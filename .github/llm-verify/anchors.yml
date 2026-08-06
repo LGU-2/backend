@@ -176,8 +176,10 @@ rules:
       - "lombok.config"
     anchors: []
     activate:
-      prefixes: [MNT, PERF]
-      levels: [인프라, 프로세스]
+      # INF 10장: JaCoCo 커버리지와 SonarQube 게이트 설정
+      prefixes: [MNT, PERF, INF]
+      levels: [코드, 인프라, 프로세스]
+      chapters: { INF: [10] }
     needs_baseline_values: false
 
 # activate.chapters 의 의미
