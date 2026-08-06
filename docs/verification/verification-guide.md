@@ -149,6 +149,39 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 앵커 파일   읽음 2, 부재 3, 실패 0
 ```
 
+## 점검 항목을 고쳤을 때
+
+`items.yml` 은 가이드 문서에서 생성된 파생물이다. **문서를 고쳤으면 다시 생성해야 한다.**
+안 하면 문서에는 있는데 게이트는 모르는 항목이 생긴다.
+
+```bash
+cd ../common/.github/llm-verify
+
+python3 gen_items.py ../../docs/software-quality 'qa-*.md' common \
+        -o items.yml
+python3 gen_items.py ../../../backend/docs/code-architecture '*-guideline.md' backend 코드 \
+        -o ../../../backend/.github/llm-verify/items.yml
+python3 gen_items.py ../../../infra/docs/infra-review '*-guideline.md' infra 코드 \
+        -o ../../../infra/.github/llm-verify/items.yml
+```
+
+`--check` 를 주면 파일을 쓰지 않고 어긋났는지만 본다.
+
+```
+OK  backend 250건. 문서와 레지스트리가 일치한다
+```
+
+문서에 적는 형식은 이렇다. 층위 태그는 common 에만 붙인다.
+
+```markdown
+점검 항목
+* `[코드]` `SEC-1-07` 세션 고정 공격을 막는가       <- common
+* `EJ-1-07` 인스턴스화를 막으려면 private 생성자를 쓰는가   <- backend, infra
+```
+
+나머지 필드(`gate`, `domains`, `ci_stage` 등)는 `gen_items.py` 가 규칙으로 채운다.
+`level` 에서 `gate` 가 정해지므로 **층위 태그를 잘못 붙이면 판정 시점이 바뀐다.**
+
 ## 안 될 때
 
 | 증상 | 조치 |
