@@ -1,0 +1,178 @@
+---
+description: G-LOCAL. 마지막 커밋의 변경분을 세 저장소의 점검 항목으로 판정한다
+allowed-tools: Bash(git *), Bash(./gradlew *), Read, Glob, Grep
+---
+
+# G-LOCAL 검증
+
+마지막 커밋의 변경분을 판정한다. **차단하지 않는다.** 작업 중 반복 실행하는 도구이므로 중간 상태에서 위반이 나오는 것이 정상이다.
+
+설계 근거는 `LGU-2/.github` 의 `docs/software-quality/qa-llm-verification.md`, 실행 순서는 같은 저장소의 `docs/workflow/verification-workflow.md` 에 있다.
+
+인자로 커밋 범위를 받으면 그것을 쓰고, 없으면 `HEAD~1..HEAD` 를 쓴다: $ARGUMENTS
+
+## 0. 기준 저장소 위치 확인
+
+```bash
+ls ../common/.github/llm-verify/items.yml ../infra/.github/llm-verify/items.yml
+```
+
+없으면 여기서 멈추고 사용자에게 두 저장소의 경로를 묻는다. **없는 채로 진행하면 backend 250건만 판정하고 그 사실이 결과에 드러나지 않는다.**
+
+## 1. 빌드 게이트 (G-BUILD 와 같은 기준, 여기서는 알림만)
+
+```bash
+./gradlew check
+```
+
+두 가지를 본다.
+
+* `*.domain.service.*` 패키지 메서드 커버리지 100%
+* 정적 분석 신규 `Blocker` 0건
+
+미달이면 어느 클래스의 어느 메서드인지까지 보고한다. CI 에서는 이 두 가지가 **병합을 차단**하므로, 여기서 먼저 잡는 것이 목적이다.
+
+`build.gradle` 에 JaCoCo 나 Sonar 설정이 없으면 그 사실 자체를 보고한다. `INF-10-01` 부터 `INF-10-10` 이 이 설정을 점검 대상으로 삼는다.
+
+## 2. 판정 범위 산출
+
+```bash
+git diff --name-only HEAD~1..HEAD
+git diff HEAD~1..HEAD
+```
+
+CI 의 G-PR 과 범위가 다르다. G-PR 은 PR 누적 diff(`base...HEAD`)를 보고, 여기서는 **마지막 커밋 한 개**만 본다.
+누적 판정은 CI 소관이므로 여기서 넓히지 않는다.
+
+## 3. 앵커 규칙 매칭
+
+`.github/llm-verify/anchors.yml` 을 읽는다.
+
+변경 파일을 각 규칙의 `trigger` 글롭과 대조해 매칭된 규칙을 모두 모은다. 한 파일이 여러 규칙에 걸릴 수 있고, 그때는 전부 적용한다.
+
+어떤 규칙도 안 걸리면 `defaults.on_no_match` 를 쓴다 (`levels: [코드]`, `prefixes: [EJ]`).
+
+매칭 결과에서 셋을 얻는다.
+
+| 산출 | 쓰임 |
+|------|------|
+| `anchors` | 5단계에서 함께 읽을 파일 |
+| `activate` | 4단계 필터 조건 |
+| `needs_baseline_values` | 6단계 확정값 로드 여부 |
+
+## 4. 점검 항목 필터
+
+세 레지스트리를 읽는다.
+
+```
+.github/llm-verify/items.yml              250건
+../common/.github/llm-verify/items.yml    217건
+../infra/.github/llm-verify/items.yml     100건
+```
+
+각 항목의 접두사(ID 의 첫 토큰)를 기준으로 세 조건을 **모두** 만족하는 것만 켠다.
+
+1. `activate.prefixes` 에 접두사가 있는가
+2. `activate.levels` 에 `level` 이 있는가 (비어 있으면 전부 통과)
+3. `activate.chapters` 에 그 접두사가 있으면 `ch` 가 목록에 있는가 (없으면 전 장 통과)
+
+`ci_stage` 는 무시한다. **로컬에서는 단계를 나누지 않고 활성 항목을 전부 판정한다.**
+
+## 5. 앵커 파일 로드
+
+3단계가 정한 `anchors` 글롭에 맞는 파일을 **diff 에 없어도** 읽는다.
+
+이것이 부재 판정의 근거다. "타임아웃 설정이 없다" 를 말하려면 설정이 있을 법한 파일을 봐야 한다.
+읽지 못한 앵커가 있으면 그 앵커에 의존하는 항목은 `INSUFFICIENT_EVIDENCE` 로 둔다. **통과시키지 않는다.**
+
+## 6. 확정값 로드
+
+매칭된 규칙 중 하나라도 `needs_baseline_values: true` 면 `../infra/docs/system-design/` 의 문서를 읽는다.
+아니면 읽지 않는다.
+
+## 7. 알려진 모순 로드
+
+`../common/.github/llm-verify/known-conflicts.yml` 을 읽는다.
+
+* `status: unresolved` 인 모순의 `affects` 에 있는 항목은 `CONFLICTING_BASELINE` 으로 두고 **양쪽 값을 함께 표기**한다. 한쪽을 골라 판정하지 않는다.
+* `status: intentional` 은 모순이 아니다. `sources` 의 뒤쪽(확정값)을 기준으로 판정한다.
+* 목록에 없는 모순을 발견하면 **새로 발견된 것이므로 보고**한다.
+
+## 8. 판정 기준 본문 로드
+
+활성 항목이 속한 문서만 읽는다. 각 항목의 `doc` 필드가 파일명이다.
+
+```
+../common/docs/software-quality/qa-*.md
+docs/code-architecture/*-guideline.md
+../infra/docs/infra-review/code-guideline.md
+```
+
+ID 와 제목만으로 판정하지 않는다. **본문에 판정 기준과 예외가 적혀 있다.**
+
+## 9. 판정
+
+활성 항목 하나하나에 대해 `verdict` 를 정한다.
+
+| 값 | 언제 |
+|----|------|
+| `VIOLATION` | 위반을 확인했다 |
+| `OK` | 충족을 확인했다 |
+| `NOT_APPLICABLE` | 이 변경과 무관하다 |
+| `INSUFFICIENT_EVIDENCE` | 판정에 필요한 증거가 입력에 없다 |
+| `CONFLICTING_BASELINE` | 확정값이 문서마다 다르다 |
+
+`UNJUDGED` 는 쓰지 않는다. 로컬에서는 활성 항목을 전부 판정하므로 이 값이 나올 자리가 없다.
+
+**추측으로 `OK` 를 내지 않는다.** 근거 파일을 못 봤으면 `INSUFFICIENT_EVIDENCE` 다.
+이 구분이 무너지면 게이트가 통과시킨 것과 안 본 것이 뒤섞여 지표가 무의미해진다.
+
+### 중복 지적 억제
+
+항목에 `defers_to` 가 있으면, 그 대상 항목이 같은 코드에 대해 `VIOLATION` 이면 **이쪽은 발화하지 않는다.**
+같은 문제를 두 번 지적하면 리뷰 신뢰도가 떨어진다.
+
+## 10. 출력
+
+```
+G-LOCAL  <커밋 SHA 앞 7자리>  <메시지>
+
+빌드 게이트
+  커버리지   <통과 또는 미달 목록>
+  정적 분석  <통과 또는 Blocker 목록>
+
+매칭된 규칙  <규칙 id 나열>
+활성 항목    <n>건  (backend <a>, common <b>, infra <c>)
+
+VIOLATION <n>건
+  <ID>  <제목>
+    파일:줄
+    무엇이 문제인가 한 줄
+    어떻게 고치는가 한 줄
+
+CONFLICTING_BASELINE <n>건
+  <ID>  <제목>
+    <문서 A>: <값>
+    <문서 B>: <값>
+    -> 결정 필요
+
+INSUFFICIENT_EVIDENCE <n>건
+  <ID>  <제목>  못 읽은 앵커: <경로>
+
+OK <n>  NOT_APPLICABLE <n>
+```
+
+`VIOLATION` 만 자세히 쓰고 나머지는 건수와 ID 만 낸다.
+`INSUFFICIENT_EVIDENCE` 가 계속 같은 항목에서 나오면 `anchors.yml` 의 앵커 목록이 부족한 것이므로 그 사실을 함께 말한다.
+
+## 이 명령이 CI 와 다른 점
+
+| | G-LOCAL (이 명령) | G-PR (CI) |
+|---|---|---|
+| 판정 주체 | Claude | gemini-2.5-flash |
+| 범위 | 마지막 커밋 | PR 누적 diff |
+| 단계 | 없음. 활성 항목 전부 | 1단계 backend, 2단계 common+infra 조건부 |
+| 차단 | 안 함 | 안 함 |
+
+**로컬을 건너뛰고 CI 2단계가 실패하면 common 과 infra 기준은 아무도 보지 않는다.**
+그 조합이 실제로 일어나므로 커밋 후 이 명령을 돌리는 것이 권장된다.

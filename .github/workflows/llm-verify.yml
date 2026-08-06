@@ -1,0 +1,25 @@
+# G-PR 호출자
+#
+# 트리거만 정의하고 판정은 LGU-2/.github 의 재사용 워크플로가 한다.
+# 본체를 한곳에 두어야 세 저장소의 판정 절차가 갈라지지 않는다.
+#
+# synchronize 를 넣은 이유는 PR 이 열린 뒤의 push 도 판정해야 하기 때문이다.
+# reopened 를 넣은 이유는 닫았다 여는 동안 base 가 움직였을 수 있기 때문이다.
+
+name: LLM 검증
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# 같은 PR 에 push 가 이어지면 앞선 실행을 취소한다.
+# 무료 티어의 RPM 이 10 이라 중복 실행이 쌓이면 뒤의 것이 밀린다.
+concurrency:
+  group: llm-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: LGU-2/.github/.github/workflows/llm-verify.yml@main
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
