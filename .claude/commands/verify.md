@@ -1,6 +1,6 @@
 ---
 description: G-LOCAL. 마지막 커밋의 변경분을 세 저장소의 점검 항목으로 판정한다
-allowed-tools: Bash(git *), Bash(./gradlew *), Read, Glob, Grep
+allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Bash(date *), Read, Glob, Grep, Write
 ---
 
 # G-LOCAL 검증
@@ -164,6 +164,64 @@ OK <n>  NOT_APPLICABLE <n>
 
 `VIOLATION` 만 자세히 쓰고 나머지는 건수와 ID 만 낸다.
 `INSUFFICIENT_EVIDENCE` 가 계속 같은 항목에서 나오면 `anchors.yml` 의 앵커 목록이 부족한 것이므로 그 사실을 함께 말한다.
+
+## 11. 기록 저장
+
+화면에 낸 것과 **같은 내용**을 파일로 남긴다. 요약해서 저장하지 않는다.
+
+```bash
+mkdir -p docs/llm-review
+LOGIN=$(gh api user -q .login 2>/dev/null || git config user.name)
+STAMP=$(date +%Y%m%d-%H%M%S)
+echo "docs/llm-review/${LOGIN}_${STAMP}_llm-review.md"
+```
+
+파일명은 `<깃허브 계정명>_<YYYYMMDD-HHMMSS>_llm-review.md` 다.
+계정명을 넣는 이유는 팀원이 각자 로컬에서 돌리기 때문이고,
+초 단위까지 넣는 이유는 한 커밋을 고쳐 가며 여러 번 돌리는 것이 정상 사용이기 때문이다.
+
+`gh` 인증이 없으면 `git config user.name` 으로 떨어진다. 둘 다 없으면 `unknown` 을 쓰고 그 사실을 알린다.
+
+파일 첫머리에 다시 만들 수 있는 정보를 넣는다. 없으면 나중에 이 기록이 무엇을 판정한 것인지 알 수 없다.
+
+```markdown
+---
+검증: G-LOCAL
+계정: <계정명>
+시각: <ISO 8601>
+저장소: <origin URL>
+브랜치: <브랜치명>
+커밋: <전체 SHA>
+범위: <base>..<head>
+기준 저장소:
+  common: <common 의 커밋 SHA>
+  infra: <infra 의 커밋 SHA 또는 미사용>
+매칭 규칙: [<규칙 id>]
+활성 항목: <n> (backend <a>, common <b>, infra <c>)
+---
+```
+
+**기준 저장소의 SHA 를 남기는 것이 핵심이다.**
+점검 항목은 계속 바뀌므로, 어느 시점의 기준으로 판정했는지 모르면 과거 기록을 다시 읽을 수 없다.
+
+저장 후 경로를 한 줄로 알린다.
+
+```
+기록: docs/llm-review/devjohnpark_20260806-174500_llm-review.md
+```
+
+### 이 디렉터리를 커밋하는가
+
+**커밋한다.** 두 가지 이유다.
+
+* 계정명으로 파일을 나누는 것은 여러 사람이 볼 때만 의미가 있다
+* 로컬 판정은 재량이라 안 돌려도 아무 일이 없다. 기록이 남아야 돌렸는지가 구분된다
+
+두 번째가 G-AUDIT 으로 이어질 자리이지만, **아직 이것을 점검하는 항목은 등록되어 있지 않다.**
+넣으려면 `docs/software-quality/` 에 항목을 추가하고 `items.yml` 을 다시 생성해야 한다.
+
+파일명이 계정과 초 단위 시각을 포함하므로 충돌하지 않는다.
+쌓이는 속도가 부담스러워지면 분기별로 정리하되, **지우기 전에 G-AUDIT 주기를 확인한다.**
 
 ## 이 명령이 CI 와 다른 점
 
