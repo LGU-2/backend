@@ -30,10 +30,10 @@ PR 에 코멘트 하나로 달린다. push 할 때마다 새로 달리지 않고
 ### LLM 검증 (G-PR)
 
 매칭된 규칙 `service`
-활성 항목 **182건**  (backend 79, common 88, infra 15)
+활성 항목 **179건**  (backend 79, common 85, infra 15)
 
 * 1단계 완료 79건
-* 2단계 완료 103건
+* 2단계 완료 100건
 
 #### 이 PR 이 만든 위반 3건
 
@@ -156,7 +156,7 @@ G-LOCAL  bd07e1a  결제 서비스 추가
   정적 분석  Blocker 0건
 
 매칭된 규칙  service
-활성 항목    182건  (backend 79, common 88, infra 15)
+활성 항목    179건  (backend 79, common 85, infra 15)
 
 VIOLATION 4건
   EJ-7-01   파라미터 유효성을 메서드 시작 부분에서 검사하는가

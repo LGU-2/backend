@@ -110,7 +110,7 @@ backend/docs/llm-review/
   common: 61ad5797c7c0fc809ed504bf2073271f5e849841
   infra: 3e05b7f9933d654c20a30b3b64593252ab9a8501
 매칭 규칙: [service]
-활성 항목: 182 (backend 79, common 88, infra 15)
+활성 항목: 179 (backend 79, common 85, infra 15)
 ---
 ```
 
@@ -143,10 +143,11 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 
 ```
 매칭 규칙   service
-활성 항목   182건
+활성 항목   179건
   1단계    79건
-  2단계    103건
+  2단계    100건
 앵커 파일   읽음 2, 부재 3, 실패 0
+확정값      9건
 ```
 
 ## 점검 항목을 고쳤을 때
