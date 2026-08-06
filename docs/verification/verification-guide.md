@@ -1,10 +1,6 @@
 # 검증 시스템 실행 방법
 
 
-> **이 문서는 복사본이다.**
-> 원본은 `LGU-2/.github` 의 [`docs/workflow/verification-guide.md`](https://github.com/LGU-2/.github/blob/main/docs/workflow/verification-guide.md) 에 있다.
-> 고칠 일이 생기면 **원본을 고치고 여기로 복사한다.** 여기서 고치면 다음 복사 때 지워진다.
-
 코드 품질 점검을 LLM 에게 맡긴다. 점검 항목은 세 저장소에 나뉘어 총 567건이고, 판정 대상은 backend 코드다.
 
 ```
