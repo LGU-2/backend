@@ -102,15 +102,15 @@ backend/docs/llm-review/
 ```markdown
 ---
 검증: G-LOCAL
-계정: devjohnpark
-시각: 2026-08-06T08:45:00Z
-커밋: bd07e1ac15f2ca4257ecf7b976745c0f5d79d7eb
-범위: HEAD~1..HEAD
+계정: <계정명>
+시각: <ISO 8601>
+커밋: <전체 SHA>
+범위: <base>..<head>
 기준 저장소:
-  common: 61ad5797c7c0fc809ed504bf2073271f5e849841
-  infra: 3e05b7f9933d654c20a30b3b64593252ab9a8501
-매칭 규칙: [service]
-활성 항목: 179 (backend 79, common 85, infra 15)
+  common: <common 의 커밋 SHA>
+  infra: <infra 의 커밋 SHA>
+매칭 규칙: [<규칙 id>]
+활성 항목: <n> (backend <a>, common <b>, infra <c>)
 ---
 ```
 
@@ -142,13 +142,16 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 ```
 
 ```
-매칭 규칙   service
-활성 항목   179건
-  1단계    79건
-  2단계    100건
-앵커 파일   읽음 2, 부재 3, 실패 0
-확정값      9건
+매칭 규칙   <걸린 규칙>
+활성 항목   <n>건
+  1단계    <a>건
+  2단계    <b>건
+앵커 파일   읽음 <x>, 부재 <y>, 실패 <z>
+확정값      <m>건 또는 불필요
 ```
+
+**숫자를 여기 적어 두지 않는다.** 항목이 늘거나 앵커 규칙이 바뀌면 값이 달라지는데,
+문서에 박아 두면 조용히 어긋난다. 실제 값은 위 명령이 알려 준다.
 
 ## 점검 항목을 고쳤을 때
 
@@ -192,7 +195,7 @@ OK  backend 250건. 문서와 레지스트리가 일치한다
 | 증상 | 조치 |
 |---|---|
 | `/verify` 가 시작하자마자 멈춘다 | `common`, `infra` 를 같은 부모 디렉터리에 clone |
-| 활성 항목이 50건뿐이다 | 정상이다. 문서만 고쳤을 때 그렇다 |
+| 활성 항목이 유난히 적고 규칙이 `on_no_match` 다 | 정상이다. 문서만 고쳤을 때 그렇다 |
 | 같은 항목이 계속 `INSUFFICIENT_EVIDENCE` | `backend/.github/llm-verify/anchors.yml` 의 `anchors` 에 파일 추가 |
 | 2단계가 매번 건너뛰어진다 | 코멘트의 사유를 보고 로컬로 대신 본다 |
 | CI 워크플로가 빨갛다 | `GEMINI_API_KEY` 조직 시크릿 등록 |
