@@ -27,9 +27,9 @@
 | `@EqualsAndHashCode`, `@ToString` (전 필드) | 금지 | 연관 필드를 건드려 지연 로딩과 순환 참조를 유발한다 |
 
 점검 항목
-* 엔티티에 `@Setter`, `@Data`가 붙어 있지 않은가
-* 클래스 레벨 `@Builder`, `@AllArgsConstructor`가 없는가
-* `@EqualsAndHashCode`, `@ToString`이 연관 필드를 포함하지 않는가
+* `EC-1-01` 엔티티에 `@Setter`, `@Data`가 붙어 있지 않은가
+* `EC-1-02` 클래스 레벨 `@Builder`, `@AllArgsConstructor`가 없는가
+* `EC-1-03` `@EqualsAndHashCode`, `@ToString`이 연관 필드를 포함하지 않는가
 
 ## 2. 필수 규칙
 
@@ -38,16 +38,16 @@
 ### R1. 기본 생성자는 protected로 둔다
 
 점검 항목
-* `@NoArgsConstructor(access = AccessLevel.PROTECTED)`가 있는가
-* 기본 생성자가 public이 아닌가
+* `EC-2-01` `@NoArgsConstructor(access = AccessLevel.PROTECTED)`가 있는가
+* `EC-2-02` 기본 생성자가 public이 아닌가
 
 ### R2. 외부에 노출되는 생성 경로는 정적 팩터리 메서드 하나뿐이다
 
 `public` 생성자, `public builder()`, `@Setter`를 통한 사후 조립을 모두 금지한다.
 
 점검 항목
-* public 생성자 또는 public `builder()`가 있는가
-* 사후에 setter로 조립하는 호출부가 있는가
+* `EC-2-03` public 생성자 또는 public `builder()`가 있는가
+* `EC-2-04` 사후에 setter로 조립하는 호출부가 있는가
 
 ```java
 // 점검 대상: 사후 조립. 검증 생성자를 우회한다
@@ -62,7 +62,7 @@ Order order = Order.place(1L, 10000);
 ### R3. 식별자는 생성 파라미터에 포함하지 않는다
 
 점검 항목
-* `id`를 외부에서 세팅할 수 있는가
+* `EC-2-05` `id`를 외부에서 세팅할 수 있는가
   `save()`가 persist가 아니라 merge로 흘러 남의 행을 덮어쓸 수 있다.
 
 ### R4. 내부가 결정하는 값은 외부 입력을 받지 않는다
@@ -70,7 +70,7 @@ Order order = Order.place(1L, 10000);
 초기 상태, 생성 시각, 집계값처럼 규칙에 의해 정해지는 필드는 생성자 본문에서 설정한다.
 
 점검 항목
-* 상태 필드를 외부에서 지정할 수 있는가
+* `EC-2-06` 상태 필드를 외부에서 지정할 수 있는가
 
 ```java
 this.status = OrderStatus.CREATED;      // 외부가 SHIPPED 로 만들 수 없다
@@ -88,8 +88,8 @@ this.createdAt = LocalDateTime.now();   // 또는 @CreatedDate 로 위임
 | DB (`NOT NULL`, `CHECK`) | 최종 방어선 | 앞 두 계층을 우회한 데이터 차단 |
 
 점검 항목
-* 필수 필드 검증이 private 생성자에 있는가
-* 다른 필드의 도메인 맥락이 필요한 규칙을 DTO에 넣지 않았는가
+* `EC-2-07` 필수 필드 검증이 private 생성자에 있는가
+* `EC-2-08` 다른 필드의 도메인 맥락이 필요한 규칙을 DTO에 넣지 않았는가
   DTO는 그 맥락을 모른다. 엔티티나 도메인 서비스에 둔다.
 
 ### R5. 생성은 오버로딩한 정적 팩터리로 하고, 필수는 파라미터로 강제한다
@@ -97,9 +97,9 @@ this.createdAt = LocalDateTime.now();   // 또는 @CreatedDate 로 위임
 필수 필드는 모든 팩터리의 앞자리 파라미터로 받아 컴파일 시점에 강제하고, 선택 필드는 뒤에 붙는 오버로딩으로 받는다.
 
 점검 항목
-* 필수 필드가 팩터리 파라미터로 컴파일 시점에 강제되는가
-* 생성 경로에 `@Builder`를 썼는가 (예외 승인 없이)
-* 선택 필드의 모든 조합(2의 n승)을 만들지 않고 의미 있는 시나리오만 오버로딩했는가
+* `EC-2-09` 필수 필드가 팩터리 파라미터로 컴파일 시점에 강제되는가
+* `EC-2-10` 생성 경로에 `@Builder`를 썼는가 (예외 승인 없이)
+* `EC-2-11` 선택 필드의 모든 조합(2의 n승)을 만들지 않고 의미 있는 시나리오만 오버로딩했는가
 
 ```java
 // 준수: 필수는 팩터리 파라미터로 강제, 선택은 오버로딩으로 받음
@@ -115,7 +115,7 @@ Order.place(1L);   // 컴파일 에러: 필수 두 개 필요
 ### R6. `@Data`, `@Setter`, `@AllArgsConstructor`는 엔티티에 쓰지 않는다
 
 점검 항목
-* 세 애너테이션이 엔티티에 없는가
+* `EC-2-12` 세 애너테이션이 엔티티에 없는가
 
 ### R7. 상태 변경은 의미 있는 도메인 메서드로만 한다
 
@@ -133,8 +133,8 @@ public void ship() {
 ```
 
 점검 항목
-* 상태 변경이 setter가 아니라 도메인 메서드로 이루어지는가
-* 그 메서드가 전이 전제 조건을 검사하는가
+* `EC-2-13` 상태 변경이 setter가 아니라 도메인 메서드로 이루어지는가
+* `EC-2-14` 그 메서드가 전이 전제 조건을 검사하는가
 
 ## 3. 권장 규칙
 
@@ -150,13 +150,13 @@ public void ship() {
 | 외부 표현으로부터 복원 | `restore`, `parse` |
 
 점검 항목
-* 팩터리 이름이 `of`, `create`로 남발되지 않는가
+* `EC-3-01` 팩터리 이름이 `of`, `create`로 남발되지 않는가
 
 ### G2. 선택 필드 기본값은 생성자 본문에서 처리한다
 
 점검 항목
-* 기본값 설정이 검증을 모으는 private 생성자 한곳에 있는가
-* Lombok `@Builder.Default`를 쓰지 않았는가
+* `EC-3-02` 기본값 설정이 검증을 모으는 private 생성자 한곳에 있는가
+* `EC-3-03` Lombok `@Builder.Default`를 쓰지 않았는가
 
 ```java
 private Order(Long memberId, int totalPrice, String memo, Integer quantity) {
@@ -169,9 +169,9 @@ private Order(Long memberId, int totalPrice, String memo, Integer quantity) {
 ### G3. `equals`와 `hashCode`는 식별자 기준으로 직접 작성한다
 
 점검 항목
-* `@EqualsAndHashCode`를 쓰지 않고 직접 작성했는가
-* `equals`가 식별자만 비교하는가
-* `hashCode`가 고정값인가
+* `EC-3-04` `@EqualsAndHashCode`를 쓰지 않고 직접 작성했는가
+* `EC-3-05` `equals`가 식별자만 비교하는가
+* `EC-3-06` `hashCode`가 고정값인가
 
 ```java
 @Override
@@ -194,13 +194,13 @@ public int hashCode() {
 ```
 
 점검 항목
-* `@ToString`이 지연 로딩 필드를 포함하지 않는가
+* `EC-3-07` `@ToString`이 지연 로딩 필드를 포함하지 않는가
 
 ### G5. 테스트 픽스처는 별도 팩터리에 모은다
 
 점검 항목
-* 프로덕션 코드에 테스트 전용 생성 수단(setter, 팩터리)이 없는가
-* 테스트 소스에 픽스처 클래스가 있는가
+* `EC-3-08` 프로덕션 코드에 테스트 전용 생성 수단(setter, 팩터리)이 없는가
+* `EC-3-09` 테스트 소스에 픽스처 클래스가 있는가
 
 ```java
 // src/test/java/.../OrderFixture.java
@@ -224,13 +224,13 @@ public final class OrderFixture {
 **기본은 enum + `@Enumerated(EnumType.STRING)`**이다. 세 방식의 비교와 채택 근거는 rationale을 참고한다.
 
 점검 항목
-* 코드성 값에 enum을 썼는가
+* `EC-4-01` 코드성 값에 enum을 썼는가
   운영자가 화면에서 런타임에 값을 바꿔야 하는 경우에만 테이블로 승격한다.
-* `@Enumerated(EnumType.STRING)`을 명시했는가
+* `EC-4-02` `@Enumerated(EnumType.STRING)`을 명시했는가
   기본값 `ORDINAL`은 상수 순서만 바뀌어도 기존 데이터가 뒤틀린다.
-* 사람에게 보일 문구를 상수 이름이 아니라 `displayName` 같은 필드로 분리했는가
-* 저장 컬럼 `length`를 넉넉히(20~30) 두었는가
-* 테이블로 승격한 경우 정수 대리키 + `code` UNIQUE 방식인가
+* `EC-4-03` 사람에게 보일 문구를 상수 이름이 아니라 `displayName` 같은 필드로 분리했는가
+* `EC-4-04` 저장 컬럼 `length`를 넉넉히(20~30) 두었는가
+* `EC-4-05` 테이블로 승격한 경우 정수 대리키 + `code` UNIQUE 방식인가
   베이스 엔티티 규칙은 [base-entity-guideline.md](./base-entity-guideline.md)를 따른다.
 
 판단 기준은 정책의 유무가 아니라 **그 정책을 누가 관리하는가**다.

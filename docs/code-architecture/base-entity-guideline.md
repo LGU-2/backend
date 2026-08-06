@@ -19,10 +19,10 @@
 `ImmutableTimeEntity`와 `MutableTimeEntity`는 시각 컬럼만 제공하는 `@MappedSuperclass`이며 직접 상속하지 않는다.
 
 점검 항목
-* 모든 `@Entity`가 `BaseImmutableTimeEntity` 또는 `BaseMutableTimeEntity`를 상속하는가
-* 수정되지 않는 테이블(이력, 로그)에 `BaseMutableTimeEntity`를 쓰지 않았는가
+* `BE-1-01` 모든 `@Entity`가 `BaseImmutableTimeEntity` 또는 `BaseMutableTimeEntity`를 상속하는가
+* `BE-1-02` 수정되지 않는 테이블(이력, 로그)에 `BaseMutableTimeEntity`를 쓰지 않았는가
   `updated_at`이 영원히 `created_at`과 같은 값으로 남아 컬럼과 인덱스가 낭비된다.
-* 시각 계층(`ImmutableTimeEntity`, `MutableTimeEntity`)을 엔티티가 직접 상속하지 않았는가
+* `BE-1-03` 시각 계층(`ImmutableTimeEntity`, `MutableTimeEntity`)을 엔티티가 직접 상속하지 않았는가
   PK가 없는 계층이라 상속하면 `@Id`를 엔티티마다 손으로 선언하게 된다.
 
 ```java
@@ -47,21 +47,21 @@ public class User extends BaseMutableTimeEntity {
 ## 2. PK 규칙
 
 점검 항목
-* PK가 `Long`(MySQL `BIGINT`)인가
-* `@GeneratedValue(strategy = GenerationType.IDENTITY)`를 쓰는가
-* 코드 테이블도 정수 PK를 쓰는가
-* 문자열 PK를 쓴다면 5절의 예외 조건과 사유가 PR에 있는가
+* `BE-2-01` PK가 `Long`(MySQL `BIGINT`)인가
+* `BE-2-02` `@GeneratedValue(strategy = GenerationType.IDENTITY)`를 쓰는가
+* `BE-2-03` 코드 테이블도 정수 PK를 쓰는가
+* `BE-2-04` 문자열 PK를 쓴다면 5절의 예외 조건과 사유가 PR에 있는가
 
 ## 3. 시각 컬럼과 Auditing
 
 생성과 수정 시각은 JPA Auditing이 채운다. 코드에서 직접 넣지 않는다.
 
 점검 항목
-* 생성 시각을 `LocalDateTime.now()`로 직접 대입하지 않는가
-* `created_at`에 `updatable = false`가 지정되어 있는가
-* 설정 클래스에 `@EnableJpaAuditing`이 한 번 선언되어 있는가
+* `BE-3-01` 생성 시각을 `LocalDateTime.now()`로 직접 대입하지 않는가
+* `BE-3-02` `created_at`에 `updatable = false`가 지정되어 있는가
+* `BE-3-03` 설정 클래스에 `@EnableJpaAuditing`이 한 번 선언되어 있는가
   선언이 없으면 `@CreatedDate`가 조용히 동작하지 않아 시각이 `null`로 저장된다.
-* `@EntityListeners(AuditingEntityListener.class)`를 하위 클래스에 중복 선언하지 않았는가
+* `BE-3-04` `@EntityListeners(AuditingEntityListener.class)`를 하위 클래스에 중복 선언하지 않았는가
 
 ```java
 // 점검 대상: 시각을 코드에서 직접 채움
@@ -79,11 +79,11 @@ private LocalDateTime createdAt;
 판단 기준은 [entity-creation-guideline.md](./entity-creation-guideline.md)의 코드성 값 절을 따른다.
 
 점검 항목
-* 테이블로 만들 근거(운영자의 런타임 관리 요구)가 있는가
+* `BE-4-01` 테이블로 만들 근거(운영자의 런타임 관리 요구)가 있는가
   근거가 없으면 enum이어야 한다.
-* 코드 테이블이 `BaseMutableTimeEntity`를 상속하는가
-* `code` 컬럼에 UNIQUE 제약이 있는가
-* 코드값 조회 경로(`findByCode`)와 캐싱이 준비되어 있는가
+* `BE-4-02` 코드 테이블이 `BaseMutableTimeEntity`를 상속하는가
+* `BE-4-03` `code` 컬럼에 UNIQUE 제약이 있는가
+* `BE-4-04` 코드값 조회 경로(`findByCode`)와 캐싱이 준비되어 있는가
 
 ```java
 // 개선: 정수 PK + code UNIQUE
@@ -111,10 +111,10 @@ public class Grade extends BaseMutableTimeEntity {
 3. 캐싱으로도 조인을 없애기 어렵다
 
 점검 항목
-* 세 조건이 모두 성립하는가
+* `BE-5-01` 세 조건이 모두 성립하는가
   등급이나 카테고리 같은 소형 코드 테이블은 2번이 맞지 않아 해당하지 않는다.
-* 베이스 미상속 사유가 PR에 기재되어 있는가
-* 시각 컬럼을 직접 선언했는가
+* `BE-5-02` 베이스 미상속 사유가 PR에 기재되어 있는가
+* `BE-5-03` 시각 컬럼을 직접 선언했는가
   베이스를 상속하지 않으므로 `created_at`과 `updated_at`이 자동으로 생기지 않는다.
 
 ## 6. 상속 선택 기준

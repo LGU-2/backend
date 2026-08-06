@@ -44,13 +44,35 @@
 | 엔티티 인스턴스 생성 (정적 팩터리, 검증 위치, 생성용 Lombok) | entity-creation-guideline.md | effective-java-guideline.md, jpa-rdb-guideline.md |
 | 엔티티 뼈대 (베이스 상속, PK 타입, Auditing, 시각 컬럼) | base-entity-guideline.md | jpa-rdb-guideline.md |
 | 외부 노출 식별자 (`public_id`, UUID 버전, 난수원) | identifier-strategy-guideline.md | base-entity-guideline.md |
-| 연관관계 매핑, 지연 로딩, N+1, 조회 전략 | jpa-rdb-guideline.md | - |
+| 연관관계 매핑, cascade, 자동 매핑, DTO 프로젝션 | jpa-rdb-guideline.md | - |
 | 코드성 값의 저장 방식 (enum 대 코드 테이블) | entity-creation-guideline.md | base-entity-guideline.md |
-| 패키지 배치, 도메인 간 참조, 접근 제어자 | domain-package-boundary-guideline.md | - |
-| 트랜잭션 경계와 외부 호출 위치 | domain-package-boundary-guideline.md | jpa-rdb-guideline.md |
+| 패키지 배치, 도메인 간 참조, 접근 제어자, 순환 의존 | domain-package-boundary-guideline.md | - |
 | 자바 관용 (불변, 예외 흐름, 컬렉션 반환, 상속보다 조합) | effective-java-guideline.md | - |
 | 테스트 설계와 품질 (동작 검증, 테스트 더블, 구조, 격리) | unit-testing-guideline.md | - |
 | API 표면 설계 (리소스, 표준 메서드, 필드명, 페이지네이션, 오류 구조) | api-design-guideline.md | - |
+
+### common 저장소가 소유하는 사안
+
+`LGU-2/.github`의 `docs/software-quality/`가 시스템 품질 속성을 다룬다.
+아래 사안은 그쪽이 소유하므로 이 디렉터리의 가이드로 지적하지 않는다.
+
+| 사안 | 소유 문서와 항목 |
+|------|-----------------|
+| 트랜잭션 경계, 외부 호출 위치, 트랜잭션 길이 | `qa-data-integrity.md` 4장 (`DI-4-*`) |
+| 잠금 전략, 획득 순서, 갱신 손실 | `qa-data-integrity.md` 2장 (`DI-2-*`) |
+| N+1, 인덱스, 쿼리 성능 | `qa-performance-efficiency.md` 2장 (`PERF-2-*`) |
+| 인가와 소유권 검증 | `qa-security.md` 1장 (`SEC-1-*`) |
+| 타임아웃, 재시도, 서킷 브레이커 | `qa-reliability.md` 2장 (`REL-2-*`) |
+
+**반대로 아래는 이 디렉터리가 소유한다.** common에서 이관받은 사안이다.
+
+| 사안 | 소유 가이드 |
+|------|-------------|
+| 도메인 경계, 순환 의존, 내부 타입 교환 | domain-package-boundary-guideline.md |
+| 테스트 실행 시간과 테스트 설계 품질 | unit-testing-guideline.md |
+| 목록 응답의 페이지네이션 구조 | api-design-guideline.md |
+
+경계 기준은 **common은 "얼마나 잘 하는가"(품질 속성), 이 디렉터리는 "어떻게 쓰는가"(코드 관용과 패턴)**다.
 
 해석 원칙은 다음과 같다.
 
