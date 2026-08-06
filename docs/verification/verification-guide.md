@@ -171,6 +171,10 @@ python3 gen_items.py ../../../infra/docs/infra-review '*-guideline.md' infra 코
 OK  backend 250건. 문서와 레지스트리가 일치한다
 ```
 
+**재생성을 잊어도 CI 가 잡는다.** 세 저장소 모두 `registry-check.yml` 이 이 검사를 돌린다.
+결정론적이라 오탐이 없으므로 **LLM 게이트와 달리 병합을 막는다.**
+문서를 안 고친 PR 에서는 아예 실행되지 않으므로 평소에는 부담이 없다.
+
 문서에 적는 형식은 이렇다. 층위 태그는 common 에만 붙인다.
 
 ```markdown
