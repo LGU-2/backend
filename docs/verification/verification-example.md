@@ -130,7 +130,7 @@ PR 에 코멘트 하나로 달린다. push 할 때마다 새로 달리지 않고
 
 ### 이 PR 이 만든 위반 없음
 
-| verdict              | 건수 |
+| verdict             | 건수 |
 | VIOLATION            |   0 |
 | OK                   |  51 |
 | NOT_APPLICABLE       |  26 |
