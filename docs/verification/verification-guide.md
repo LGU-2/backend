@@ -32,6 +32,7 @@
 
 결과의 실물은 [verification-example.md](./verification-example.md),
 무엇이 언제 도는지는 [verification-workflow.md](./verification-workflow.md),
+무엇으로 이루어져 있는지는 [verification-architecture.md](./verification-architecture.md),
 설계 근거는 [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md) 에 있다.
 
 ## 준비

@@ -411,6 +411,8 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 
 ## 관련 문서
 
+* 시스템 구조: [verification-architecture.md](./verification-architecture.md)
+
 * 설계 근거와 커버리지 계산: [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md)
 * 품질 속성 점검 항목: [quality-attributes.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/quality-attributes.md)
 * 코드 리뷰 점검 항목: `LGU-2/backend`의 `docs/code-architecture/CODEREVIEW.md`
