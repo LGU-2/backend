@@ -50,11 +50,17 @@ rules:
       - "**/domain/entity/*.java"
       - "**/domain/client/**/*.java"
       - "**/*Api.java"
+      # 권한 모델을 확인해야 소유권 검증 누락을 판정할 수 있다
+      - "**/config/SecurityConfig.java"
     activate:
-      prefixes: [DI, PERF, REL, DPB, EJ, FUN, MNT, FLX, TRD, INF]
+      prefixes: [DI, PERF, REL, DPB, EJ, FUN, MNT, FLX, TRD, INF, SEC]
       levels: [코드, 설계]
+      chapters:
+        INF: [1, 2, 8]                    # 배치와 분산 락, 스케일 인, 정합성 감지
+        # 소유권 검증과 주입, 민감 정보 노출, 남용 방지는 서비스 로직이 판정 대상이다.
+        # 3장(입력 검증)은 controller 가, 5장(감사 이력)은 entity 와 migration 이 맡는다.
+        SEC: [1, 2, 4, 6]
     # 트랜잭션 타임아웃과 잠금 대기 상한을 확정값과 대조한다
-      chapters: { INF: [1, 2, 8] }        # 배치와 분산 락, 스케일 인, 정합성 감지
     needs_baseline_values: true
 
   - id: entity
@@ -79,8 +85,12 @@ rules:
       - "**/domain/entity/*.java"
       - "src/main/resources/db/migration/*.sql"
     activate:
-      prefixes: [PERF, DI, JPA]
+      prefixes: [PERF, DI, JPA, SEC]
       levels: [코드, 설계]
+      chapters:
+        # 쿼리 조립과 소유자 조건은 여기가 판정 대상이다.
+        # @Query 문자열 연결과 Pageable 정렬 컬럼이 주입 경로가 된다.
+        SEC: [1, 2]
     needs_baseline_values: false
 
   - id: external-client
