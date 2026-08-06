@@ -30,6 +30,7 @@
 
 병합을 막는 것은 커버리지(service 패키지 메서드 100%)와 SonarQube 신규 Blocker 0건뿐이다.
 
+결과의 실물은 [verification-example.md](./verification-example.md),
 무엇이 언제 도는지는 [verification-workflow.md](./verification-workflow.md),
 설계 근거는 [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md) 에 있다.
 
