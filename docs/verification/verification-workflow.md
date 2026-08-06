@@ -1,6 +1,5 @@
 # 검증 워크플로
 
-
 다섯 게이트가 각각 무엇을 언제 판정하는지를 한 장으로 정리한다.
 
 설계 근거와 상세는 [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md)에 있다.
