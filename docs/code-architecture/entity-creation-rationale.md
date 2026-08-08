@@ -21,20 +21,39 @@
 `@Getter`는 원칙과 무관한 보일러플레이트지만, `@Setter`는 가변성을 열어 불변식을 무너뜨린다.
 같은 Lombok이라도 둘의 성격이 전혀 다르다.
 
-### 왜 생성 경로에 @Builder를 쓰지 않는가
+### 어떤 @Builder를 쓰지 않는가
 
-**필수 강제가 컴파일 시점에서 런타임으로 내려가기 때문이다.**
+기준은 하나다. **필수 강제가 컴파일 시점에 남는가.**
 
 ```java
-// @Builder: 필수값 누락이 런타임에야 터진다
+// 클래스 레벨 @Builder: 필수값 누락이 런타임에야 터진다
 Order.builder().totalPrice(10000).build();   // memberId 누락. 컴파일 통과
 
 // 오버로딩 정적 팩터리: 컴파일이 안 된다
 Order.place(10000);   // 컴파일 에러
 ```
 
-클래스 레벨 `@Builder`는 여기에 더해 `id`를 노출하고(R3 위반) 모든 필드를 선택으로 만든다.
-검증 생성자에 붙인 `@Builder`도 인자 없는 `builder()`를 만들어 같은 문제를 낳는다.
+클래스 레벨 `@Builder`는 여기에 더해 `id`를 노출하고(R3 위반) 모든 필드를 선택으로 만든다. **그래서 금지한다.**
+
+**생성자 레벨은 다르다.** `access = AccessLevel.PRIVATE` 을 주면 Lombok이 만든 인자 없는 `builder()`가 private이 되어 밖에서 못 부른다.
+그 위에 필수를 파라미터로 받는 정적 진입점을 얹으면 컴파일 강제가 그대로 남는다.
+
+```java
+@Builder(access = AccessLevel.PRIVATE)
+private Order(Long memberId, int totalPrice, String memo, String giftMessage) { ... }
+
+public static OrderBuilder builder(Long memberId, int totalPrice) {
+    return Order.builder().memberId(memberId).totalPrice(totalPrice);
+}
+```
+
+```java
+Order.builder();          // 컴파일 에러: builder() has private access
+Order.builder(1L);        // 컴파일 에러: 인자 두 개가 필요하다
+```
+
+생성자에 붙이므로 `id`도 빌더에 들어가지 않는다(R3 준수).
+**초판은 "검증 생성자에 붙인 `@Builder`도 인자 없는 `builder()`를 만들어 같은 문제를 낳는다" 고 적었으나, `access = PRIVATE` 을 빠뜨린 판단이었다.**
 
 ## 2. 표준 골격
 
@@ -106,10 +125,13 @@ Order.place(1L);   // 컴파일 에러
 선택 필드의 모든 조합(2의 n승)을 만들지 않는다.
 만들어야 할 조합이 계속 늘어난다면, 그 엔티티의 생성 시나리오가 정말 그렇게 다양한지 다시 검토하는 신호로 읽는다.
 
-### 왜 손으로 쓴 빌더가 예외로 허용되는가
+### 왜 선택 필드가 많으면 빌더로 가는가
 
-선택 필드가 지나치게 많으면 오버로딩이 감당이 안 된다.
-이때 정적 멤버 빌더(아이템 2 원형)를 직접 작성하면 **필수는 빌더 생성자로 받아 컴파일 강제를 유지하면서** 선택은 체이닝으로 받아 오버로딩 없이 확장된다.
+선택 필드가 늘면 오버로딩이 감당이 안 된다. 빌더는 **선택 필드 추가가 필드 하나 + 메서드 하나**로 끝난다.
+
+생성자 레벨 `@Builder(access = PRIVATE)` 로 충분하므로 대부분은 손으로 쓸 일이 없다.
+아래는 Lombok으로 표현할 수 없는 제약(단계별 빌더 등)이 필요할 때의 원형이며, 아이템 2가 제시한 형태다.
+**필수를 빌더 생성자로 받아 컴파일 강제를 유지한다**는 점은 두 방식이 같다.
 
 ```java
 // 정적 팩터리로 빌더 진입점을 연다. 필수 두 개를 여기서 받는다.
