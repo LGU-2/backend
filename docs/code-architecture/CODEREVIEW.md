@@ -43,7 +43,8 @@
 |------|-------------|-----------|
 | 엔티티 인스턴스 생성 (정적 팩터리, 검증 위치, 생성용 Lombok) | entity-creation-guideline.md | effective-java-guideline.md, jpa-rdb-guideline.md |
 | 엔티티 뼈대 (베이스 상속, PK 타입, Auditing, 시각 컬럼) | base-entity-guideline.md | jpa-rdb-guideline.md |
-| 외부 노출 식별자 (`public_id`, UUID 버전, 난수원) | identifier-strategy-guideline.md | base-entity-guideline.md |
+| 외부 노출 식별자가 필요한가, UUID 버전, 난수원, 컬럼 스펙 | identifier-strategy-guideline.md | base-entity-guideline.md |
+| 어느 베이스를 상속하는가 (`BasePublic*` 여부 포함) | base-entity-guideline.md | identifier-strategy-guideline.md |
 | 연관관계 매핑, cascade, 자동 매핑, DTO 프로젝션 | jpa-rdb-guideline.md | - |
 | 코드성 값의 저장 방식 (enum 대 코드 테이블) | entity-creation-guideline.md | base-entity-guideline.md |
 | 패키지 배치, 도메인 간 참조, 접근 제어자, 순환 의존 | domain-package-boundary-guideline.md | - |

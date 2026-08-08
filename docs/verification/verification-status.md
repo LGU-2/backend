@@ -3,14 +3,14 @@
 **이 문서는 `gen_status.py` 가 만든다. 손으로 고치지 않는다.**
 레지스트리와 앵커 규칙에서 계산한 값이라, 항목이나 규칙이 바뀌면 다시 생성해야 한다.
 
-생성 시각: 2026-08-08 19:04
+생성 시각: 2026-08-08 19:45
 
 | 저장소 | 커밋 | 항목 |
 |---|---|---:|
-| `common` | `8dc1cab` | 217 |
-| `backend` | `b2efbee` | 260 |
-| `infra` | `3435e3d` | 96 |
-| | | **573** |
+| `common` | `a021faf` | 217 |
+| `backend` | `8fe0ad5` | 264 |
+| `infra` | `5c06db8` | 96 |
+| | | **577** |
 
 ## 게이트가 지금 도는가
 
@@ -42,11 +42,11 @@
 |---|---|---:|---:|---:|---:|---:|---:|
 | `**/domain/controller/*.java` | controller | 220 | 166 | 54 | 166 | 48 | 6 |
 | `**/domain/service/*.java` | service | 185 | 79 | 106 | 79 | 85 | 21 |
-| `**/domain/entity/*.java` | entity | 122 | 89 | 33 | 89 | 30 | 3 |
+| `**/domain/entity/*.java` | entity | 126 | 93 | 33 | 93 | 30 | 3 |
 | `**/domain/repository/*.java` | repository | 48 | 15 | 33 | 15 | 33 | 0 |
 | `**/domain/client/**/*.java` | external-client | 80 | 29 | 51 | 29 | 44 | 7 |
 | `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 135 | 116 | 19 | 116 | 15 | 4 |
-| `src/main/resources/db/migration/*.sql` | migration | 93 | 43 | 50 | 43 | 46 | 4 |
+| `src/main/resources/db/migration/*.sql` | migration | 97 | 47 | 50 | 47 | 46 | 4 |
 | `src/main/resources/application*.yml`, `src/main/resources/logback*.xml` | app-config | 115 | 0 | 115 | 0 | 91 | 24 |
 | `src/test/**/*Test.java` | test | 29 | 20 | 9 | 20 | 9 | 0 |
 | `src/test/**/ArchitectureTest.java` | archunit | 29 | 29 | 0 | 29 | 0 | 0 |
@@ -59,7 +59,7 @@
 
 | 층위 | 건수 | 게이트 | 건수 |
 |---|---:|---|---:|
-| `[코드]` | 386 | `G-PR` | 432 |
+| `[코드]` | 390 | `G-PR` | 436 |
 | `[프로세스]` | 50 | `G-AUDIT` | 84 |
 | `[인프라]` | 46 | `G-DESIGN` | 44 |
 | `[설계]` | 44 | `G-RELEASE` | 13 |
@@ -68,7 +68,7 @@
 
 ## PR 로 판정되지 않는 항목
 
-573건 중 **470건**이 어떤 규칙엔가 걸린다. 나머지 103건은 아래와 같다.
+577건 중 **474건**이 어떤 규칙엔가 걸린다. 나머지 103건은 아래와 같다.
 
 | 게이트 | 건수 | 접두사 |
 |---|---:|---|
@@ -120,9 +120,9 @@
 
 이 중 **1건은 위 모순에 가려 동작하지 않는다.** 확정값끼리 어긋나 있으면 확정값을 기준으로 판정하라는 지시가 성립하지 않는다.
 
-### 층위 미검증 356건
+### 층위 미검증 360건
 
-backend 260건, infra 96건 의 층위 태그가 기본값으로 채워져 있다. 실제와 다른 것이 섞여 있어 `levels` 필터가 정확하지 않다.
+backend 264건, infra 96건 의 층위 태그가 기본값으로 채워져 있다. 실제와 다른 것이 섞여 있어 `levels` 필터가 정확하지 않다.
 
 ## 다시 생성하는 법
 

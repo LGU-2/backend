@@ -9,21 +9,35 @@
 
 ## 1. 계층 구조
 
-모든 실제 엔티티는 아래 둘 중 하나를 상속한다.
+모든 실제 엔티티는 아래 넷 중 하나를 상속한다. **상속하면 안 되는 중간 계층은 두지 않는다.**
 
-| 클래스 | PK | created_at | updated_at | 상속 대상 |
-|--------|:--:|:----------:|:----------:|-----------|
-| `BaseImmutableTimeEntity` | Long | O | X | 이력, 로그 (append-only) |
-| `BaseMutableTimeEntity` | Long | O | O | 일반 도메인 엔티티, 코드 테이블 |
+| 클래스 | PK | created_at | updated_at | public_id | 상속 대상 |
+|--------|:--:|:----------:|:----------:|:---------:|-----------|
+| `BaseImmutableTimeEntity` | Long | O | X | X | 이력, 로그 (append-only) |
+| `BaseMutableTimeEntity` | Long | O | O | X | 일반 도메인 엔티티, 코드 테이블 |
+| `BasePublicImmutableTimeEntity` | Long | O | X | O | 외부에 노출되는 이력 |
+| `BasePublicMutableTimeEntity` | Long | O | O | O | 외부에 노출되는 도메인 엔티티 |
 
-`ImmutableTimeEntity`와 `MutableTimeEntity`는 시각 컬럼만 제공하는 `@MappedSuperclass`이며 직접 상속하지 않는다.
+축이 둘이다. **수정 가능 여부**와 **외부 노출 여부**다.
+
+```
+                    수정 불가                     수정 가능
+외부 미노출   BaseImmutableTimeEntity        BaseMutableTimeEntity
+외부 노출     BasePublicImmutableTimeEntity  BasePublicMutableTimeEntity
+```
+
+`public_id`를 다는 기준은 `identifier-strategy-guideline.md` 2절이 정한다.
+**실무상 애그리거트 루트가 그 조건에 대응하며**, 하위 엔티티와 이력 테이블은 대개 `Public`이 없는 쪽이다.
 
 점검 항목
-* `BE-1-01` 모든 `@Entity`가 `BaseImmutableTimeEntity` 또는 `BaseMutableTimeEntity`를 상속하는가
-* `BE-1-02` 수정되지 않는 테이블(이력, 로그)에 `BaseMutableTimeEntity`를 쓰지 않았는가
+* `BE-1-01` 모든 `@Entity`가 위 네 클래스 중 하나를 상속하는가
+* `BE-1-02` 수정되지 않는 테이블(이력, 로그)에 `Mutable` 베이스를 쓰지 않았는가
   `updated_at`이 영원히 `created_at`과 같은 값으로 남아 컬럼과 인덱스가 낭비된다.
-* `BE-1-03` 시각 계층(`ImmutableTimeEntity`, `MutableTimeEntity`)을 엔티티가 직접 상속하지 않았는가
-  PK가 없는 계층이라 상속하면 `@Id`를 엔티티마다 손으로 선언하게 된다.
+* `BE-1-03` `public_id`를 엔티티가 직접 선언하지 않고 `BasePublic*` 상속으로 얻는가
+  직접 선언하면 컬럼명과 타입이 갈려 공통 매핑이 무너진다. `IDS-6-01`이 요구하는 `BINARY(16) NOT NULL`을 엔티티마다 지켜야 한다.
+* `BE-1-04` 외부에 노출되지 않는 엔티티가 `BasePublic*`을 상속하지 않았는가
+  UNIQUE 인덱스 하나는 저장 공간과 삽입 비용을 모두 늘린다. 쓰이지 않으면 순손실이다.
+* `BE-1-05` `id`와 시각 컬럼을 엔티티가 직접 선언하지 않았는가
 
 ```java
 // 점검 대상: 베이스를 상속하지 않고 id 와 시각을 직접 선언
@@ -34,15 +48,73 @@ public class User {
     private LocalDateTime createdAt;
 }
 
-// 개선: 베이스 상속으로 뼈대를 통일
+// 개선: 외부에 노출되지 않는 엔티티
 @Entity
-@Table(name = "users")
+@Table(name = "order_items")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User extends BaseMutableTimeEntity {
-    private String email;
+public class OrderItem extends BaseMutableTimeEntity {
+    private int quantity;
+}
+
+// 개선: 외부에 노출되는 애그리거트 루트
+@Entity
+@Table(name = "orders")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Order extends BasePublicMutableTimeEntity {
+    private Long memberId;
+
+    @Builder(access = AccessLevel.PRIVATE)
+    private Order(UUID publicId, Long memberId) {
+        super(publicId);            // 생성자 인자로 확정한다 (IDS-5-01)
+        this.memberId = memberId;
+    }
+
+    public static OrderBuilder builder(UUID publicId, Long memberId) {
+        return Order.builder().publicId(publicId).memberId(memberId);
+    }
+
+    // 타입 래퍼는 하위가 씌운다
+    public OrderPublicId getPublicId() {
+        return new OrderPublicId(publicIdValue());
+    }
 }
 ```
+
+### 1.1 `public_id`는 베이스가 `UUID`로 들고 하위가 타입을 씌운다
+
+`AbstractPublicId` 하위 타입은 엔티티마다 다르다(`OrderPublicId`, `AccountPublicId`).
+베이스가 그 타입을 직접 들면 엔티티마다 `AttributeConverter`가 필요해진다.
+
+**베이스는 `UUID` 하나만 들고, 변환기도 하나만 둔다.**
+
+```java
+@MappedSuperclass
+public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
+
+    @Column(name = "public_id", nullable = false, updatable = false,
+            columnDefinition = "BINARY(16)")
+    @Convert(converter = UuidToBinaryConverter.class)
+    private UUID publicId;
+
+    protected BasePublicMutableTimeEntity(UUID publicId) {
+        if (publicId == null) {
+            throw new IllegalArgumentException("publicId 는 필수다");
+        }
+        this.publicId = publicId;
+    }
+
+    protected UUID publicIdValue() {
+        return publicId;
+    }
+}
+```
+
+점검 항목
+* `BE-1-06` 베이스가 `UUID`를 들고 변환기가 하나인가
+* `BE-1-07` 하위 엔티티가 `getPublicId()`로 자기 타입 래퍼를 돌려주는가
+  `publicIdValue()`가 `protected`인 이유다. 외부에는 타입이 붙은 것만 나간다.
 
 ## 2. PK 규칙
 
@@ -119,13 +191,28 @@ public class Grade extends BaseMutableTimeEntity {
 
 ## 6. 상속 선택 기준
 
+두 가지를 순서대로 묻는다.
+
+```
+1. 이 테이블의 행이 수정되는가?
+   아니오 -> Immutable      예 -> Mutable
+
+2. 식별자가 외부(API 경로, 응답 본문, 타 서비스)에 노출되는가?
+   아니오 -> 그대로          예 -> Public 을 붙인다
+```
+
 | 테이블 성격 | 상속 대상 |
 |-------------|-----------|
-| 일반 도메인 엔티티 (회원, 주문, 상품) | `BaseMutableTimeEntity` |
+| 애그리거트 루트 (회원, 주문, 상품) | `BasePublicMutableTimeEntity` |
+| 하위 엔티티 (주문 항목, 배송지) | `BaseMutableTimeEntity` |
 | 운영 관리 코드 테이블 (등급, 카테고리) | `BaseMutableTimeEntity` (id + code UNIQUE) |
 | 이력, 로그, append-only | `BaseImmutableTimeEntity` |
+| 외부에 단건으로 노출되는 이력 | `BasePublicImmutableTimeEntity` |
 | 코드성 값 중 운영 관리가 불필요한 것 | 테이블을 만들지 않고 enum |
 | 대량 참조 + 캐싱 곤란한 특수 코드 테이블 | 문자열 PK 예외 (베이스 미상속, 사유 기재) |
+
+**하위 엔티티에 `Public`을 붙이지 않는 이유**는 부모 식별자와 순번으로 도달하기 때문이다 (`/orders/{id}/items/3`).
+이력 테이블도 목록으로만 조회되면 단건 참조 대상이 아니다. 근거는 `identifier-strategy-guideline.md` 2절에 있다.
 
 ## 7. 참고
 

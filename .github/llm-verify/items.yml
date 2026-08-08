@@ -3,7 +3,7 @@
 # 생성 명령: gen_items.py <dir> '*-guideline.md' 'backend' 코드
 version: 1
 source: backend
-count: 260
+count: 264
 items:
   - {id: API-2-01, doc: api-design-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "API를 리소스 계층(컬렉션과 하위 컬렉션)으로 모델링했는가 (AIP-121)"}
   - {id: API-2-02, doc: api-design-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "API 표면을 내부 DB 스키마와 동일하게 노출하지 않았는가 (AIP-121)"}
@@ -67,9 +67,13 @@ items:
   - {id: API-8-02, doc: api-design-guideline.md, ch: 8, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "공통 타입(google.rpc, google.type 등)을 재사용했는가 (AIP-213)"}
   - {id: API-8-03, doc: api-design-guideline.md, ch: 8, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "API용 proto를 내부 저장용 proto와 분리했는가 (AIP-215)"}
   - {id: API-8-04, doc: api-design-guideline.md, ch: 8, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "proto 파일과 디렉터리 구조가 규칙을 따르는가 (AIP-191)"}
-  - {id: BE-1-01, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "모든 `@Entity`가 `BaseImmutableTimeEntity` 또는 `BaseMutableTimeEntity`를 상속하는가"}
-  - {id: BE-1-02, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "수정되지 않는 테이블(이력, 로그)에 `BaseMutableTimeEntity`를 쓰지 않았는가"}
-  - {id: BE-1-03, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "시각 계층(`ImmutableTimeEntity`, `MutableTimeEntity`)을 엔티티가 직접 상속하지 않았는가"}
+  - {id: BE-1-01, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "모든 `@Entity`가 위 네 클래스 중 하나를 상속하는가"}
+  - {id: BE-1-02, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "수정되지 않는 테이블(이력, 로그)에 `Mutable` 베이스를 쓰지 않았는가"}
+  - {id: BE-1-03, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`public_id`를 엔티티가 직접 선언하지 않고 `BasePublic*` 상속으로 얻는가"}
+  - {id: BE-1-04, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, defers_to: [IDS-2-03], title: "외부에 노출되지 않는 엔티티가 `BasePublic*`을 상속하지 않았는가"}
+  - {id: BE-1-05, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`id`와 시각 컬럼을 엔티티가 직접 선언하지 않았는가"}
+  - {id: BE-1-06, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "베이스가 `UUID`를 들고 변환기가 하나인가"}
+  - {id: BE-1-07, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "하위 엔티티가 `getPublicId()`로 자기 타입 래퍼를 돌려주는가"}
   - {id: BE-2-01, doc: base-entity-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "PK가 `Long`(MySQL `BIGINT`)인가"}
   - {id: BE-2-02, doc: base-entity-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`@GeneratedValue(strategy = GenerationType.IDENTITY)`를 쓰는가"}
   - {id: BE-2-03, doc: base-entity-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "코드 테이블도 정수 PK를 쓰는가"}

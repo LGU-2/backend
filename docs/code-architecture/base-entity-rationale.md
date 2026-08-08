@@ -24,27 +24,46 @@ public class AccessLog extends BaseImmutableTimeEntity {
 }
 ```
 
-### 왜 MutableTimeEntity가 ImmutableTimeEntity를 상속하는가
+### 왜 시각만 가진 중간 계층을 두지 않는가
 
-`created_at` 정의를 재사용하기 위해서다.
-의미상 "수정 가능이 수정 불가를 상속한다"로 읽으면 어색하므로, **"생성 시각 위에 수정 시각을 더한다"**로 이해한다.
+초판은 `ImmutableTimeEntity`와 `MutableTimeEntity`를 `@MappedSuperclass`로 두고, 그 위에 PK를 더한 `Base*`를 얹었다.
+`created_at` 정의를 재사용하려는 것이었고, 대신 **"직접 상속하면 안 되는 클래스"가 저장소에 둘 존재하게 됐다.**
 
-상속 방향이 의미가 아니라 컬럼 재사용을 따른 결과이며, 이름이 그 사실을 잘 드러내지 못한다는 점은 이 설계의 약점이다.
+그걸 막으려고 점검 항목을 하나 두어야 했다. 계층을 없애면 항목도 필요 없다.
 
-### 왜 id 선언이 두 곳에 중복되는가
+```
+전   ImmutableTimeEntity(상속 금지) -> BaseImmutableTimeEntity(상속 대상)
+후   BaseImmutableTimeEntity 하나
+```
 
-`@Id @GeneratedValue`가 `BaseImmutableTimeEntity`와 `BaseMutableTimeEntity`에 각각 들어간다.
+대가는 `created_at` 선언이 네 곳에 중복되는 것이다. `@CreatedDate` 한 줄씩이라 감수한다.
+**상속하면 안 되는 클래스가 존재하는 비용이 중복 네 줄보다 크다.**
 
-수정 여부(시각 축)와 PK(id) **두 축을 모두 상속으로 표현하는데 Java는 단일 상속만 된다.**
-id를 한곳에 모으면서 시각 축으로도 나누는 것은 불가능하다.
+### 왜 선언이 여러 곳에 중복되는가
+
+`@Id @GeneratedValue`와 `@CreatedDate`가 여러 베이스에 각각 들어간다.
+
+수정 여부와 외부 노출 여부 **두 축을 모두 상속으로 표현하는데 Java는 단일 상속만 된다.**
+한 축을 상속으로 나누면 다른 축은 중복이 된다.
 
 | 대안 | 문제 |
 |------|------|
-| id를 최상위에 두고 시각을 아래로 | 시각 축으로 나눌 수 없다 |
+| id를 최상위에 두고 나머지를 아래로 | 축이 둘이라 한쪽으로만 나뉜다 |
 | 인터페이스로 id 분리 | `@Id`는 필드에 붙어야 해 인터페이스로 못 옮긴다 |
-| 두 곳에 중복 선언 (채택) | 두 줄이 중복된다 |
+| 여러 곳에 중복 선언 (채택) | 어노테이션 몇 줄이 중복된다 |
 
-두 줄의 중복은 구조상 감수한다. 세 대안 중 실제로 동작하는 것이 이것뿐이다.
+`BasePublic*`은 `Base*`를 상속하므로 `public_id`는 두 곳에만 들어간다.
+
+### 왜 베이스가 UUID를 들고 타입 래퍼는 하위가 씌우는가
+
+`AbstractPublicId` 하위 타입은 엔티티마다 다르다. 베이스가 그 타입을 직접 들려면 둘 중 하나다.
+
+| 방식 | 문제 |
+|------|------|
+| 제네릭 베이스 `BasePublic...<ID extends AbstractPublicId>` | JPA가 제네릭 필드를 매핑하려면 **엔티티마다 `AttributeConverter`**가 필요하다 |
+| 베이스가 `UUID`를 들고 하위가 래핑 (채택) | 변환기가 하나. 하위는 `getPublicId()` 한 줄 |
+
+`publicIdValue()`를 `protected`로 두어 **밖으로는 타입이 붙은 것만 나가게** 한다.
 
 ## 2. PK 규칙
 
