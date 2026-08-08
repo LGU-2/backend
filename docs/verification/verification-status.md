@@ -3,14 +3,14 @@
 **이 문서는 `gen_status.py` 가 만든다. 손으로 고치지 않는다.**
 레지스트리와 앵커 규칙에서 계산한 값이라, 항목이나 규칙이 바뀌면 다시 생성해야 한다.
 
-생성 시각: 2026-08-09 01:09
+생성 시각: 2026-08-09 01:21
 
 | 저장소 | 커밋 | 항목 |
 |---|---|---:|
 | `common` | `bb5fc9c` | 217 |
-| `backend` | `e5faa34` | 268 |
+| `backend` | `582b810` | 273 |
 | `infra` | `5c06db8` | 96 |
-| | | **581** |
+| | | **586** |
 
 ## 게이트가 지금 도는가
 
@@ -40,16 +40,16 @@
 
 | 트리거 | 규칙 | 활성 | 1단계 | 2단계 | backend | common | infra |
 |---|---|---:|---:|---:|---:|---:|---:|
-| `**/domain/controller/*.java` | controller | 222 | 168 | 54 | 168 | 48 | 6 |
-| `**/domain/service/*.java` | service | 185 | 79 | 106 | 79 | 85 | 21 |
-| `**/domain/entity/*.java` | entity | 130 | 97 | 33 | 97 | 30 | 3 |
-| `**/domain/repository/*.java` | repository | 48 | 15 | 33 | 15 | 33 | 0 |
-| `**/domain/client/**/*.java` | external-client | 80 | 29 | 51 | 29 | 44 | 7 |
-| `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 137 | 118 | 19 | 118 | 15 | 4 |
+| `**/domain/controller/*.java`, `**/domain/dto/*.java` | controller | 227 | 173 | 54 | 173 | 48 | 6 |
+| `**/domain/service/*.java` | service | 189 | 83 | 106 | 83 | 85 | 21 |
+| `**/domain/entity/*.java` | entity | 163 | 130 | 33 | 130 | 30 | 3 |
+| `**/domain/repository/*.java` | repository | 81 | 48 | 33 | 48 | 33 | 0 |
+| `**/domain/client/**/*.java` | external-client | 84 | 33 | 51 | 33 | 44 | 7 |
+| `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 142 | 123 | 19 | 123 | 15 | 4 |
 | `src/main/resources/db/migration/*.sql` | migration | 101 | 51 | 50 | 51 | 46 | 4 |
 | `src/main/resources/application*.yml`, `src/main/resources/logback*.xml` | app-config | 115 | 0 | 115 | 0 | 91 | 24 |
 | `src/test/**/*Test.java` | test | 29 | 20 | 9 | 20 | 9 | 0 |
-| `src/test/**/ArchitectureTest.java` | archunit | 29 | 29 | 0 | 29 | 0 | 0 |
+| `src/test/**/ArchitectureTest.java` | archunit | 33 | 33 | 0 | 33 | 0 | 0 |
 | `build.gradle`, `settings.gradle`, `lombok.config` | build | 36 | 10 | 26 | 10 | 26 | 0 |
 | (해당 없음) | 기본 집합 | 50 | 50 | 0 | 50 | 0 | 0 |
 
@@ -59,7 +59,7 @@
 
 | 층위 | 건수 | 게이트 | 건수 |
 |---|---:|---|---:|
-| `[코드]` | 394 | `G-PR` | 440 |
+| `[코드]` | 399 | `G-PR` | 445 |
 | `[프로세스]` | 50 | `G-AUDIT` | 84 |
 | `[인프라]` | 46 | `G-DESIGN` | 44 |
 | `[설계]` | 44 | `G-RELEASE` | 13 |
@@ -68,7 +68,7 @@
 
 ## PR 로 판정되지 않는 항목
 
-581건 중 **478건**이 어떤 규칙엔가 걸린다. 나머지 103건은 아래와 같다.
+586건 중 **483건**이 어떤 규칙엔가 걸린다. 나머지 103건은 아래와 같다.
 
 | 게이트 | 건수 | 접두사 |
 |---|---:|---|
@@ -120,9 +120,9 @@
 
 이 중 **1건은 위 모순에 가려 동작하지 않는다.** 확정값끼리 어긋나 있으면 확정값을 기준으로 판정하라는 지시가 성립하지 않는다.
 
-### 층위 미검증 364건
+### 층위 미검증 369건
 
-backend 268건, infra 96건 의 층위 태그가 기본값으로 채워져 있다. 실제와 다른 것이 섞여 있어 `levels` 필터가 정확하지 않다.
+backend 273건, infra 96건 의 층위 태그가 기본값으로 채워져 있다. 실제와 다른 것이 섞여 있어 `levels` 필터가 정확하지 않다.
 
 ## 다시 생성하는 법
 

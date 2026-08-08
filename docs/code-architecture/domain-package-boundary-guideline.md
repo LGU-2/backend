@@ -114,7 +114,9 @@ payment
 | 여러 도메인이 쓴다 (SMS, 이메일, 파일 저장소) | 별도 도메인으로 승격 후 공개 API 제공 |
 | 도메인 지식이 없는 기술 설정 (HTTP 타임아웃, 재시도 정책) | `config` |
 
-## 4. 공개 창구의 이름
+## 4. 이름 규칙
+
+### 4.1 공개 창구
 
 공개 창구는 도메인명 + `Api`(`ProductApi`, `MemberApi`)로 통일한다.
 구현체는 `~ApiImpl`로 이름 짓고 `domain` 바로 아래에 package-private로 둔다.
@@ -128,6 +130,43 @@ payment
   변환이나 노출 범위 축소가 없으면 노이즈다.
 * `DPB-4-05` API 구현체에 비즈니스 로직이 없는가
   조합과 변환만 하고 규칙 판단은 내부 서비스에 남긴다.
+
+### 4.2 회원용과 관리자용
+
+한 도메인에 소비자가 둘이면 **관리자 쪽에만 `Admin`을 앞에 붙인다.** 회원용이 기본이라 접두사가 없다.
+
+| 소비자 | URI | 컨트롤러 | 서비스 |
+|---|---|---|---|
+| 회원 | `/v1/products` | `ProductController` | `ProductService` |
+| 관리자 | `/v1/admin/products` | `AdminProductController` | `AdminProductService` |
+
+**URI와 클래스 이름이 같은 순서로 간다.** `/v1/admin/products`를 보면 `AdminProduct~`를 찾으면 된다.
+경로 조각이 이름 조각에 그대로 대응하므로 둘 사이에 번역 규칙이 필요 없다.
+
+붙이는 위치가 앞인 이유는 **정렬**이다. 뒤에 붙이면 파일명 순으로 볼 때 두 소비자가 번갈아 나온다.
+
+```
+Admin 접두사 (채택)            Admin 접미사
+  AdminProductService            ProductAdminService
+  AdminProductStatService        ProductService
+  ProductService                 ProductStatAdminService
+  ProductStatService             ProductStatService
+```
+
+왼쪽은 관리자용이 위에 모여 **한 덩어리로 보인다.** 권한 검토나 감사 대상을 훑을 때 이 덩어리가 그대로 목록이 된다.
+
+**엔티티와 레포지토리에는 붙이지 않는다.** 저장 모델은 소비자가 누구든 하나다.
+관리자 전용 조회가 필요하면 같은 레포지토리에 메서드를 더한다.
+
+점검 항목
+* `DPB-4-06` 관리자 전용 컨트롤러, 서비스, DTO의 이름이 `Admin`으로 시작하는가
+  중간이나 끝에 넣으면 정렬로 구분하려던 목적이 사라진다.
+* `DPB-4-07` 회원용 클래스에 `Member`, `User`, `Client` 같은 접두사를 붙이지 않았는가
+  양쪽에 다 붙이면 접두사가 아무것도 구분해 주지 못한다. 회원용이 기본값이다.
+* `DPB-4-08` 클래스 이름의 `Admin` 유무가 URI의 `/admin` 유무와 일치하는가
+  한쪽만 바꾸면 경로에서 클래스를 찾는 경로가 끊긴다.
+* `DPB-4-09` 엔티티와 레포지토리에 `Admin`을 붙이지 않았는가
+  저장 모델이 소비자별로 갈라지면 같은 테이블에 두 개의 매핑이 생긴다.
 
 ## 5. 의존 방향
 

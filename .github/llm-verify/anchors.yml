@@ -31,6 +31,9 @@ rules:
     status: unverified
     trigger:
       - "**/domain/controller/*.java"
+      # DTO 는 컨트롤러의 계약이라 같은 항목으로 판정한다.
+      # DTO 만 바뀌는 PR 이 어떤 규칙에도 안 걸리면 DPB-4-06 의 이름 규칙이 발화하지 않는다
+      - "**/domain/dto/*.java"
     anchors:
       - "**/config/SecurityConfig.java"
       - "**/domain/service/*.java"
@@ -74,7 +77,8 @@ rules:
       - "src/main/resources/db/migration/*.sql"
       - "**/common/entity/*.java"
     activate:
-      prefixes: [BE, EC, JPA, DI, CMP, IDS, INF]
+      # DPB: 도메인 루트에 @Entity 가 올라오지 않는가, 엔티티에 Admin 접두사를 붙이지 않았는가
+      prefixes: [BE, EC, JPA, DI, CMP, IDS, INF, DPB]
       levels: [코드, 설계]
       chapters: { INF: [8] }              # 누적 값 이력 테이블
     needs_baseline_values: false
@@ -87,7 +91,8 @@ rules:
       - "**/domain/entity/*.java"
       - "src/main/resources/db/migration/*.sql"
     activate:
-      prefixes: [PERF, DI, JPA, SEC]
+      # DPB: 레포지토리가 도메인 루트에 올라오지 않는가, Admin 접두사를 붙이지 않았는가
+      prefixes: [PERF, DI, JPA, SEC, DPB]
       levels: [코드, 설계]
       chapters:
         # 쿼리 조립과 소유자 조건은 여기가 판정 대상이다.
