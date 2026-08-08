@@ -59,25 +59,6 @@ git clone https://github.com/LGU-2/be.git backend
 캐시가 하루보다 오래되면 갱신 명령을 알려 주되, **자동으로 갱신하지는 않는다.**
 판정 기준이 말없이 바뀌면 어제 통과한 것이 오늘 실패한다.
 
-### 세 저장소를 나란히 두고 싶다면
-
-기준 문서를 직접 고칠 일이 있으면 이쪽이 낫다. 캐시를 쓰지 않고 네트워크도 안 쓴다.
-
-```bash
-git clone https://github.com/LGU-2/.github.git common
-git clone https://github.com/LGU-2/be.git       backend
-git clone https://github.com/LGU-2/infra.git    infra
-```
-
-```
-어딘가/
-  common/     품질 속성 217건
-  backend/    코드 관용 250건, 판정 대상
-  infra/      인프라 제약 100건
-```
-
-이때 `/verify` 는 옆 저장소를 그대로 쓰고 **갱신하거나 건드리지 않는다.** 사용자가 관리하는 것이기 때문이다.
-
 ## 로컬에서 도는 것
 
 ```
