@@ -6,6 +6,7 @@
 |---|---|
 | **무엇으로 이루어져 있나** | 이 문서 |
 | 어떻게 쓰나 | [verification-guide.md](./verification-guide.md) |
+| 칠 수 있는 명령 | [verification-commands.md](./verification-commands.md) |
 | 언제 무엇이 도나 | [verification-workflow.md](./verification-workflow.md) |
 | 결과가 어떻게 생겼나 | [verification-example.md](./verification-example.md) |
 | **지금 무엇을 검증하나** | [verification-status.md](./verification-status.md) (자동 생성) |
