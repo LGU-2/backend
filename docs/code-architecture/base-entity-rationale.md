@@ -61,9 +61,23 @@ public class AccessLog extends BaseImmutableTimeEntity {
 | 방식 | 문제 |
 |------|------|
 | 제네릭 베이스 `BasePublic...<ID extends AbstractPublicId>` | JPA가 제네릭 필드를 매핑하려면 **엔티티마다 `AttributeConverter`**가 필요하다 |
-| 베이스가 `UUID`를 들고 하위가 래핑 (채택) | 변환기가 하나. 하위는 `getPublicId()` 한 줄 |
+| 베이스가 `UUID`를 들고 하위가 래핑 (채택) | 변환기가 하나. 하위는 `publicId()` 한 줄 |
 
 `publicIdValue()`를 `protected`로 두어 **밖으로는 타입이 붙은 것만 나가게** 한다.
+
+### 왜 접근자 이름에 get 을 붙이지 않는가
+
+`entity-creation-guideline.md` 1절이 `@Getter`를 허용하기 때문이다.
+
+베이스에 `@Getter`가 붙으면 Lombok 이 `public UUID getPublicId()`를 만든다. 그러면 둘 다 깨진다.
+
+```
+하위가 OrderPublicId getPublicId() 를 선언   반환형이 달라 컴파일 실패
+선언하지 않고 두면                            생 UUID 가 public 으로 새어 나간다
+```
+
+**이름이 겹치지 않으면 두 경우가 다 사라진다.** `publicId()`는 Lombok 이 만드는 어떤 이름과도 부딪히지 않는다.
+그래도 베이스에 `@Getter`를 붙이면 생 `UUID`가 나가므로 `BE-1-09`로 따로 막는다.
 
 ### 왜 베이스에 생성자가 없는가
 

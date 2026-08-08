@@ -73,8 +73,9 @@ public class Order extends BasePublicMutableTimeEntity {
         return new Order(memberId);
     }
 
-    // 타입 래퍼는 하위가 씌운다
-    public OrderPublicId getPublicId() {
+    /* 타입 래퍼는 하위가 씌운다.
+       get 접두사를 붙이지 않는다. Lombok 이 만드는 접근자와 이름이 겹친다. */
+    public OrderPublicId publicId() {
         return new OrderPublicId(publicIdValue());
     }
 }
@@ -91,7 +92,7 @@ public class Order extends BasePublicMutableTimeEntity {
 @MappedSuperclass
 public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
 
-    @PublicIdGeneration                              // ORM 이 INSERT 직전에 채운다
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)   // ORM 이 INSERT 직전에 채운다
     @Column(name = "public_id", nullable = false, updatable = false,
             columnDefinition = "BINARY(16)")
     @Convert(converter = UuidToBinaryConverter.class)
@@ -108,11 +109,15 @@ public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity 
 
 점검 항목
 * `BE-1-06` 베이스가 `UUID`를 들고 변환기가 하나인가
-* `BE-1-07` 하위 엔티티가 `getPublicId()`로 자기 타입 래퍼를 돌려주는가
+* `BE-1-07` 하위 엔티티가 `publicId()`로 자기 타입 래퍼를 돌려주는가
   `publicIdValue()`가 `protected`인 이유다. 외부에는 타입이 붙은 것만 나간다.
+  `get` 접두사를 쓰지 않는다. `@Getter`가 만드는 `getPublicId()`와 반환형이 달라 컴파일이 깨진다.
 * `BE-1-08` 하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가
-  ORM 이 채우므로 기본 경로에서는 받을 이유가 없다.
-  저장 전에 식별자가 필요한 흐름(결제 준비 등)은 `IDS-5-05`의 예외 경로이며 PR에 사유를 남긴다.
+  ORM 이 채우므로 받을 이유가 없다. 받아도 INSERT 때 덮어쓰이므로 값이 조용히 사라진다.
+  v4 예외 대상 테이블은 `style = RANDOM`으로 바꾸고 사유를 남긴다(`IDS-3-01`).
+* `BE-1-09` 외부 노출 베이스에 `@Getter`가 붙어 있지 않은가
+  붙이면 생 `UUID`를 돌려주는 `public` 접근자가 생겨 타입 래퍼를 우회한다.
+  엔티티 본체의 `@Getter`는 허용이다(`entity-creation-guideline.md` 1절). 이 두 베이스만 예외다.
 
 ## 2. PK 규칙
 

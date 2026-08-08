@@ -84,46 +84,26 @@
   리눅스에서 블로킹 엔트로피 소스에 연결될 수 있어 컨테이너 기동 직후 애플리케이션이 통째로 정지한다.
 * `IDS-4-03` 외부 UUID 라이브러리를 도입했다면 난수원을 확인했는가
   일부 v7 구현체가 속도를 위해 rand_b를 비암호학적 PRNG로 채운다.
-* `IDS-4-04` RFC 9562의 단조 카운터 옵션(Method 1, 2)이나 rand_a 서브밀리초 대체(Method 3)를 쓰지 않았는가
+* `IDS-4-04` 단조 옵션을 쓴다면 증가값이 CSPRNG에서 나오는가
+  RFC 9562가 경고하는 것은 증가값이 고정된 카운터(Method 1)다. 앞의 값을 보면 다음 값이 그대로 나온다.
+  증가값을 난수로 뽑는 Method 2는 인접한 두 값 사이에 32비트 이상을 남기므로 허용한다.
+* `IDS-4-05` 밀리초가 바뀔 때 난수 부분을 다시 뽑는가
+  같은 시각 구간 안에서만 값이 이어져야 한다. 구간을 넘어서까지 이어지면 상관관계가 누적된다.
 
 ## 5. 생성 시점
 
 **ORM 이 INSERT 직전에 채운다.** 서비스가 생성기를 호출하지 않는다.
 
-`public_id`는 PK가 아니므로 Hibernate의 `@UuidGenerator`를 쓸 수 없다. 그 애노테이션은 **식별자 전용**이다.
-비식별자 필드는 `@ValueGenerationType`으로 커스텀 생성기를 만들어 붙인다.
+**Hibernate 내장 `@UuidGenerator`를 쓴다.** 직접 만들지 않는다.
 
-```java
-@ValueGenerationType(generatedBy = PublicIdGeneration.Generator.class)
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface PublicIdGeneration {
-
-    UuidVersion value() default UuidVersion.V7;
-
-    class Generator implements BeforeExecutionGenerator {
-
-        private final PublicIdGenerator delegate;   // 4절의 난수원 규칙을 지키는 구현
-
-        @Override
-        public Object generate(SharedSessionContractImplementor session, Object owner,
-                               Object currentValue, EventType eventType) {
-            return currentValue != null ? currentValue : delegate.generate();
-        }
-
-        @Override
-        public EnumSet<EventType> getEventTypes() {
-            return EventTypeSets.INSERT_ONLY;      // 갱신 시에는 건드리지 않는다
-        }
-    }
-}
-```
+javadoc 문구는 식별자를 말하지만, 이 애노테이션은 `@IdGeneratorType`과 `@ValueGenerationType`을 함께 달고 있고
+`GeneratorCreationContext`를 받는 생성자가 있어 **비식별자 필드에 그대로 붙는다.**
 
 ```java
 @MappedSuperclass
 public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
 
-    @PublicIdGeneration
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     @Column(name = "public_id", nullable = false, updatable = false,
             columnDefinition = "BINARY(16)")
     @Convert(converter = UuidToBinaryConverter.class)
@@ -131,44 +111,62 @@ public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity 
 }
 ```
 
+**`style`을 생략하면 안 된다.** 기본값 `AUTO`는 `RANDOM`으로 풀려 v4가 된다.
+3절이 기본을 v7로 정했으므로, 생략하면 사유 없이 v4를 쓰게 되어 `IDS-3-01`과 조용히 어긋난다.
+v4 예외 대상 테이블은 `style = RANDOM`을 명시한다.
+
 ```java
 // 서비스는 식별자를 모른다
 @Transactional
 public AccountPublicId register(String email) {
     Account account = Account.register(email);
     accountRepository.save(account);
-    return account.getPublicId();       // save 이후에 값이 있다
+    return account.publicId();       // save 이후에 값이 있다
 }
 ```
 
-**Hibernate 내장 `UuidVersion7Strategy`를 쓰지 않는다.** 그 구현은 12비트를 서브밀리초로, 62비트를 단조 카운터로 채워
-4절이 금지한 RFC 9562 Method 1, 2, 3을 모두 쓴다. 난수원도 문서화되어 있지 않다.
-**생성 시점만 ORM에 맡기고 생성 방식은 우리가 정한다.**
+### 5.1 내장 구현이 4절을 지키는가
 
-점검 항목
-* `IDS-5-01` `public_id`가 `@PublicIdGeneration`으로 채워지는가
-  엔티티나 서비스가 직접 대입하면 4절의 난수원 규칙을 우회하는 경로가 생긴다.
-* `IDS-5-02` 생성이 `PublicIdGenerator` 인터페이스 뒤에 있는가
-  테스트 대역을 둘 수 있는 것이 이 인터페이스의 존재 이유다. 생성기 자체는 ORM이 부르지만 구현은 교체 가능해야 한다.
-* `IDS-5-03` 비식별자 필드에 `@UuidGenerator`나 `GenerationType.UUID`를 쓰지 않았는가
-  식별자 전용 애노테이션이다. 내부 PK는 `IDENTITY`이므로 이 프로젝트에서 쓸 자리가 없다.
-* `IDS-5-04` 생성 시점이 INSERT로 한정되어 있는가
-  `EventTypeSets.INSERT_ONLY`가 아니면 갱신 때 값이 바뀐다. `updatable = false`와 함께 이중으로 막는다.
-* `IDS-5-05` 이미 값이 있으면 덮어쓰지 않는가
-  마이그레이션이나 테스트에서 값을 지정하는 경로가 필요하다.
+`IDS-4-03`은 도입한 구현의 난수원을 확인하라고 요구한다. 내장 `UuidVersion7Strategy`를 대조한 결과다.
 
-### 5.1 무엇을 포기했는가
+| 4절 항목 | 내장 구현 | |
+|---|---|---|
+| `IDS-4-01` `SecureRandom`인가 | `new SecureRandom()` | 지킴 |
+| `IDS-4-02` `getInstanceStrong()` 금지 | 쓰지 않음 | 지킴 |
+| `IDS-4-04` 증가값이 CSPRNG에서 나오는가 | `lastSequence + nextLong(0xFFFF_FFFFL)` | 지킴 |
+| `IDS-4-05` 밀리초가 바뀌면 다시 뽑는가 | `new State(now, randomSequence())` | 지킴 |
+
+rand_a 12비트는 서브밀리초 시각으로 채워진다(Method 3). 난수가 74비트에서 62비트로 줄고 생성 시각이 약 250µs 단위까지 드러난다.
+**이 손실은 받아들인다.** 밀리초는 어차피 타임스탬프에 있고, 62비트는 인가 검증(`IDS-3-03`)이 앞단에 있는 식별자로 충분하다.
+
+### 5.2 무엇을 포기했는가
 
 **사전 채번을 포기했다.** `save()` 전에는 `public_id`가 `null`이다.
+
+내장 생성기의 `generate()`는 `currentValue`를 보지 않고 항상 새 값을 반환한다.
+**값을 미리 넣어도 INSERT 때 덮어쓰인다.** 예외 경로가 없다는 뜻이다.
 
 | | 이전 (생성자 인자) | 지금 (ORM) |
 |---|---|---|
 | 값이 정해지는 시점 | 엔티티 생성 | INSERT 직전 |
 | 저장 전 로그, 이벤트에 사용 | 가능 | **불가** |
 | 서비스마다 생성기 호출 | 필요 | **불필요** |
-| 난수원 통제 | 가능 | **가능** (커스텀 생성기라서) |
+| 테스트에서 값 고정 | 가능 | **불가.** `save()` 후에 읽는다 |
+| 특정 값 지정 | 가능 | **불가.** 백필은 SQL로 한다 |
 
-저장 전에 식별자가 필요한 경우가 생기면 `IDS-5-05`의 경로로 값을 미리 넣는다. 기본 경로는 아니다.
+저장 전에 식별자가 필요한 흐름이 실제로 생기면 이 결정을 되돌린다.
+`@ValueGenerationType`으로 `currentValue`를 보존하는 생성기를 두면 되고, 비트 배치는 그때도 내장 전략에 위임한다.
+
+점검 항목
+* `IDS-5-01` `public_id`가 `@UuidGenerator`로 채워지는가
+  엔티티나 서비스가 직접 대입하면 3절의 버전 규칙을 우회하는 경로가 생긴다.
+* `IDS-5-02` `style`을 명시했는가
+  기본값 `AUTO`는 `RANDOM`으로 풀려 v4가 된다. 생략하면 사유 없이 v4를 쓰게 된다.
+* `IDS-5-03` `GenerationType.UUID`를 쓰지 않았는가
+  JPA 표준은 버전을 규정하지 않고 Hibernate는 v4로 구현한다. 버전을 고를 수 없다.
+* `IDS-5-04` `public_id` 컬럼에 `updatable = false`가 지정되어 있는가
+  생성이 INSERT로 한정되는 것은 `@UuidGenerator`가 `EventTypeSets.INSERT_ONLY`를 반환해 보장한다.
+  이 항목은 우리 쪽 잠금이다. 필드에 대입하는 코드가 생겨도 UPDATE 문에 실리지 않는다.
 
 ## 6. 스키마
 
@@ -248,10 +246,10 @@ CREATE TABLE account (
 * [ ] 2절 판단 순서로 구성을 결정하고 근거를 남겼다
 * [ ] 3절에 따라 기본 버전을 확정하고 v4 예외 대상을 식별했다
 * [ ] 클라이언트 생성 식별자 허용 여부를 결정했다
-* [ ] `common-core`에 생성기, 래퍼, `@MappedSuperclass`를 배치했다
+* [ ] `common-core`에 래퍼와 `@MappedSuperclass`를 배치했다
 * [ ] 2절 기준으로 적용 대상 테이블을 확정하고 ERD에 반영했다
 * [ ] 비즈니스 식별자가 필요한 리소스와 채번 규칙을 정했다
-* [ ] `FixedPublicIdGenerator` 등 테스트 대역을 준비했다
+* [ ] 테스트가 `save()` 이후에 식별자를 읽도록 작성했다
 
 ## 12. 참고
 
