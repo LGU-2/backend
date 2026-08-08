@@ -24,26 +24,28 @@ ls ~/.cache/llm-verify/common/.github/llm-verify/items.yml
 
 찾는 순서는 이렇다.
 
-| 순서 | 위치 | 뜻 |
-|------|------|-----|
-| 1 | `../common` | 사용자가 직접 clone 해 둔 것. **우선한다** |
-| 2 | `~/.cache/llm-verify/common` | 전에 받아 둔 캐시 |
-| 3 | 없음 | 아래 절차로 받는다 |
+| 순서 | 위치 | 어떻게 다루나 |
+|------|------|---------------|
+| 1 | `../common` | 사용자가 직접 clone 해 둔 것. **그대로 쓰고 건드리지 않는다** |
+| 2 | `~/.cache/llm-verify/common` | 아래 절차로 **원격 최신에 맞춘 뒤** 쓴다 |
 
-**1번을 우선하는 이유**는 사용자가 관리하는 저장소를 캐시가 덮으면 안 되기 때문이다.
-직접 clone 한 사람은 이 명령이 네트워크를 쓰지 않는다.
+**1번을 우선하는 이유**는 사용자가 관리하는 저장소이기 때문이다.
+직접 clone 한 사람은 이 명령이 네트워크를 쓰지 않고, 그 저장소를 갱신하지도 않는다.
+기준을 바꾸고 싶으면 사용자가 직접 `git pull` 한다.
 
 `infra` 도 같은 순서로 정한다.
 
 이후 단계에서는 여기서 정한 경로를 쓴다. 아래 본문의 `../common`, `../infra` 는 그 경로를 가리킨다.
 
-### 둘 다 없으면 받는다
+### 옆에 없으면 받아서 최신으로 맞춘다
 
-사용자에게 먼저 묻는다. **네트워크를 쓰고 디스크에 쓰는 동작이므로 말없이 하지 않는다.**
+`~/.cache/llm-verify/` 에 두고 **판정 전에 항상 원격 최신으로 맞춘다.**
+
+처음이면 사용자에게 묻는다. 네트워크를 쓰고 디스크에 쓰는 동작이므로 말없이 하지 않는다.
 
 ```
 common 과 infra 를 찾지 못했습니다.
-~/.cache/llm-verify 에 받을까요? (약 3MB, 공개 저장소라 인증 불필요)
+~/.cache/llm-verify 에 받을까요? (약 1.3MB, 공개 저장소라 인증 불필요)
 ```
 
 승인하면 받는다.
@@ -54,32 +56,34 @@ git clone --depth 1 https://github.com/LGU-2/.github.git ~/.cache/llm-verify/com
 git clone --depth 1 https://github.com/LGU-2/infra.git   ~/.cache/llm-verify/infra
 ```
 
-받은 뒤 어느 시점 것인지 알린다.
-
-```
-common @ a1b2c3d, infra @ e4f5g6h 받음
-```
-
-거절하면 여기서 멈춘다. **없는 채로 진행하면 backend 250건만 판정하고 그 사실이 결과에 드러나지 않는다.**
-
-### 캐시를 쓸 때는 나이를 본다
-
-캐시에서 읽는 경우에만 확인한다. `../common` 을 쓸 때는 사용자 소관이므로 건드리지 않는다.
+이미 있으면 묻지 않고 최신으로 맞춘다.
 
 ```bash
-git -C ~/.cache/llm-verify/common log -1 --format=%cr
+git -C ~/.cache/llm-verify/common fetch --depth 1 -q origin HEAD && \
+git -C ~/.cache/llm-verify/common reset --hard -q FETCH_HEAD
+git -C ~/.cache/llm-verify/infra  fetch --depth 1 -q origin HEAD && \
+git -C ~/.cache/llm-verify/infra  reset --hard -q FETCH_HEAD
 ```
 
-**마지막 커밋이 하루보다 오래됐으면 알린다.** 판정은 그대로 진행한다.
+**`pull` 대신 `fetch` + `reset --hard` 를 쓴다.** 얕은 clone 이라 병합할 이력이 없고,
+이쪽은 사람이 고칠 곳이 아니므로 원격을 그대로 덮는 것이 맞다.
+
+받거나 맞춘 뒤 어느 시점인지 한 줄로 알린다. **캐시라는 말은 하지 않는다.**
+사용자가 알아야 할 것은 "어느 시점의 기준으로 판정하는가" 뿐이다.
 
 ```
-기준 캐시가 3일 전 것입니다. 갱신하려면:
-  git -C ~/.cache/llm-verify/common pull
-  git -C ~/.cache/llm-verify/infra  pull
+기준: common @ dfe9fd9, infra @ aa74a76
 ```
 
-**자동으로 갱신하지 않는다.** 판정 기준이 말없이 바뀌면 어제 통과한 것이 오늘 실패한다.
-언제 갱신할지는 사용자가 정한다.
+### 네트워크가 안 되면
+
+받아 둔 것이 있으면 **그것으로 진행하고 사실만 알린다.**
+
+```
+원격을 확인하지 못했습니다. 받아 둔 기준으로 판정합니다: common @ dfe9fd9 (8월 8일)
+```
+
+아무것도 없으면 멈춘다. **없는 채로 진행하면 backend 250건만 판정하고 그 사실이 결과에 드러나지 않는다.**
 
 ## 1. 빌드 게이트 (G-BUILD 와 같은 기준, 여기서는 알림만)
 
