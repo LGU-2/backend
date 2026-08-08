@@ -1,6 +1,6 @@
 ---
 description: G-LOCAL. 마지막 커밋의 변경분을 세 저장소의 점검 항목으로 판정한다
-allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Bash(date *), Read, Glob, Grep, Write
+allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Bash(date *), Bash(ls *), Bash(test *), Read, Glob, Grep, Write
 ---
 
 # G-LOCAL 검증
@@ -13,11 +13,73 @@ allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Ba
 
 ## 0. 기준 저장소 위치 확인
 
+판정 기준 567건 중 317건이 다른 두 저장소에 있다. 먼저 그 위치를 정한다.
+
+`common` 과 `infra` 를 **따로 판단한다.** 하나만 없을 수도 있다.
+
 ```bash
-ls ../common/.github/llm-verify/items.yml ../infra/.github/llm-verify/items.yml
+ls ../common/.github/llm-verify/items.yml
+ls ~/.cache/llm-verify/common/.github/llm-verify/items.yml
 ```
 
-없으면 여기서 멈추고 사용자에게 두 저장소의 경로를 묻는다. **없는 채로 진행하면 backend 250건만 판정하고 그 사실이 결과에 드러나지 않는다.**
+찾는 순서는 이렇다.
+
+| 순서 | 위치 | 뜻 |
+|------|------|-----|
+| 1 | `../common` | 사용자가 직접 clone 해 둔 것. **우선한다** |
+| 2 | `~/.cache/llm-verify/common` | 전에 받아 둔 캐시 |
+| 3 | 없음 | 아래 절차로 받는다 |
+
+**1번을 우선하는 이유**는 사용자가 관리하는 저장소를 캐시가 덮으면 안 되기 때문이다.
+직접 clone 한 사람은 이 명령이 네트워크를 쓰지 않는다.
+
+`infra` 도 같은 순서로 정한다.
+
+이후 단계에서는 여기서 정한 경로를 쓴다. 아래 본문의 `../common`, `../infra` 는 그 경로를 가리킨다.
+
+### 둘 다 없으면 받는다
+
+사용자에게 먼저 묻는다. **네트워크를 쓰고 디스크에 쓰는 동작이므로 말없이 하지 않는다.**
+
+```
+common 과 infra 를 찾지 못했습니다.
+~/.cache/llm-verify 에 받을까요? (약 3MB, 공개 저장소라 인증 불필요)
+```
+
+승인하면 받는다.
+
+```bash
+mkdir -p ~/.cache/llm-verify
+git clone --depth 1 https://github.com/LGU-2/.github.git ~/.cache/llm-verify/common
+git clone --depth 1 https://github.com/LGU-2/infra.git   ~/.cache/llm-verify/infra
+```
+
+받은 뒤 어느 시점 것인지 알린다.
+
+```
+common @ a1b2c3d, infra @ e4f5g6h 받음
+```
+
+거절하면 여기서 멈춘다. **없는 채로 진행하면 backend 250건만 판정하고 그 사실이 결과에 드러나지 않는다.**
+
+### 캐시를 쓸 때는 나이를 본다
+
+캐시에서 읽는 경우에만 확인한다. `../common` 을 쓸 때는 사용자 소관이므로 건드리지 않는다.
+
+```bash
+git -C ~/.cache/llm-verify/common log -1 --format=%cr
+```
+
+**마지막 커밋이 하루보다 오래됐으면 알린다.** 판정은 그대로 진행한다.
+
+```
+기준 캐시가 3일 전 것입니다. 갱신하려면:
+  git -C ~/.cache/llm-verify/common pull
+  git -C ~/.cache/llm-verify/infra  pull
+```
+
+**자동으로 갱신하지 않는다.** 판정 기준이 말없이 바뀌면 어제 통과한 것이 오늘 실패한다.
+언제 갱신할지는 사용자가 정한다.
 
 ## 1. 빌드 게이트 (G-BUILD 와 같은 기준, 여기서는 알림만)
 
@@ -194,8 +256,8 @@ echo "docs/llm-review/${LOGIN}_${STAMP}_llm-review.md"
 커밋: <전체 SHA>
 범위: <base>..<head>
 기준 저장소:
-  common: <common 의 커밋 SHA>
-  infra: <infra 의 커밋 SHA 또는 미사용>
+  common: <커밋 SHA>  <경로>   # 옆 저장소인지 캐시인지 적는다
+  infra: <커밋 SHA>  <경로>
 매칭 규칙: [<규칙 id>]
 활성 항목: <n> (backend <a>, common <b>, infra <c>)
 ---
@@ -203,6 +265,9 @@ echo "docs/llm-review/${LOGIN}_${STAMP}_llm-review.md"
 
 **기준 저장소의 SHA 를 남기는 것이 핵심이다.**
 점검 항목은 계속 바뀌므로, 어느 시점의 기준으로 판정했는지 모르면 과거 기록을 다시 읽을 수 없다.
+
+경로도 함께 적는다. 옆 저장소를 썼는지 캐시를 썼는지에 따라 기준이 다를 수 있고,
+캐시가 낡아 있었다면 그 기록만 보고도 알 수 있어야 한다.
 
 저장 후 경로를 한 줄로 알린다.
 
