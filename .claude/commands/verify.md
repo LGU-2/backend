@@ -193,6 +193,30 @@ ID 와 제목만으로 판정하지 않는다. **본문에 판정 기준과 예�
 **추측으로 `OK` 를 내지 않는다.** 근거 파일을 못 봤으면 `INSUFFICIENT_EVIDENCE` 다.
 이 구분이 무너지면 게이트가 통과시킨 것과 안 본 것이 뒤섞여 지표가 무의미해진다.
 
+### 설명은 한국어로 쓴다
+
+점검 항목과 판정 기준이 한국어이므로 지적도 한국어여야 대조하기 쉽다.
+
+**다만 아래는 원문 그대로 둔다.** 번역하면 검색과 대조가 깨진다.
+
+```
+항목 ID          SEC-1-01,  INF-10-03
+verdict          VIOLATION,  OK,  NOT_APPLICABLE,  INSUFFICIENT_EVIDENCE,  CONFLICTING_BASELINE
+파일 경로         src/main/java/com/x/domain/service/OrderService.java
+클래스와 메서드    OrderService.pay
+설정 키와 값      maximum-pool-size: 10,  @Transactional
+점검 항목 제목     문서에 적힌 문장 그대로
+```
+
+예를 들면 이렇게 쓴다.
+
+```
+SEC-1-01  리소스 접근 시 소유권 또는 권한을 검증하는가
+  OrderService.java:4
+  id 로 조회만 하고 호출자가 소유자인지 확인하지 않는다
+  인증 주체의 식별자를 조회 조건에 포함한다
+```
+
 ### 중복 지적 억제
 
 항목에 `defers_to` 가 있으면, 그 대상 항목이 같은 코드에 대해 `VIOLATION` 이면 **이쪽은 발화하지 않는다.**
