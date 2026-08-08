@@ -78,7 +78,7 @@ rules:
       - "**/common/entity/*.java"
     activate:
       # DPB: 도메인 루트에 @Entity 가 올라오지 않는가, 엔티티에 Admin 접두사를 붙이지 않았는가
-      prefixes: [BE, EC, JPA, DI, CMP, IDS, INF, DPB]
+      prefixes: [BE, EC, JPA, DI, CMP, IDS, INF, DPB, EJ]
       levels: [코드, 설계]
       chapters: { INF: [8] }              # 누적 값 이력 테이블
     needs_baseline_values: false
@@ -92,7 +92,7 @@ rules:
       - "src/main/resources/db/migration/*.sql"
     activate:
       # DPB: 레포지토리가 도메인 루트에 올라오지 않는가, Admin 접두사를 붙이지 않았는가
-      prefixes: [PERF, DI, JPA, SEC, DPB]
+      prefixes: [PERF, DI, JPA, SEC, DPB, EJ]
       levels: [코드, 설계]
       chapters:
         # 쿼리 조립과 소유자 조건은 여기가 판정 대상이다.
@@ -108,7 +108,7 @@ rules:
       - "**/domain/service/*.java"
       - "src/main/resources/application*.yml"
     activate:
-      prefixes: [REL, DPB, OBS, INF]
+      prefixes: [REL, DPB, OBS, INF, EJ]
       levels: [코드, 설계, 인프라]
     # 타임아웃 계층과 서킷 설정을 확정값과 대조한다
       chapters: { INF: [3] }              # 외부 호출 타임아웃
@@ -123,7 +123,7 @@ rules:
       - "**/domain/service/*.java"
       - "**/domain/controller/*.java"
     activate:
-      prefixes: [DPB, CMP, API, IDS, INF]
+      prefixes: [DPB, CMP, API, IDS, INF, EJ]
       levels: [코드, 설계]
       chapters: { INF: [6] }              # 혼재 구간의 응답 필드 규칙
     needs_baseline_values: false
@@ -171,7 +171,7 @@ rules:
       - "**/domain/service/*.java"
       - "**/domain/entity/*.java"
     activate:
-      prefixes: [UT, MNT]
+      prefixes: [UT, MNT, DPB, EJ]
       levels: [코드]
     needs_baseline_values: false
 
@@ -181,7 +181,7 @@ rules:
       - "src/test/**/ArchitectureTest.java"
     anchors: []
     activate:
-      prefixes: [DPB]
+      prefixes: [DPB, EJ]
       levels: [코드, 설계]
     needs_baseline_values: false
 
@@ -198,6 +198,11 @@ rules:
       levels: [코드, 인프라, 프로세스]
     needs_baseline_values: false
 
+# EJ 와 DPB 는 자바 파일을 트리거로 하는 모든 규칙에 들어간다
+#   CODEREVIEW.md 가 이 둘을 "변경 위치와 무관하게 모든 자바 PR 에 항상 적용" 으로 규정한다.
+#   규칙을 새로 만들 때 트리거가 *.java 면 두 접두사를 반드시 넣는다.
+#   migration(.sql), app-config(yml), build(gradle) 는 자바가 아니므로 대상이 아니다.
+#
 # activate.chapters 의 의미
 #   접두사만 쓰면 그 문서의 전 항목이 켜진다. INF 49건처럼 장마다 대상이 다른 문서는
 #   장 번호로 범위를 좁힌다. 지정하지 않은 접두사는 전 장을 켠다.
