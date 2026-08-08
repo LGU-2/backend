@@ -4,9 +4,9 @@
 # 판정 항목의 정의는 items.yml, 설계 근거는 LGU-2/.github 의 qa-llm-verification.md 3장에 있다.
 #
 # 참조하는 레지스트리는 셋이다.
-#   backend/.github/llm-verify/items.yml   250건  코드 관용과 패턴
+#   backend/.github/llm-verify/items.yml   260건  코드 관용과 패턴, 빌드 게이트
 #   LGU-2/.github ... items.yml            217건  일반 품질 속성
-#   LGU-2/infra   ... items.yml            106건  인프라 결정이 코드에 부과하는 제약 (INF 접두사)
+#   LGU-2/infra   ... items.yml             96건  인프라 결정이 코드에 부과하는 제약 (INF 접두사)
 # INF 항목은 판정 대상이 이 저장소의 코드이므로 여기서 활성화한다.
 #
 # trigger 패턴은 domain-package-boundary-guideline.md 1절이 확정한 패키지 구조를 따른다.
@@ -188,14 +188,13 @@ rules:
       - "lombok.config"
     anchors: []
     activate:
-      # INF 10장: JaCoCo 커버리지와 SonarQube 게이트 설정
-      prefixes: [MNT, PERF, INF]
+      # BLD: JaCoCo 커버리지와 SonarQube 게이트 설정. 판정 대상이 build.gradle 이라 이 저장소가 소유한다
+      prefixes: [BLD, MNT, PERF]
       levels: [코드, 인프라, 프로세스]
-      chapters: { INF: [10] }
     needs_baseline_values: false
 
 # activate.chapters 의 의미
-#   접두사만 쓰면 그 문서의 전 항목이 켜진다. INF 59건처럼 장마다 대상이 다른 문서는
+#   접두사만 쓰면 그 문서의 전 항목이 켜진다. INF 49건처럼 장마다 대상이 다른 문서는
 #   장 번호로 범위를 좁힌다. 지정하지 않은 접두사는 전 장을 켠다.
 #
 # status 의 의미

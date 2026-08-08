@@ -3,7 +3,7 @@
 # 생성 명령: gen_items.py <dir> '*-guideline.md' 'backend' 코드
 version: 1
 source: backend
-count: 250
+count: 260
 items:
   - {id: API-2-01, doc: api-design-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "API를 리소스 계층(컬렉션과 하위 컬렉션)으로 모델링했는가 (AIP-121)"}
   - {id: API-2-02, doc: api-design-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "API 표면을 내부 DB 스키마와 동일하게 노출하지 않았는가 (AIP-121)"}
@@ -85,6 +85,16 @@ items:
   - {id: BE-5-01, doc: base-entity-guideline.md, ch: 5, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "세 조건이 모두 성립하는가"}
   - {id: BE-5-02, doc: base-entity-guideline.md, ch: 5, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "베이스 미상속 사유가 PR에 기재되어 있는가"}
   - {id: BE-5-03, doc: base-entity-guideline.md, ch: 5, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "시각 컬럼을 직접 선언했는가"}
+  - {id: BLD-1-01, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "JaCoCo 대상이 `*.domain.service.*`로 좁혀져 있는가"}
+  - {id: BLD-1-02, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "판정 단위가 클래스별(`element = 'CLASS'`), 카운터가 메서드(`counter = 'METHOD'`)인가"}
+  - {id: BLD-1-03, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "기준이 `minimum = 1.00`인가"}
+  - {id: BLD-1-04, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "단위 테스트와 통합 테스트의 `.exec`를 합산하는가"}
+  - {id: BLD-1-05, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "`lombok.config`에 `lombok.addLombokGeneratedAnnotation = true`가 있는가"}
+  - {id: BLD-1-06, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "`check`가 `integrationTest`와 `jacocoTestCoverageVerification`에 의존하는가"}
+  - {id: BLD-1-07, doc: build-gate-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "`jacocoTestReport`가 `sonar` 태스크보다 먼저 도는가"}
+  - {id: BLD-2-01, doc: build-gate-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "SonarQube Quality Gate에서 커버리지 조건을 제거했는가"}
+  - {id: BLD-2-02, doc: build-gate-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "정적 분석 차단 조건이 신규 `Blocker` 이슈 0건인가"}
+  - {id: BLD-2-03, doc: build-gate-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "브랜치 보호의 필수 상태 검사에 두 게이트가 등록되어 있는가"}
   - {id: DPB-1-01, doc: domain-package-boundary-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "도메인 루트에 API 인터페이스, record DTO, 공개 예외 외의 것이 없는가"}
   - {id: DPB-1-02, doc: domain-package-boundary-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "다른 도메인의 `domain` 패키지를 import하지 않는가"}
   - {id: DPB-1-03, doc: domain-package-boundary-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [application], level_verified: false, title: "API를 호출당하지 않는 도메인에도 의무적으로 만들지 않았는가"}

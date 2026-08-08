@@ -98,7 +98,7 @@ git -C ~/.cache/llm-verify/infra  reset --hard -q FETCH_HEAD
 
 미달이면 어느 클래스의 어느 메서드인지까지 보고한다. CI 에서는 이 두 가지가 **병합을 차단**하므로, 여기서 먼저 잡는 것이 목적이다.
 
-`build.gradle` 에 JaCoCo 나 Sonar 설정이 없으면 그 사실 자체를 보고한다. `INF-10-01` 부터 `INF-10-10` 이 이 설정을 점검 대상으로 삼는다.
+`build.gradle` 에 JaCoCo 나 Sonar 설정이 없으면 그 사실 자체를 보고한다. `BLD-1-*` 과 `BLD-2-*` 10건이 이 설정을 점검 대상으로 삼는다.
 
 ## 2. 판정 범위 산출
 
@@ -200,7 +200,7 @@ ID 와 제목만으로 판정하지 않는다. **본문에 판정 기준과 예�
 **다만 아래는 원문 그대로 둔다.** 번역하면 검색과 대조가 깨진다.
 
 ```
-항목 ID          SEC-1-01,  INF-10-03
+항목 ID          SEC-1-01,  BLD-1-03
 verdict          VIOLATION,  OK,  NOT_APPLICABLE,  INSUFFICIENT_EVIDENCE,  CONFLICTING_BASELINE
 파일 경로         src/main/java/com/x/domain/service/OrderService.java
 클래스와 메서드    OrderService.pay
