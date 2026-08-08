@@ -8,6 +8,7 @@
 | 어떻게 쓰나 | [verification-guide.md](./verification-guide.md) |
 | 언제 무엇이 도나 | [verification-workflow.md](./verification-workflow.md) |
 | 결과가 어떻게 생겼나 | [verification-example.md](./verification-example.md) |
+| **지금 무엇을 검증하나** | [verification-status.md](./verification-status.md) (자동 생성) |
 | 왜 이렇게 설계했나 | [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md) |
 
 ## 1. 네 층
