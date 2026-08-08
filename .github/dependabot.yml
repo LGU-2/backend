@@ -1,0 +1,39 @@
+# 의존성 자동 추적
+#
+# Spring Boot BOM 이 관리하는 라이브러리는 여기 대상이 아니다.
+# 버전을 안 적으므로 Boot 를 올리면 함께 올라간다.
+#
+# 대상은 BOM 밖에 있어 버전을 직접 박아야 하는 것들이다.
+# 지금은 springdoc-openapi 가 유일하다. Boot 를 올릴 때마다 사람이 맞춰야 하는 것을 자동화한다.
+#
+# Dependabot 이 연 PR 도 다른 PR 과 똑같이 게이트를 거친다.
+# 커버리지와 정적 분석이 깨지면 병합이 막히므로, "올려 보고 깨지면 안 올린다" 가 자동으로 성립한다.
+
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    # 한 번에 여러 개가 올라오면 무엇이 깨뜨렸는지 가려진다
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "[Chore]"
+    labels:
+      - dependencies
+    ignore:
+      # Boot 자체는 손으로 올린다. 마이너 하나에 BOM 전체가 움직인다
+      - dependency-name: "org.springframework.boot:*"
+      - dependency-name: "io.spring.dependency-management"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "[Chore]"
+    labels:
+      - dependencies
