@@ -109,8 +109,87 @@ public static Order place(Long memberId, int totalPrice, String memo) { ... }
 Order.place(1L);   // 컴파일 에러: 필수 두 개 필요
 ```
 
-**예외.** 선택 필드가 지나치게 많아 오버로딩이 감당이 안 되는 소수 엔티티에 한해 정적 멤버 빌더를 직접 작성한다.
-필수를 빌더 생성자로 받아 컴파일 강제를 유지한다. 기본이 아니라 예외이며 PR에 사유를 남긴다.
+**예외.** 선택 필드가 지나치게 많아 오버로딩이 감당이 안 되는 소수 엔티티에 한해 빌더를 쓴다.
+**필수를 빌더 진입점의 파라미터로 받아 컴파일 강제를 유지한다.** 기본이 아니라 예외이며 PR에 사유를 남긴다.
+
+**핵심은 `builder()`가 필수 필드를 파라미터로 받는 것이다.** 그러면 빠뜨렸을 때 컴파일이 안 된다.
+
+Lombok 으로 된다. **`@Builder` 를 생성자에 붙이고 `access = PRIVATE` 로 감춘 뒤, 필수를 받는 정적 메서드를 따로 둔다.**
+
+```java
+@Entity
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Order {
+
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long memberId;          // 필수
+    private int totalPrice;         // 필수
+    private String memo;            // 선택
+    private String couponCode;      // 선택
+    private String giftMessage;     // 선택
+    private OrderStatus status;     // 내부가 결정 (R4)
+
+    /* 생성자에 붙이므로 id 는 빌더에 들어가지 않는다 (R3).
+       access = PRIVATE 라 Lombok 이 만든 무인자 builder() 를 외부에서 못 부른다. */
+    @Builder(access = AccessLevel.PRIVATE)
+    private Order(Long memberId, int totalPrice,
+                  String memo, String couponCode, String giftMessage) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId 는 필수다");
+        }
+        if (totalPrice < 0) {
+            throw new IllegalArgumentException("totalPrice 는 0 이상이어야 한다: " + totalPrice);
+        }
+        this.memberId = memberId;
+        this.totalPrice = totalPrice;
+        this.memo = memo;
+        this.couponCode = couponCode;
+        this.giftMessage = giftMessage;
+        this.status = OrderStatus.CREATED;   // 외부 입력을 받지 않는다 (R4)
+    }
+
+    /* 외부 진입점. 필수를 파라미터로 받아 컴파일 시점에 강제한다. */
+    public static OrderBuilder builder(Long memberId, int totalPrice) {
+        return Order.builder()               // private builder(). 같은 클래스라 부를 수 있다
+                .memberId(memberId)
+                .totalPrice(totalPrice);
+    }
+}
+```
+
+```java
+Order order = Order.builder(1L, 10000)
+        .memo("문 앞에 놓아주세요")
+        .couponCode("WELCOME10")
+        .build();
+
+Order.builder();       // 컴파일 에러: builder() has private access
+Order.builder(1L);     // 컴파일 에러: 인자 두 개가 필요하다
+```
+
+**두 `builder` 는 시그니처가 달라 오버로딩된다.** Lombok 이 만든 무인자 쪽은 private 이라 밖에서 안 보이고,
+밖에서 보이는 것은 필수를 받는 쪽뿐이다.
+
+**무엇이 어떻게 다른가**
+
+| | 클래스 레벨 `@Builder` | 생성자 레벨 + `access = PRIVATE` | 직접 작성한 정적 멤버 빌더 |
+|---|---|---|---|
+| 필수 강제 | **런타임.** 사실상 없다 | **컴파일 시점** | 컴파일 시점 |
+| `id` 노출 | **노출된다** | 안 된다 | 안 된다 |
+| 검증 위치 | `build()` 뒤로 흩어진다 | 생성자 한곳 | 생성자 한곳 |
+| 코드량 | 한 줄 | 몇 줄 | **길다** |
+
+**두 번째를 쓴다.** 세 번째와 같은 보장을 훨씬 적은 코드로 얻는다.
+직접 작성한 정적 멤버 빌더는 Lombok 으로 표현할 수 없는 제약(단계별 빌더 등)이 필요할 때의 최후 수단이다.
+
+`EC-1-02`(클래스 레벨 `@Builder` 금지)와 충돌하지 않는다. 금지 대상은 **클래스 레벨**이고 위는 생성자 레벨이다.
+`EC-2-10`(생성 경로에 `@Builder`를 썼는가) 역시 필수 강제가 풀리는 경우를 두고 하는 말이며,
+**위처럼 필수를 컴파일 시점에 강제했다면 해당하지 않는다.**
+
+Effective Java 아이템 2가 이 패턴을 다루며, 이 문서는 거기에 **"필수는 빌더 진입점의 파라미터로 받는다"** 는 제약을 더한 것이다.
 
 ### R6. `@Data`, `@Setter`, `@AllArgsConstructor`는 엔티티에 쓰지 않는다
 
