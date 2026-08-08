@@ -14,7 +14,8 @@
 /verify HEAD~3..HEAD
 ```
 
-**CI.** PR 을 열거나 push 하면 자동으로 돈다. 칠 것이 없다.
+**CI.** **PR 을 열었을 때만** 돈다. 칠 것이 없다.
+PR 에 push 를 더하면 다시 돈다. main 에 직접 push 하면 아무것도 안 돈다.
 
 **처음이라면** 아래 [준비](#준비) 를 먼저 한다. 세 저장소가 나란히 있어야 `/verify` 가 돈다.
 
@@ -23,9 +24,9 @@
 코드 품질 점검을 LLM 에게 맡긴다. 점검 항목은 세 저장소에 나뉘어 총 567건이고, 판정 대상은 backend 코드다.
 
 ```
-커밋하면   로컬에서 Claude 가 본다   (/verify 를 쳐야 돈다)
-푸시하면   CI 에서 gemini 가 본다    (자동)
-둘 다      병합을 막지 않는다
+커밋하면      로컬에서 Claude 가 본다   (/verify 를 쳐야 돈다)
+PR 을 열면    CI 에서 gemini 가 본다    (자동)
+둘 다         병합을 막지 않는다
 ```
 
 병합을 막는 것은 커버리지(service 패키지 메서드 100%)와 SonarQube 신규 Blocker 0건뿐이다.
@@ -39,7 +40,28 @@
 
 ## 준비
 
-세 저장소를 **같은 부모 디렉터리에 나란히** 둔다. 로컬 검증이 상대 경로로 서로를 찾는다.
+**backend 만 clone 해도 된다.**
+
+```bash
+git clone https://github.com/LGU-2/be.git backend
+```
+
+판정 기준 567건 중 317건이 다른 두 저장소에 있다.
+`/verify` 는 그 둘을 세 단계로 찾는다.
+
+| 순서 | 위치 | 뜻 |
+|------|------|-----|
+| 1 | `../common`, `../infra` | 직접 clone 해 둔 것. **우선한다** |
+| 2 | `~/.cache/llm-verify/` | 전에 받아 둔 캐시 |
+| 3 | 없으면 | 물어보고 받는다 (약 1.3MB, 공개 저장소라 인증 불필요) |
+
+한 번 받으면 다음부터는 안 묻는다.
+캐시가 하루보다 오래되면 갱신 명령을 알려 주되, **자동으로 갱신하지는 않는다.**
+판정 기준이 말없이 바뀌면 어제 통과한 것이 오늘 실패한다.
+
+### 세 저장소를 나란히 두고 싶다면
+
+기준 문서를 직접 고칠 일이 있으면 이쪽이 낫다. 캐시를 쓰지 않고 네트워크도 안 쓴다.
 
 ```bash
 git clone https://github.com/LGU-2/.github.git common
@@ -54,7 +76,7 @@ git clone https://github.com/LGU-2/infra.git    infra
   infra/      인프라 제약 100건
 ```
 
-`common` 이나 `infra` 가 없으면 backend 250건만 판정된다. 그래서 `/verify` 는 없으면 멈춘다.
+이때 `/verify` 는 옆 저장소를 그대로 쓰고 **갱신하거나 건드리지 않는다.** 사용자가 관리하는 것이기 때문이다.
 
 ## 로컬에서 도는 것
 
@@ -69,7 +91,20 @@ git clone https://github.com/LGU-2/infra.git    infra
 
 ## CI
 
-PR 을 열거나 push 하면 자동으로 돈다. 할 일은 없다.
+**PR 에서만 돈다.** 할 일은 없다.
+
+| 언제 | 도는가 |
+|------|--------|
+| PR 생성 | 돈다 |
+| PR 에 push (`synchronize`) | 돈다 |
+| PR 을 닫았다 다시 열기 | 돈다 |
+| **main 에 직접 push** | **안 돈다** |
+
+마지막 줄이 지금 열려 있는 구멍이다.
+추후 main 과 develop 을 보호해 **PR 병합으로만 반영**하도록 막을 예정이며, 그전까지는 직접 push 로 게이트를 건너뛸 수 있다.
+
+`registry-check.yml` 은 조건이 하나 더 붙는다. **점검 항목 문서나 `items.yml` 을 건드린 PR 에서만** 돈다.
+Java 코드만 고친 PR 에서는 실행조차 되지 않는다.
 
 코멘트는 push 마다 새로 달리지 않고 **같은 것이 갱신된다.**
 코멘트는 위반을 둘로 나눈다.
@@ -92,6 +127,9 @@ PR 을 열거나 push 하면 자동으로 돈다. 할 일은 없다.
 같은 코멘트를 갱신하므로 이력이 남지 않고, Actions 로그는 보존 기간이 지나면 사라진다.
 되짚어 볼 필요가 있으면 로컬에서 `/verify` 를 돌려 기록을 남긴다.
 
+로컬 기록에는 **어느 저장소의 어느 시점 기준으로 판정했는지**가 함께 남는다.
+옆 저장소를 썼는지 캐시를 썼는지도 경로로 구분된다.
+
 ```
 backend/docs/llm-review/
   devjohnpark_20260806-174500_llm-review.md
@@ -110,8 +148,8 @@ backend/docs/llm-review/
 커밋: <전체 SHA>
 범위: <base>..<head>
 기준 저장소:
-  common: <common 의 커밋 SHA>
-  infra: <infra 의 커밋 SHA>
+  common: <커밋 SHA>  <경로>
+  infra: <커밋 SHA>  <경로>
 매칭 규칙: [<규칙 id>]
 활성 항목: <n> (backend <a>, common <b>, infra <c>)
 ---
@@ -197,11 +235,15 @@ OK  backend 250건. 문서와 레지스트리가 일치한다
 
 | 증상 | 조치 |
 |---|---|
-| `/verify` 가 시작하자마자 멈춘다 | `common`, `infra` 를 같은 부모 디렉터리에 clone |
+| `/verify` 가 기준 저장소를 받겠다고 묻는다 | 정상이다. 승인하면 `~/.cache/llm-verify` 에 받는다 |
+| 받기를 거절해 멈췄다 | 승인하거나, `common` 과 `infra` 를 옆에 clone 한다 |
+| 기준 캐시가 오래됐다는 경고 | `git -C ~/.cache/llm-verify/common pull` (`infra` 도 같이) |
 | 활성 항목이 유난히 적고 규칙이 `on_no_match` 다 | 정상이다. 문서만 고쳤을 때 그렇다 |
 | 같은 항목이 계속 `INSUFFICIENT_EVIDENCE` | `backend/.github/llm-verify/anchors.yml` 의 `anchors` 에 파일 추가 |
 | 2단계가 매번 건너뛰어진다 | 코멘트의 사유를 보고 로컬로 대신 본다 |
-| CI 워크플로가 빨갛다 | `GEMINI_API_KEY` 조직 시크릿 등록 |
+| CI 워크플로가 빨갛다 | `GEMINI_API_KEY` 시크릿 등록 (조직 또는 `LGU-2/be`) |
+| PR 을 열었는데 아무것도 안 돈다 | `registry-check` 는 문서를 건드린 PR 에서만 돈다 |
+| main 에 push 했는데 아무것도 안 돌았다 | 정상이다. CI 는 PR 에서만 돈다 |
 | 같은 지적이 매 PR 마다 나온다 | `common/.github/llm-verify/known-conflicts.yml` 에 등록 |
 
 **지금은 아직 판정할 대상이 없다.** backend 에 Java 코드가 없어 모든 규칙이 기본 집합으로 떨어지고,
