@@ -88,22 +88,87 @@
 
 ## 5. 생성 시점
 
-점검 항목
-* `IDS-5-01` 식별자가 `@PrePersist`나 ORM 생성기가 아니라 **생성자 인자로** 확정되는가
-  persist 시점에 채워지면 저장 전까지 `null`이라 사전 채번의 이점이 사라지고, 테스트에서 값을 고정할 수 없다.
-* `IDS-5-02` 생성을 `PublicIdGenerator` 인터페이스 뒤에 두었는가
-  테스트 대역을 둘 수 있는 것이 이 인터페이스의 존재 이유다.
-* `IDS-5-03` `@UuidGenerator`나 `GenerationType.UUID`를 쓰지 않았는가
+**ORM 이 INSERT 직전에 채운다.** 서비스가 생성기를 호출하지 않는다.
+
+`public_id`는 PK가 아니므로 Hibernate의 `@UuidGenerator`를 쓸 수 없다. 그 애노테이션은 **식별자 전용**이다.
+비식별자 필드는 `@ValueGenerationType`으로 커스텀 생성기를 만들어 붙인다.
 
 ```java
-// 개선: 식별자를 생성자 인자로 받는다
-@Transactional
-public AccountPublicId register(String email) {
-    Account account = new Account(publicIdGenerator.generate(), email);
-    accountRepository.save(account);
-    return account.getPublicId();
+@ValueGenerationType(generatedBy = PublicIdGeneration.Generator.class)
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.FIELD, ElementType.METHOD})
+public @interface PublicIdGeneration {
+
+    UuidVersion value() default UuidVersion.V7;
+
+    class Generator implements BeforeExecutionGenerator {
+
+        private final PublicIdGenerator delegate;   // 4절의 난수원 규칙을 지키는 구현
+
+        @Override
+        public Object generate(SharedSessionContractImplementor session, Object owner,
+                               Object currentValue, EventType eventType) {
+            return currentValue != null ? currentValue : delegate.generate();
+        }
+
+        @Override
+        public EnumSet<EventType> getEventTypes() {
+            return EventTypeSets.INSERT_ONLY;      // 갱신 시에는 건드리지 않는다
+        }
+    }
 }
 ```
+
+```java
+@MappedSuperclass
+public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
+
+    @PublicIdGeneration
+    @Column(name = "public_id", nullable = false, updatable = false,
+            columnDefinition = "BINARY(16)")
+    @Convert(converter = UuidToBinaryConverter.class)
+    private UUID publicId;
+}
+```
+
+```java
+// 서비스는 식별자를 모른다
+@Transactional
+public AccountPublicId register(String email) {
+    Account account = Account.register(email);
+    accountRepository.save(account);
+    return account.getPublicId();       // save 이후에 값이 있다
+}
+```
+
+**Hibernate 내장 `UuidVersion7Strategy`를 쓰지 않는다.** 그 구현은 12비트를 서브밀리초로, 62비트를 단조 카운터로 채워
+4절이 금지한 RFC 9562 Method 1, 2, 3을 모두 쓴다. 난수원도 문서화되어 있지 않다.
+**생성 시점만 ORM에 맡기고 생성 방식은 우리가 정한다.**
+
+점검 항목
+* `IDS-5-01` `public_id`가 `@PublicIdGeneration`으로 채워지는가
+  엔티티나 서비스가 직접 대입하면 4절의 난수원 규칙을 우회하는 경로가 생긴다.
+* `IDS-5-02` 생성이 `PublicIdGenerator` 인터페이스 뒤에 있는가
+  테스트 대역을 둘 수 있는 것이 이 인터페이스의 존재 이유다. 생성기 자체는 ORM이 부르지만 구현은 교체 가능해야 한다.
+* `IDS-5-03` 비식별자 필드에 `@UuidGenerator`나 `GenerationType.UUID`를 쓰지 않았는가
+  식별자 전용 애노테이션이다. 내부 PK는 `IDENTITY`이므로 이 프로젝트에서 쓸 자리가 없다.
+* `IDS-5-04` 생성 시점이 INSERT로 한정되어 있는가
+  `EventTypeSets.INSERT_ONLY`가 아니면 갱신 때 값이 바뀐다. `updatable = false`와 함께 이중으로 막는다.
+* `IDS-5-05` 이미 값이 있으면 덮어쓰지 않는가
+  마이그레이션이나 테스트에서 값을 지정하는 경로가 필요하다.
+
+### 5.1 무엇을 포기했는가
+
+**사전 채번을 포기했다.** `save()` 전에는 `public_id`가 `null`이다.
+
+| | 이전 (생성자 인자) | 지금 (ORM) |
+|---|---|---|
+| 값이 정해지는 시점 | 엔티티 생성 | INSERT 직전 |
+| 저장 전 로그, 이벤트에 사용 | 가능 | **불가** |
+| 서비스마다 생성기 호출 | 필요 | **불필요** |
+| 난수원 통제 | 가능 | **가능** (커스텀 생성기라서) |
+
+저장 전에 식별자가 필요한 경우가 생기면 `IDS-5-05`의 경로로 값을 미리 넣는다. 기본 경로는 아니다.
 
 ## 6. 스키마
 
@@ -141,7 +206,8 @@ CREATE TABLE account (
 | DB 조인, FK | 내부 | 8바이트 비교 |
 | 배치, 대량 조회 | 내부 | UNIQUE에서 PK로 가는 2단계가 행 수만큼 반복된다 |
 
-예외로 **저장 전 단계의 로그는 외부 식별자를 쓴다.** 내부 ID가 아직 없기 때문이다.
+저장 전 단계에서는 **두 식별자가 다 없다.** 내부 ID는 INSERT 후에, 외부 식별자는 INSERT 직전에 정해진다 (5절).
+그 구간의 로그는 요청 식별자나 도메인 값으로 남긴다.
 
 점검 항목
 * `IDS-7-01` 응답 DTO나 API 경로에 내부 `Long id`가 없는가

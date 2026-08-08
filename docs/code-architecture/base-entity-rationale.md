@@ -65,6 +65,13 @@ public class AccessLog extends BaseImmutableTimeEntity {
 
 `publicIdValue()`를 `protected`로 두어 **밖으로는 타입이 붙은 것만 나가게** 한다.
 
+### 왜 베이스에 생성자가 없는가
+
+`public_id`를 ORM 이 INSERT 직전에 채우기 때문이다. 하위 엔티티가 값을 넘길 일이 없다.
+
+초판은 생성자 인자로 받아 사전 채번을 얻으려 했으나, 애그리거트 루트를 만들 때마다 서비스가 생성기를 호출해야 했다.
+**사전 채번을 포기하고 호출을 없앴다.** 판단 근거는 `identifier-strategy-guideline.md` 5.1절에 있다.
+
 ## 2. PK 규칙
 
 ### 왜 bigint로 통일하는가

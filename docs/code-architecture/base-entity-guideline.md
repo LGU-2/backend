@@ -65,14 +65,12 @@ public class OrderItem extends BaseMutableTimeEntity {
 public class Order extends BasePublicMutableTimeEntity {
     private Long memberId;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private Order(UUID publicId, Long memberId) {
-        super(publicId);            // 생성자 인자로 확정한다 (IDS-5-01)
-        this.memberId = memberId;
+    private Order(Long memberId) {
+        this.memberId = memberId;   // public_id 는 다루지 않는다. ORM 이 INSERT 직전에 채운다
     }
 
-    public static OrderBuilder builder(UUID publicId, Long memberId) {
-        return Order.builder().publicId(publicId).memberId(memberId);
+    public static Order place(Long memberId) {
+        return new Order(memberId);
     }
 
     // 타입 래퍼는 하위가 씌운다
@@ -93,17 +91,11 @@ public class Order extends BasePublicMutableTimeEntity {
 @MappedSuperclass
 public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
 
+    @PublicIdGeneration                              // ORM 이 INSERT 직전에 채운다
     @Column(name = "public_id", nullable = false, updatable = false,
             columnDefinition = "BINARY(16)")
     @Convert(converter = UuidToBinaryConverter.class)
     private UUID publicId;
-
-    protected BasePublicMutableTimeEntity(UUID publicId) {
-        if (publicId == null) {
-            throw new IllegalArgumentException("publicId 는 필수다");
-        }
-        this.publicId = publicId;
-    }
 
     protected UUID publicIdValue() {
         return publicId;
@@ -111,10 +103,16 @@ public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity 
 }
 ```
 
+**베이스에 생성자가 없다.** 하위 엔티티는 `public_id`를 다루지 않고, 값은 `save()` 시점에 채워진다.
+생성 방식은 `identifier-strategy-guideline.md` 5절이 정한다.
+
 점검 항목
 * `BE-1-06` 베이스가 `UUID`를 들고 변환기가 하나인가
 * `BE-1-07` 하위 엔티티가 `getPublicId()`로 자기 타입 래퍼를 돌려주는가
   `publicIdValue()`가 `protected`인 이유다. 외부에는 타입이 붙은 것만 나간다.
+* `BE-1-08` 하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가
+  ORM 이 채우므로 기본 경로에서는 받을 이유가 없다.
+  저장 전에 식별자가 필요한 흐름(결제 준비 등)은 `IDS-5-05`의 예외 경로이며 PR에 사유를 남긴다.
 
 ## 2. PK 규칙
 
