@@ -3,12 +3,12 @@
 **이 문서는 `gen_status.py` 가 만든다. 손으로 고치지 않는다.**
 레지스트리와 앵커 규칙에서 계산한 값이라, 항목이나 규칙이 바뀌면 다시 생성해야 한다.
 
-생성 시각: 2026-08-09 01:36
+생성 시각: 2026-08-09 01:48
 
 | 저장소 | 커밋 | 항목 |
 |---|---|---:|
 | `common` | `bb5fc9c` | 217 |
-| `backend` | `8db8920` | 273 |
+| `backend` | `360493b` | 273 |
 | `infra` | `5c06db8` | 96 |
 | | | **586** |
 
@@ -48,8 +48,8 @@
 | `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 192 | 173 | 19 | 173 | 15 | 4 |
 | `src/main/resources/db/migration/*.sql` | migration | 101 | 51 | 50 | 51 | 46 | 4 |
 | `src/main/resources/application*.yml`, `src/main/resources/logback*.xml` | app-config | 115 | 0 | 115 | 0 | 91 | 24 |
-| `src/test/**/*Test.java` | test | 112 | 103 | 9 | 103 | 9 | 0 |
-| `src/test/**/ArchitectureTest.java` | archunit | 83 | 83 | 0 | 83 | 0 | 0 |
+| `src/test/**/*Test.java` | test | 29 | 20 | 9 | 20 | 9 | 0 |
+| `src/test/**/ArchitectureTest.java` | archunit | 33 | 33 | 0 | 33 | 0 | 0 |
 | `build.gradle`, `settings.gradle`, `lombok.config` | build | 36 | 10 | 26 | 10 | 26 | 0 |
 | (해당 없음) | 기본 집합 | 50 | 50 | 0 | 50 | 0 | 0 |
 

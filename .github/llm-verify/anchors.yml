@@ -171,7 +171,9 @@ rules:
       - "**/domain/service/*.java"
       - "**/domain/entity/*.java"
     activate:
-      prefixes: [UT, MNT, DPB, EJ]
+      # DPB 와 EJ 는 넣지 않는다. 프로덕션 코드를 겨냥한 항목이라
+      # 테스트에 걸면 목 주입, 픽스처 빌더, 긴 메서드명이 전부 지적으로 나온다
+      prefixes: [UT, MNT]
       levels: [코드]
     needs_baseline_values: false
 
@@ -181,7 +183,8 @@ rules:
       - "src/test/**/ArchitectureTest.java"
     anchors: []
     activate:
-      prefixes: [DPB, EJ]
+      # 테스트 파일이지만 판정 대상이 경계 규칙 자체라 DPB 를 켠다. EJ 는 뺀다
+      prefixes: [DPB]
       levels: [코드, 설계]
     needs_baseline_values: false
 
@@ -198,10 +201,15 @@ rules:
       levels: [코드, 인프라, 프로세스]
     needs_baseline_values: false
 
-# EJ 와 DPB 는 자바 파일을 트리거로 하는 모든 규칙에 들어간다
-#   CODEREVIEW.md 가 이 둘을 "변경 위치와 무관하게 모든 자바 PR 에 항상 적용" 으로 규정한다.
-#   규칙을 새로 만들 때 트리거가 *.java 면 두 접두사를 반드시 넣는다.
-#   migration(.sql), app-config(yml), build(gradle) 는 자바가 아니므로 대상이 아니다.
+# EJ 와 DPB 는 프로덕션 자바를 트리거로 하는 모든 규칙에 들어간다
+#   CODEREVIEW.md 가 이 둘을 "변경 위치와 무관하게 모든 프로덕션 자바 PR 에 항상 적용" 으로 규정한다.
+#   규칙을 새로 만들 때 트리거가 src/main 의 *.java 면 두 접두사를 반드시 넣는다.
+#
+#   제외 대상은 둘이다.
+#     test        프로덕션 코드를 겨냥한 항목이라 테스트에 걸면 오탐만 는다
+#     migration(.sql), app-config(yml), build(gradle)   자바가 아니다
+#
+#   archunit 은 src/test 아래지만 판정 대상이 경계 규칙 자체이므로 DPB 를 켠다.
 #
 # activate.chapters 의 의미
 #   접두사만 쓰면 그 문서의 전 항목이 켜진다. INF 49건처럼 장마다 대상이 다른 문서는

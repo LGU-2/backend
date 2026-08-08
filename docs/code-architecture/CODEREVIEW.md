@@ -83,8 +83,13 @@
 
 ## 가이드 적용 대상 판단
 
-effective-java-guideline.md와 domain-package-boundary-guideline.md는 변경 위치와 무관하게 모든 자바 PR에 항상 적용한다.
+effective-java-guideline.md와 domain-package-boundary-guideline.md는 변경 위치와 무관하게 모든 프로덕션 자바 PR에 항상 적용한다.
 나머지는 변경 내용을 기준으로 적용 여부를 판단한다.
+
+**테스트 코드(`src/test/**`)는 이 둘의 대상이 아니다.**
+두 문서는 프로덕션 코드를 겨냥하므로 목 주입, 픽스처 빌더, 서술형 메서드명이 전부 지적으로 나온다.
+테스트는 unit-testing-guideline.md가 소유한다.
+예외는 ArchitectureTest다. 테스트 파일이지만 판정 대상이 경계 규칙 자체이므로 domain-package-boundary-guideline.md를 적용한다.
 
 이 프로젝트는 도메인형 구조(package-by-feature)를 사용한다.
 도메인 패키지 안에 Controller, Service, Repository, Entity가 함께 모이므로 계층 디렉터리로 영역을 구분할 수 없다.
@@ -112,12 +117,13 @@ effective-java-guideline.md와 domain-package-boundary-guideline.md는 변경 �
 
 | 파일명 패턴 | 적용 문서 |
 |-------------|-----------|
-| 모든 변경 | effective-java-guideline.md, domain-package-boundary-guideline.md |
+| `src/main/**` 의 모든 변경 | effective-java-guideline.md, domain-package-boundary-guideline.md |
 | `**/*Entity.java`, `**/entity/**` | base-entity-guideline.md, entity-creation-guideline.md, jpa-rdb-guideline.md |
 | `**/*Repository.java`, `**/*.sql`, `db/migration/**` | jpa-rdb-guideline.md, identifier-strategy-guideline.md |
 | `**/*Controller.java`, `**/dto/**`, `**/*.proto`, OpenAPI 명세 | api-design-guideline.md |
 | `**/*Api.java`, `**/*ApiImpl.java`, `**/client/**` | domain-package-boundary-guideline.md |
 | `**/*Test.java`, `src/test/**` | unit-testing-guideline.md |
+| `**/ArchitectureTest.java` | domain-package-boundary-guideline.md |
 
 ### 도메인 경계 점검의 자동화
 
