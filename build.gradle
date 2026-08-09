@@ -70,8 +70,18 @@ dependencies {
     /* 통합 테스트는 인메모리 DB 를 쓰지 않는다.
        운영과 같은 mysql:8.4 를 Testcontainers 로 띄운다 (tech-stack.md 2장). */
     integrationTestImplementation 'org.springframework.boot:spring-boot-testcontainers'
-    integrationTestImplementation 'org.testcontainers:junit-jupiter'
-    integrationTestImplementation 'org.testcontainers:mysql'
+    /* Boot 4.0.5 의 BOM 이 Testcontainers 2.0.4 를 관리한다.
+       2.x 에서 산출물 이름에 testcontainers- 접두사가 붙었다. 1.x 좌표(junit-jupiter, mysql)는 해석되지 않는다. */
+    integrationTestImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    integrationTestImplementation 'org.testcontainers:testcontainers-mysql'
+
+    /* 검증용 엔티티가 이 소스셋에 있으므로 APT 를 여기에도 건다.
+       걸지 않으면 Q클래스가 생성되지 않아 컴파일이 깨진다. */
+    integrationTestCompileOnly 'org.projectlombok:lombok'
+    integrationTestAnnotationProcessor 'org.projectlombok:lombok'
+    integrationTestAnnotationProcessor 'com.querydsl:querydsl-apt::jakarta'
+    integrationTestAnnotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+    integrationTestAnnotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 }
 
 tasks.named('test') {
