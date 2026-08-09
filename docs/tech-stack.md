@@ -36,7 +36,7 @@
 | ORM | Hibernate | BOM 관리 (Boot 4 는 Hibernate 7 계열) | Spring Boot 4.0.5 |
 | Migration | Flyway | BOM 관리 | Spring Boot 4.0.5 |
 | Boilerplate | Lombok | BOM 관리 | Spring Boot 4.0.5 |
-| Integration Test | Testcontainers | BOM 관리 | Spring Boot 4.0.5 |
+| Integration Test | Testcontainers | BOM 관리 (Boot 4.0.5 는 2.0.4) | Spring Boot 4.0.5 |
 | Query | QueryDSL | BOM 관리 (`querydsl-bom` 5.1.0) | Spring Boot 4.0.5 |
 
 Terraform AWS Provider 를 `~> 6.0` 으로 고정한 것과 반대 논리다. 프로바이더는 BOM 이 없어 직접 고정해야 하지만, 이쪽은 **BOM 이 검증한 조합을 그대로 쓰는 것이 목적**이다.
@@ -45,12 +45,24 @@ BOM 밖에 있어 직접 지정해야 하는 항목은 다음과 같다.
 
 | 구분 | 기술 | 버전 | 비고 |
 |------|------|------|------|
-| API Docs | springdoc-openapi | **미확정** | 4장 참조. Boot 4 호환 확인 필요 |
-| Coverage | JaCoCo | 0.8.16 | service 패키지 메서드 100% 미만이면 병합 차단 |
+| API Docs | springdoc-openapi | 3.0.3 | 4장 참조. Boot 4.0.5 를 parent 로 빌드된 버전이다 |
+| Coverage | JaCoCo | 0.8.15 | service 패키지 메서드 100% 미만이면 병합 차단 |
 | Static Analysis | SonarQube Cloud | - | 버그, 취약점만 판정. **Blocker 이슈가 있으면 병합 차단** |
 | Static Analysis | SonarScanner for Gradle | 최신 | Gradle 7.6.4 또는 8.4 이상 필요 |
 
 **통합 테스트는 인메모리 DB 를 쓰지 않는다.** Testcontainers 로 운영과 동일한 `mysql:8.4` 를 띄운다. 근거는 2.3절의 버전 일치 원칙과 같다.
+
+**Testcontainers 2.x 에서 산출물 이름이 바뀌었다.** 1.x 좌표를 그대로 쓰면 해석되지 않는다.
+
+```gradle
+// 1.x 좌표. Boot 4.0.5 의 BOM 에서 해석되지 않는다
+'org.testcontainers:junit-jupiter'
+'org.testcontainers:mysql'
+
+// 2.x 좌표
+'org.testcontainers:testcontainers-junit-jupiter'
+'org.testcontainers:testcontainers-mysql'
+```
 
 ## 3. QueryDSL: 채택하되 착수 전에 검증한다
 
@@ -92,9 +104,13 @@ spring-boot-dependencies-4.0.5.pom
 
 **Spring Boot 4.0.5 가 QueryDSL 5.1.0 을 검증해 BOM 에 올려 두었다.** 버전을 적지 않는다.
 
+**jakarta 분류자를 빼면 안 된다.** 빼면 `javax.persistence` 를 쓰는 변형이 걸려 Boot 4 에서 깨진다.
+
 ```gradle
-implementation 'com.querydsl:querydsl-jpa'
-annotationProcessor 'com.querydsl:querydsl-apt'
+implementation 'com.querydsl:querydsl-jpa::jakarta'
+annotationProcessor 'com.querydsl:querydsl-apt::jakarta'
+annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 ```
 
 OpenFeign 포크를 검토할 이유도 없어졌다. **Spring 팀이 조합을 검증한 본가 버전이 BOM 에 있다.**
@@ -172,6 +188,14 @@ spring-boot-dependencies-4.0.5.pom 에 springdoc 항목이 없다
 ```
 
 그래서 **Boot 를 올릴 때 springdoc 호환 버전을 함께 확인해야 한다.** 7장 재확인 목록에 넣어 둔다.
+
+확인 방법은 springdoc 의 `pom.xml` 이 어떤 `spring-boot-starter-parent` 를 상속하는지 보는 것이다. 패치까지 대응된다.
+
+```
+springdoc 3.0.3  ->  Boot 4.0.5   <- 채택
+springdoc 3.1.0  ->  Boot 4.1.0
+springdoc 2.9.0  ->  Boot 3.5.16  (구 라인)
+```
 
 자동 추적(Dependabot)은 두지 않는다. **BOM 밖 라이브러리가 이것 하나뿐이라 주간 PR 설비를 둘 값어치가 없고**, Boot 업그레이드를 어차피 손으로 하므로 그때 함께 보면 된다.
 서드파티가 서넛으로 늘면 그때 다시 검토한다.

@@ -73,7 +73,7 @@ items:
   - {id: BE-1-03, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`public_id`를 엔티티가 직접 선언하지 않고 `BasePublic*` 상속으로 얻는가"}
   - {id: BE-1-04, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, defers_to: [IDS-2-03], title: "외부에 노출되지 않는 엔티티가 `BasePublic*`을 상속하지 않았는가"}
   - {id: BE-1-05, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`id`와 시각 컬럼을 엔티티가 직접 선언하지 않았는가"}
-  - {id: BE-1-06, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "베이스가 `UUID`를 들고 변환기가 하나인가"}
+  - {id: BE-1-06, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "베이스가 `UUID`를 들고 하위 타입을 직접 들지 않는가"}
   - {id: BE-1-07, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "하위 엔티티가 `publicId()`로 자기 타입 래퍼를 돌려주는가"}
   - {id: BE-1-08, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가"}
   - {id: BE-1-09, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "외부 노출 베이스에 `@Getter`가 붙어 있지 않은가"}

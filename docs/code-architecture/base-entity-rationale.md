@@ -65,6 +65,24 @@ public class AccessLog extends BaseImmutableTimeEntity {
 
 `publicIdValue()`를 `protected`로 두어 **밖으로는 타입이 붙은 것만 나가게** 한다.
 
+### 왜 AttributeConverter 를 두지 않는가
+
+**필요가 없기 때문이다.** 초판은 `UuidToBinaryConverter`를 두라고 했으나, Hibernate가 MySQL에서 `UUID`를 이미 `binary(16)`으로 매핑한다.
+
+`mysql:8.4` 컨테이너에 붙여 `information_schema`로 확인한 결과다.
+
+```
+public_id   @Column(columnDefinition = "BINARY(16)")   -> binary(16)
+bare_uuid   애노테이션 없는 맨 UUID                     -> binary(16)
+```
+
+둘이 같다. **변환기가 있든 없든, `columnDefinition`이 있든 없든 결과가 바뀌지 않는다.**
+
+없애서 얻는 것은 줄 수가 아니라 **틀릴 자리를 없애는 것**이다.
+변환기를 손으로 쓰면 바이트 순서를 뒤집거나 `null` 처리를 빠뜨릴 수 있고, 그 오류는 저장된 값이 어긋난 뒤에야 드러난다.
+
+`columnDefinition`은 남긴다. 매핑을 바꾸지는 않지만 **스키마 의도가 엔티티에 드러나는 값어치**가 있고, 마이그레이션 스크립트와 대조할 때 기준이 된다.
+
 ### 왜 접근자 이름에 get 을 붙이지 않는가
 
 `entity-creation-guideline.md` 1절이 `@Getter`를 허용하기 때문이다.

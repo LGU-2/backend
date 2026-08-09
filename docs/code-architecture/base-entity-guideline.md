@@ -86,7 +86,8 @@ public class Order extends BasePublicMutableTimeEntity {
 `AbstractPublicId` 하위 타입은 엔티티마다 다르다(`OrderPublicId`, `AccountPublicId`).
 베이스가 그 타입을 직접 들면 엔티티마다 `AttributeConverter`가 필요해진다.
 
-**베이스는 `UUID` 하나만 들고, 변환기도 하나만 둔다.**
+**베이스는 `UUID` 하나만 든다. 변환기는 두지 않는다.**
+Hibernate가 MySQL에서 `UUID`를 `binary(16)`으로 매핑하므로 손으로 옮길 것이 없다.
 
 ```java
 @MappedSuperclass
@@ -95,7 +96,6 @@ public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity 
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)   // ORM 이 INSERT 직전에 채운다
     @Column(name = "public_id", nullable = false, updatable = false,
             columnDefinition = "BINARY(16)")
-    @Convert(converter = UuidToBinaryConverter.class)
     private UUID publicId;
 
     protected UUID publicIdValue() {
@@ -104,11 +104,14 @@ public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity 
 }
 ```
 
+`columnDefinition`은 매핑을 바꾸려는 것이 아니라 **의도를 명시하는 것**이다. 빼도 같은 컬럼이 나온다.
+
 **베이스에 생성자가 없다.** 하위 엔티티는 `public_id`를 다루지 않고, 값은 `save()` 시점에 채워진다.
 생성 방식은 `identifier-strategy-guideline.md` 5절이 정한다.
 
 점검 항목
-* `BE-1-06` 베이스가 `UUID`를 들고 변환기가 하나인가
+* `BE-1-06` 베이스가 `UUID`를 들고 하위 타입을 직접 들지 않는가
+  `AttributeConverter`를 새로 만들지 않는다. Hibernate 기본 매핑이 `binary(16)`이다.
 * `BE-1-07` 하위 엔티티가 `publicId()`로 자기 타입 래퍼를 돌려주는가
   `publicIdValue()`가 `protected`인 이유다. 외부에는 타입이 붙은 것만 나간다.
   `get` 접두사를 쓰지 않는다. `@Getter`가 만드는 `getPublicId()`와 반환형이 달라 컴파일이 깨진다.

@@ -104,9 +104,9 @@ javadoc 문구는 식별자를 말하지만, 이 애노테이션은 `@IdGenerato
 public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
 
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
+    // AttributeConverter 를 두지 않는다. Hibernate 가 MySQL 에서 UUID 를 binary(16) 으로 매핑한다
     @Column(name = "public_id", nullable = false, updatable = false,
             columnDefinition = "BINARY(16)")
-    @Convert(converter = UuidToBinaryConverter.class)
     private UUID publicId;
 }
 ```
