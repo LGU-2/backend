@@ -159,11 +159,11 @@ public class JpaAuditingConfig {
 
 ### 왜 기본이 enum인가
 
-코드성 값은 대개 값의 종류가 고정적이고, 개발자가 배포로 관리하며, 값에 로직이 딸린다.
+후보값이 정해진 속성은 대개 값의 종류가 고정적이고, 개발자가 배포로 관리하며, 값에 로직이 딸린다.
 이 경우 테이블의 "행만 추가하면 된다"는 유연성이 쓸모없다. **새 값에 로직이 딸리므로 어차피 코드를 고쳐야 하기 때문이다.**
 
 enum은 별도 테이블, FK, 조인, 캐싱이 모두 사라지고 타입 안전성까지 얻는다.
-상세한 비교는 [entity-creation-rationale.md](./entity-creation-rationale.md)의 코드성 값 절에 있다.
+상세한 비교는 [entity-creation-rationale.md](./entity-creation-rationale.md)의 5장에 있다.
 
 ### 왜 코드 테이블이 Mutable 계열인가
 

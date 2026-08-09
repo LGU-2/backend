@@ -46,7 +46,7 @@
 | 외부 노출 식별자가 필요한가, UUID 버전, 난수원, 컬럼 스펙 | identifier-strategy-guideline.md | base-entity-guideline.md |
 | 어느 베이스를 상속하는가 (`BasePublic*` 여부 포함) | base-entity-guideline.md | identifier-strategy-guideline.md |
 | 연관관계 매핑, cascade, 자동 매핑, DTO 프로젝션 | jpa-rdb-guideline.md | - |
-| 코드성 값의 저장 방식 (enum 대 코드 테이블) | entity-creation-guideline.md | base-entity-guideline.md |
+| 엔티티 속성값의 저장 방식 (enum 대 코드 테이블) | entity-creation-guideline.md | base-entity-guideline.md |
 | 패키지 배치, 도메인 간 참조, 접근 제어자, 순환 의존 | domain-package-boundary-guideline.md | - |
 | 자바 관용 (불변, 예외 흐름, 컬렉션 반환, 상속보다 조합) | effective-java-guideline.md | - |
 | 테스트 설계와 품질 (동작 검증, 테스트 더블, 구조, 격리) | unit-testing-guideline.md | - |

@@ -3,12 +3,12 @@
 **이 문서는 `gen_status.py` 가 만든다. 손으로 고치지 않는다.**
 레지스트리와 앵커 규칙에서 계산한 값이라, 항목이나 규칙이 바뀌면 다시 생성해야 한다.
 
-생성 시각: 2026-08-09 01:48
+생성 시각: 2026-08-09 18:06
 
 | 저장소 | 커밋 | 항목 |
 |---|---|---:|
 | `common` | `bb5fc9c` | 217 |
-| `backend` | `360493b` | 273 |
+| `backend` | `31274a6` | 273 |
 | `infra` | `5c06db8` | 96 |
 | | | **586** |
 
@@ -16,8 +16,8 @@
 
 | 게이트 | 판정 주체 | 차단 | 상태 |
 |---|---|---|---|
-| G-LOCAL | Claude, 로컬 | 안 함 | 돈다. 판정 대상 코드가 없어 기본 집합만 켜진다 |
-| G-BUILD | Gradle, SonarQube | **함** | **build.gradle 이 없어 돌지 않는다** |
+| G-LOCAL | Claude, 로컬 | 안 함 | 돈다 |
+| G-BUILD | Gradle, SonarQube | **함** | 돈다 |
 | G-PR | gemini-2.5-flash | 안 함 | 워크플로 있음. `GEMINI_API_KEY` 등록 여부는 로컬에서 확인할 수 없다 |
 | G-RELEASE | 배포 스크립트 | **함** | **스크립트 없음** |
 | G-AUDIT | 주기 작업 | 안 함 | **없음** |
@@ -26,8 +26,8 @@
 ### 있는 것과 없는 것
 
 ```
-  없음  backend 의 Java 코드
-  없음  backend/build.gradle
+  있음  backend 의 Java 코드  (7개)
+  있음  backend/build.gradle
   있음  backend 앵커 규칙  (규칙 11개)
   없음  infra 앵커 규칙
   있음  G-PR 호출자 워크플로

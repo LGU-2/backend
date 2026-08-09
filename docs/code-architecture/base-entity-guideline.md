@@ -150,8 +150,10 @@ private LocalDateTime createdAt;
 
 ## 4. 코드 테이블
 
-코드성 값의 기본은 enum이다. 운영자가 값 목록을 화면에서 관리해야 하는 경우에만 테이블로 둔다.
-판단 기준은 [entity-creation-guideline.md](./entity-creation-guideline.md)의 코드성 값 절을 따른다.
+후보값이 정해진 속성의 기본은 enum이다. 운영자가 값 목록을 화면에서 관리해야 하는 경우에만 테이블로 둔다.
+판단 기준은 [entity-creation-guideline.md](./entity-creation-guideline.md) 4장을 따른다.
+
+**상위 분류나 노출 순서 같은 속성이 딸린 것은 코드 테이블이 아니라 일반 도메인 엔티티다.** 상품 카테고리가 그렇다.
 
 점검 항목
 * `BE-4-01` 테이블로 만들 근거(운영자의 런타임 관리 요구)가 있는가
@@ -211,7 +213,7 @@ public class Grade extends BaseMutableTimeEntity {
 | 운영 관리 코드 테이블 (등급, 카테고리) | `BaseMutableTimeEntity` (id + code UNIQUE) |
 | 이력, 로그, append-only | `BaseImmutableTimeEntity` |
 | 외부에 단건으로 노출되는 이력 | `BasePublicImmutableTimeEntity` |
-| 코드성 값 중 운영 관리가 불필요한 것 | 테이블을 만들지 않고 enum |
+| 후보값이 정해진 속성 중 운영 관리가 불필요한 것 | 테이블을 만들지 않고 enum |
 | 대량 참조 + 캐싱 곤란한 특수 코드 테이블 | 문자열 PK 예외 (베이스 미상속, 사유 기재) |
 
 **하위 엔티티에 `Public`을 붙이지 않는 이유**는 부모 식별자와 순번으로 도달하기 때문이다 (`/orders/{id}/items/3`).
