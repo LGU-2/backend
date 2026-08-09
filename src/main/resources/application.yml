@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: freshmarket
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/freshmarket?serverTimezone=UTC&characterEncoding=UTF-8
+    username: freshmarket
+    password: freshmarket
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    # 스키마는 Flyway 가 소유한다. Hibernate 는 어긋나면 기동을 막는 역할만 한다
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

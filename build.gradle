@@ -1,0 +1,142 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.0.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
+    id 'org.sonarqube' version '7.4.0.8496'
+}
+
+group = 'com.freshmarket'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+/* 통합 테스트를 단위 테스트와 분리한다.
+   커버리지는 두 소스셋이 남긴 .exec 를 합산해서 판정한다 (BLD-1-04). */
+sourceSets {
+    integrationTest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    compileOnly.extendsFrom annotationProcessor
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestCompileOnly.extendsFrom testCompileOnly
+    integrationTestAnnotationProcessor.extendsFrom testAnnotationProcessor
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+
+    // BOM 밖이라 버전을 직접 고정한다. 3.0.3 이 Boot 4.0.5 를 parent 로 빌드된 것이다
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
+    /* QueryDSL 버전은 Boot 4.0.5 의 BOM 이 5.1.0 으로 관리한다.
+       jakarta 분류자를 빼면 javax.persistence 변형이 걸려 Boot 4 에서 깨진다. */
+    implementation 'com.querydsl:querydsl-jpa::jakarta'
+    annotationProcessor 'com.querydsl:querydsl-apt::jakarta'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    /* bootRun 이 compose.yaml 의 MySQL 을 자동으로 띄우고 접속 정보를 주입한다.
+       developmentOnly 라 bootJar 에는 들어가지 않는다. */
+    developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    /* 통합 테스트는 인메모리 DB 를 쓰지 않는다.
+       운영과 같은 mysql:8.4 를 Testcontainers 로 띄운다 (tech-stack.md 2장). */
+    integrationTestImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    integrationTestImplementation 'org.testcontainers:junit-jupiter'
+    integrationTestImplementation 'org.testcontainers:mysql'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+tasks.register('integrationTest', Test) {
+    description = '통합 테스트를 실행한다.'
+    group = 'verification'
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter tasks.named('test')
+}
+
+jacoco {
+    // tech-stack.md 는 0.8.16 이라 적었으나 그 버전은 배포된 적이 없다. 최신이 0.8.15 다
+    toolVersion = '0.8.15'
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test'), tasks.named('integrationTest')
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    reports {
+        // SonarQube 가 읽는 형식이다
+        xml.required = true
+    }
+}
+
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test'), tasks.named('integrationTest')
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    violationRules {
+        rule {
+            /* includes 로 좁히므로 exclude 목록이 필요 없다.
+               config, dto, entity, Q클래스가 자동으로 빠진다 (BLD-1-01). */
+            element = 'CLASS'
+            includes = ['*.domain.service.*']
+            limit {
+                counter = 'METHOD'
+                value = 'COVEREDRATIO'
+                minimum = 1.00
+            }
+        }
+    }
+}
+
+// BLD-1-06
+tasks.named('check') {
+    dependsOn tasks.named('integrationTest'), tasks.named('jacocoTestCoverageVerification')
+}
+
+// BLD-1-07: 순서가 바뀌면 SonarQube 에 커버리지가 0 으로 표시된다
+tasks.named('sonar') {
+    dependsOn tasks.named('jacocoTestReport')
+}
+
+sonar {
+    properties {
+        property 'sonar.projectKey', 'LGU-2_backend'
+        property 'sonar.organization', 'lgu-2'
+        property 'sonar.host.url', 'https://sonarcloud.io'
+        /* 커버리지 판정은 Gradle 이 한다. Sonar 는 버그와 취약점만 본다 (BLD-2-01).
+           이 경로는 판정용이 아니라 대시보드 표시용이다. */
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile.path
+    }
+}
