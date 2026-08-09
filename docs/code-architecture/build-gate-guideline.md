@@ -1,6 +1,6 @@
 # 빌드 게이트 (guideline)
 
-`build.gradle`, `settings.gradle`, `lombok.config` 를 고치는 PR에 적용한다.
+`build.gradle` 과 `settings.gradle` 을 고치는 PR에 적용한다.
 설계 근거는 [build-gate-rationale.md](./build-gate-rationale.md) 에 있다.
 
 **이 문서의 항목은 LLM이 아니라 도구가 판정한다.** 결정론적이므로 병합을 차단해도 근거가 있다.
@@ -19,10 +19,8 @@
 * `BLD-1-03` 기준이 `minimum = 1.00`인가
 * `BLD-1-04` 단위 테스트와 통합 테스트의 `.exec`를 합산하는가
   각각 따로 보면 어느 쪽도 100%를 못 넘지만 합치면 넘는 경우가 대부분이다.
-* `BLD-1-05` `lombok.config`에 `lombok.addLombokGeneratedAnnotation = true`가 있는가
-  없으면 `@RequiredArgsConstructor`가 만든 생성자가 분모에 들어가 게이트가 Lombok 생성 코드에 좌우된다.
-* `BLD-1-06` `check`가 `integrationTest`와 `jacocoTestCoverageVerification`에 의존하는가
-* `BLD-1-07` `jacocoTestReport`가 `sonar` 태스크보다 먼저 도는가
+* `BLD-1-05` `check`가 `integrationTest`와 `jacocoTestCoverageVerification`에 의존하는가
+* `BLD-1-06` `jacocoTestReport`가 `sonar` 태스크보다 먼저 도는가
   순서가 바뀌면 SonarQube에 커버리지가 0으로 표시된다.
 
 ## 2. 정적 분석

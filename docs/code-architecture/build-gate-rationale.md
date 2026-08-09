@@ -82,18 +82,21 @@ limit { counter = 'BRANCH'; value = 'COVEREDRATIO'; minimum = 0.60 }   // 필요
 
 | 항목 | 내용 |
 |------|------|
-| 생성자 | 메서드로 계산된다. Lombok 생성자는 `@Generated` 로 제외 |
+| 생성자 | 메서드로 계산된다. 다만 테스트가 그 클래스를 만들면 반드시 호출된다 |
 | private 메서드 | 계산된다. 도달하는 경로가 있어야 한다 |
 | 로컬 확인 | `./gradlew check` 로 push 전에 확인 |
 
-Lombok 생성 코드를 제외하지 않으면 `@RequiredArgsConstructor` 가 만든 생성자가 분모에 들어간다.
+초판은 `lombok.config` 에 `lombok.addLombokGeneratedAnnotation = true` 를 두라고 했다. **지금은 두지 않는다.**
 
-```
-# lombok.config
-lombok.addLombokGeneratedAnnotation = true
-```
+`@RequiredArgsConstructor` 가 만든 생성자가 분모에 들어가는 것은 맞지만, **그 생성자는 항상 커버된다.**
+Mockito 의 `@InjectMocks` 든 직접 `new` 든 스프링 주입이든 전부 생성자를 부른다.
+생성자만 안 불리고 다른 메서드는 다 불리는 상황이 성립하지 않고, 서비스에 테스트가 아예 없으면 생성자와 무관하게 이미 막힌다.
 
-JaCoCo 는 `@Generated` 애노테이션이 붙은 코드를 자동으로 무시한다. **이 설정이 없으면 게이트가 Lombok 생성 코드에 좌우된다.**
+서비스는 `private final` 의존성만 갖는 무상태 빈이라 Lombok 이 만드는 것도 생성자뿐이다.
+`@Getter` 나 `@ToString` 은 서비스에 붙지 않고, 엔티티에 붙더라도 `includes` 가 `*.domain.service.*` 로 좁혀져 있어 분모에 들어오지 않는다.
+
+**설정 파일 하나와 그것을 검사하는 게이트 항목이 아무 일도 하지 않고 있었다.** 그래서 뺐다.
+`domain.service` 패키지에 서비스가 아닌 클래스를 두게 되면 그때 다시 검토한다.
 
 private 메서드가 계산된다는 점도 유의한다. 특정 분기에서만 호출되는 private 헬퍼가 있으면 그 분기를 타는 테스트가 필요하다. 즉 METHOD 기준이라도 **private 메서드를 통해서는 간접적으로 경로 검증이 강제된다.**
 
