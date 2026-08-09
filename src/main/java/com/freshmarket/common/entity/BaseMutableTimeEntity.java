@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import java.time.LocalDateTime;
+import lombok.Getter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -15,6 +16,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
    BaseImmutableTimeEntity 를 상속하지 않는다. 가변이 불변의 하위 타입이라는 말이 되기 때문이다. */
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
+@Getter
 public abstract class BaseMutableTimeEntity {
 
     @Id
@@ -28,16 +30,4 @@ public abstract class BaseMutableTimeEntity {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
-    public Long getId() {
-        return id;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
 }

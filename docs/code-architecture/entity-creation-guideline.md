@@ -270,6 +270,13 @@ private Order(Long memberId, int totalPrice, String memo, Integer quantity) {
 
 ### G3. `equals`와 `hashCode`는 식별자 기준으로 직접 작성한다
 
+**해시 컬렉션에 넣을 때만 필요하다.** 이 항목들은 그럴 때만 판정한다.
+
+이 프로젝트는 FK를 `Long`으로 들고 JPA 연관을 매핑하지 않으므로(`IDS-6-03`) `Set` 연관이 생기지 않는다.
+엔티티를 `HashSet`이나 `HashMap`에 담는 코드도 없다. **그래서 대부분의 엔티티에 `equals`와 `hashCode`가 없는 것이 정상이다.**
+
+담는 코드가 생기면 그때 아래대로 작성한다.
+
 점검 항목
 * `EC-3-04` `@EqualsAndHashCode`를 쓰지 않고 직접 작성했는가
 * `EC-3-05` `equals`가 식별자만 비교하는가
