@@ -129,12 +129,12 @@ tasks.named('jacocoTestCoverageVerification') {
     }
 }
 
-// BLD-1-06
+// BLD-1-05
 tasks.named('check') {
     dependsOn tasks.named('integrationTest'), tasks.named('jacocoTestCoverageVerification')
 }
 
-// BLD-1-07: 순서가 바뀌면 SonarQube 에 커버리지가 0 으로 표시된다
+// BLD-1-06: 순서가 바뀌면 SonarQube 에 커버리지가 0 으로 표시된다
 tasks.named('sonar') {
     dependsOn tasks.named('jacocoTestReport')
 }
