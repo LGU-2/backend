@@ -307,7 +307,7 @@ id가 반드시 필요한 테스트는 `ReflectionTestUtils.setField`로 주입�
 | | 이 장의 대상 | 이 장의 대상이 아닌 것 |
 |---|---|---|
 | 정체 | 엔티티가 갖는 속성 | 엔티티 그 자체 |
-| 예 | `Grade`, `OrderStatus`, 결제 수단 | 상품 카테고리, 브랜드, 판매자 |
+| 예 | `OrderStatus`, `StorageType`, 결제 수단 | 상품 카테고리, **회원 등급**, 공급처 |
 | 판별 | 후보값 중 하나를 고르는 것이 전부다 | 계층, 노출 순서, 이미지, 활성 여부가 딸린다 |
 
 ### 세 방식과 비교
@@ -318,16 +318,16 @@ id가 반드시 필요한 테스트는 `ReflectionTestUtils.setField`로 주입�
 
 **방식 2: bigint 대리키 + code UNIQUE (코드 테이블 채택)**
 
-참조 측은 `grade_id BIGINT`를 FK로 갖는다. 값을 알려면 조인이 필요하지만 코드 테이블은 작고 캐싱 가능해 상쇄된다.
+참조 측은 `claim_reason_id BIGINT`를 FK로 갖는다. 값을 알려면 조인이 필요하지만 코드 테이블은 작고 캐싱 가능해 상쇄된다.
 
 **방식 3: enum + `@Enumerated(EnumType.STRING)` (기본 채택)**
 
-별도 테이블이 없다. 참조 측은 `grade VARCHAR` 컬럼에 상수 이름을 문자열로 저장한다.
+별도 테이블이 없다. 참조 측은 `storage_type VARCHAR` 컬럼에 상수 이름을 문자열로 저장한다.
 
 | 항목 | 방식 1 (문자열 PK) | 방식 2 (대리키+UNIQUE) | 방식 3 (enum) |
 |------|-------------------|----------------------|--------------|
 | 별도 테이블 | 있음 | 있음 | 없음 |
-| 참조 FK | grade_code (값 직독) | grade_id (조인 필요) | 컬럼에 문자열 |
+| 참조 FK | region_code (값 직독) | claim_reason_id (조인 필요) | 컬럼에 문자열 |
 | 조인 발생 | 없음 | 있음 (캐싱으로 상쇄) | 없음 |
 | 런타임 값 추가 | 가능 | 가능 | 불가 (배포 필요) |
 | PK bigint 통일 방침 | 위배 | 부합 | 해당 없음 |
@@ -361,8 +361,8 @@ id가 반드시 필요한 테스트는 `ReflectionTestUtils.setField`로 주입�
 정수 PK를 택한 대가로 얻는 것이 크다.
 **코드 테이블도 공통 베이스 엔티티를 그대로 상속해 "코드 테이블만 예외"가 사라진다.**
 
-조인 비용은 실질적으로 작다. 코드 테이블은 행이 적고(등급 3~5개) 값이 거의 안 바뀌어 캐싱으로 대부분 제거된다.
-참조 행에서 `grade_id`만 읽고 등급 정보는 메모리 캐시에서 꺼내면 DB 조인이 발생하지 않는다.
+조인 비용은 실질적으로 작다. 코드 테이블은 행이 적고(사유 코드 5~20개) 값이 거의 안 바뀌어 캐싱으로 대부분 제거된다.
+참조 행에서 `claim_reason_id`만 읽고 문구는 메모리 캐시에서 꺼내면 DB 조인이 발생하지 않는다.
 
 ### 왜 ORDINAL을 금지하는가
 
@@ -370,8 +370,8 @@ id가 반드시 필요한 테스트는 `ReflectionTestUtils.setField`로 주입�
 
 ```java
 // 상수 사이에 하나를 끼워 넣으면 기존 데이터의 의미가 통째로 밀린다
-public enum Grade { BRONZE, SILVER, GOLD }          // SILVER = 1
-public enum Grade { BRONZE, IRON, SILVER, GOLD }    // SILVER = 2, 기존 1은 IRON 이 된다
+public enum StorageType { ROOM, COLD, FROZEN }           // COLD = 1
+public enum StorageType { ROOM, CHILLED, COLD, FROZEN }  // COLD = 2, 기존 1은 CHILLED 가 된다
 ```
 
 이미 저장된 행을 건드리지 않았는데 의미가 바뀌는 유형이라 발견이 늦다.

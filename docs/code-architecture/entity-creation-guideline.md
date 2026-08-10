@@ -329,12 +329,20 @@ public final class OrderFixture {
 
 ## 4. 엔티티 속성값의 저장 방식
 
-**대상은 엔티티가 갖는 속성 하나다.** 등급, 상태, 유형처럼 정해진 후보값 중 하나를 갖는 컬럼의 저장 표준이다.
+**대상은 엔티티가 갖는 속성 하나다.** 상태, 유형, 구분처럼 정해진 후보값 중 하나를 갖는 컬럼의 저장 표준이다.
 **기본은 enum + `@Enumerated(EnumType.STRING)`**이다. 세 방식의 비교와 채택 근거는 rationale을 참고한다.
 
 **개념 자체를 어떻게 만들지는 이 장이 다루지 않는다.**
 상위 분류를 갖거나 노출 순서, 이미지, 활성 여부, 유효 기간 같은 속성이 딸리면 그것은 속성값이 아니라 **엔티티**다.
-상품 카테고리가 그렇다. 그런 것은 `Product`나 `Order`와 같은 급으로 만들고 이 장의 세 방식에 끼워 맞추지 않는다.
+그런 것은 `Product`나 `Order`와 같은 급으로 만들고 이 장의 세 방식에 끼워 맞추지 않는다.
+
+| | 이 장의 대상 | 엔티티 |
+|---|---|---|
+| 예 | 결제 수단, 주문 상태, 보관 타입 | 상품 카테고리, **회원 등급**, 공급처 |
+| 이유 | 후보값 중 하나를 고르는 것이 전부다 | 할인율, 승급 기준, 상위 분류가 딸린다 |
+
+**회원 등급을 이 장의 예로 들지 않는다.** 할인율과 승급 기준을 갖는 순간 값이 아니라 엔티티이며,
+그것이 필요하면 `member_grade` 테이블로 만든다.
 
 점검 항목
 * `EC-4-01` 후보값이 정해진 속성에 enum을 썼는가
@@ -357,10 +365,10 @@ public final class OrderFixture {
 ```java
 @Getter
 @RequiredArgsConstructor
-public enum Grade {
-    SILVER("실버", 5), GOLD("골드", 10);
+public enum StorageType {
+    ROOM("실온", 25), COLD("냉장", 4), FROZEN("냉동", -18);
     private final String displayName;
-    private final int discountRate;   // 값 정책은 필드로
+    private final int maxCelsius;     // 값 정책은 필드로
 }
 
 public enum OrderStatus {
@@ -371,6 +379,9 @@ public enum OrderStatus {
     }
 }
 ```
+
+두 예 모두 **값 자체에 더 붙을 것이 없다.** 보관 타입에 상위 분류나 노출 순서가 생기지 않고,
+주문 상태에 유효 기간이 생기지 않는다. 그래서 enum 으로 남는다.
 
 ## 5. 리뷰 체크리스트
 

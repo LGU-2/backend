@@ -166,13 +166,15 @@ private LocalDateTime createdAt;
 * `BE-4-04` 코드값 조회 경로(`findByCode`)와 캐싱이 준비되어 있는가
 
 ```java
-// 개선: 정수 PK + code UNIQUE
+/* 개선: 정수 PK + code UNIQUE.
+   운영자가 CS 화면에서 사유 목록을 늘리고 문구를 고치는 대상이라 테이블로 둔다.
+   코드로 분기하는 로직이 없어 값이 늘어도 배포가 필요 없다. */
 @Entity
-@Table(name = "grade",
-    uniqueConstraints = @UniqueConstraint(name = "uk_grade_code", columnNames = "code"))
+@Table(name = "claim_reason",
+    uniqueConstraints = @UniqueConstraint(name = "uk_claim_reason_code", columnNames = "code"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Grade extends BaseMutableTimeEntity {
+public class ClaimReason extends BaseMutableTimeEntity {
 
     @Column(name = "code", nullable = false, length = 30)
     private String code;
@@ -181,6 +183,9 @@ public class Grade extends BaseMutableTimeEntity {
     private String name;
 }
 ```
+
+**회원 등급을 예로 들지 않는다.** 할인율과 승급 기준이 딸리는 순간 코드 테이블이 아니라 도메인 엔티티다.
+판별 기준은 `entity-creation-guideline.md` 4장에 있다.
 
 ## 5. 문자열 PK 예외
 
@@ -192,7 +197,7 @@ public class Grade extends BaseMutableTimeEntity {
 
 점검 항목
 * `BE-5-01` 세 조건이 모두 성립하는가
-  등급이나 카테고리 같은 소형 코드 테이블은 2번이 맞지 않아 해당하지 않는다.
+  사유 코드 같은 소형 코드 테이블은 2번이 맞지 않아 해당하지 않는다.
 * `BE-5-02` 베이스 미상속 사유가 PR에 기재되어 있는가
 * `BE-5-03` 시각 컬럼을 직접 선언했는가
   베이스를 상속하지 않으므로 `created_at`과 `updated_at`이 자동으로 생기지 않는다.
@@ -212,8 +217,9 @@ public class Grade extends BaseMutableTimeEntity {
 | 테이블 성격 | 상속 대상 |
 |-------------|-----------|
 | 애그리거트 루트 (회원, 주문, 상품) | `BasePublicMutableTimeEntity` |
+| 부가 속성이 딸린 분류 (카테고리, 회원 등급, 공급처) | `BaseMutableTimeEntity` (코드 테이블이 아니다) |
 | 하위 엔티티 (주문 항목, 배송지) | `BaseMutableTimeEntity` |
-| 운영 관리 코드 테이블 (등급, 카테고리) | `BaseMutableTimeEntity` (id + code UNIQUE) |
+| 운영 관리 코드 테이블 (사유 코드 등) | `BaseMutableTimeEntity` (id + code UNIQUE) |
 | 이력, 로그, append-only | `BaseImmutableTimeEntity` |
 | 외부에 단건으로 노출되는 이력 | `BasePublicImmutableTimeEntity` |
 | 후보값이 정해진 속성 중 운영 관리가 불필요한 것 | 테이블을 만들지 않고 enum |
