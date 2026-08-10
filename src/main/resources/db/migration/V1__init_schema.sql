@@ -48,7 +48,6 @@ CREATE TABLE member (
 
 CREATE TABLE address (
     address_id      BIGINT       NOT NULL AUTO_INCREMENT, -- address PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     member_id       BIGINT       NOT NULL, -- member FK
     recipient       VARCHAR(50)  NOT NULL, -- 수령인
     phone           VARCHAR(20)  NOT NULL, -- 연락처(원문, 암호화 추후 적용)
@@ -60,7 +59,6 @@ CREATE TABLE address (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (address_id),
-    UNIQUE KEY uk_address_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_address_single_default_per_member (is_default_key),
     CONSTRAINT fk_address_member FOREIGN KEY (member_id) REFERENCES member (member_id)
 ); -- 회원 배송지
@@ -136,7 +134,6 @@ CREATE TABLE product (
 
 CREATE TABLE product_option (
     product_option_id BIGINT       NOT NULL AUTO_INCREMENT, -- product_option PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     product_id        BIGINT       NOT NULL, -- 상품 FK
     name              VARCHAR(100) NOT NULL, -- 옵션명(예: 200g, 500g, 1kg)
     price             INT          NOT NULL, -- 옵션 판매가(0 이상)
@@ -144,7 +141,6 @@ CREATE TABLE product_option (
     created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at        DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_option_id),
-    UNIQUE KEY uk_product_option_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_option_product_name (product_id, name), -- 한 상품 내 옵션명 중복 방지
     CONSTRAINT fk_option_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT chk_option_price CHECK (price >= 0),
@@ -153,7 +149,6 @@ CREATE TABLE product_option (
 
 CREATE TABLE product_image (
     product_image_id        BIGINT       NOT NULL AUTO_INCREMENT, -- product_image PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     product_id      BIGINT       NOT NULL, -- 상품 FK
     url             VARCHAR(500) NOT NULL, -- 이미지 URL
     sort_order      INT          NOT NULL DEFAULT 0, -- 정렬 순서
@@ -161,7 +156,6 @@ CREATE TABLE product_image (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_image_id),
-    UNIQUE KEY uk_product_image_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT fk_image_product FOREIGN KEY (product_id) REFERENCES product (product_id)
 ); -- 상품 이미지
 
@@ -189,12 +183,10 @@ CREATE TABLE stock_lot (
 
 CREATE TABLE cart (
     cart_id         BIGINT       NOT NULL AUTO_INCREMENT, -- cart PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     member_id       BIGINT       NOT NULL, -- 회원 FK(회원당 1개 UK)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (cart_id),
-    UNIQUE KEY uk_cart_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_cart_member (member_id), -- 1인 1카트
     CONSTRAINT fk_cart_member FOREIGN KEY (member_id) REFERENCES member (member_id)
 ); -- 장바구니
