@@ -145,7 +145,7 @@ CREATE TABLE product_option (
 CREATE TABLE product_image (
     product_image_id        BIGINT       NOT NULL AUTO_INCREMENT, -- product_image PK
     product_id      BIGINT       NOT NULL, -- 상품 FK
-    url             VARCHAR(500) NOT NULL, -- 이미지 URL
+    object_key      VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
     sort_order      INT          NOT NULL DEFAULT 0, -- 정렬 순서
     is_main         BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
