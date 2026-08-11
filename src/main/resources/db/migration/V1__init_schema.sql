@@ -39,12 +39,17 @@ CREATE TABLE member (
     member_grade_id  BIGINT       NOT NULL, -- 회원 등급 FK
     is_marketing_agreed BOOLEAN NOT NULL DEFAULT FALSE, -- 마케팅 수신 동의
     status           VARCHAR(30)  NOT NULL DEFAULT 'PENDING_PROFILE', -- 회원 상태(PENDING_PROFILE 카카오 최초 로그인 후 추가정보 미입력/ACTIVE 활성/BLOCKED 차단/WITHDRAWN 탈퇴)
+    refresh_token_hash CHAR(64)   NULL, -- 리프레시 토큰의 SHA-256 hex. 평문을 저장하지 않는다(유출되면 그대로 계정 탈취가 된다). 고엔트로피 난수라 bcrypt 가 아니라 단순 해시로 충분하다. NULL 은 로그아웃 상태이며, 액세스 토큰이 stateless 라 서버가 막을 수 있는 유일한 지점이 여기다
+    refresh_token_expires_at DATETIME NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
     deleted_at       DATETIME     NULL, -- 소프트딜리트(탈퇴 시, 주문 이력은 법정 기간 보존)
     active_provider_key VARCHAR(140) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN CONCAT(provider, ':', provider_user_id) ELSE NULL END), -- 탈퇴 후 같은 카카오 계정 재가입 허용: 활성 회원만 유일성 강제
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_id),
     CONSTRAINT chk_member_status CHECK (status IN ('PENDING_PROFILE','ACTIVE','BLOCKED','WITHDRAWN')),
+    CONSTRAINT chk_member_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
+        (refresh_token_hash IS NULL     AND refresh_token_expires_at IS NULL)
+     OR (refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL)),
     UNIQUE KEY uk_member_active_provider (active_provider_key), -- 활성 회원 한정 카카오 계정당 1회원(탈퇴 행은 NULL이라 제외)
     CONSTRAINT fk_member_grade FOREIGN KEY (member_grade_id) REFERENCES member_grade (member_grade_id)
 ); -- 회원(카카오 OIDC 인증. 자체 비밀번호 미보관, 인증은 카카오에 위임)
