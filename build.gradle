@@ -41,6 +41,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    /* 인증 방식은 아직 확정 항목이 아니다.
+       infra 의 기술스택 확정문서 8장이 "프로젝트 적용 시 채워야 할 항목" 으로 남겨 두었다.
+       지금은 서버 세션을 두지 않는 구성으로 시작하고, 확정되면 SecurityConfig 를 그에 맞춘다. */
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
 
