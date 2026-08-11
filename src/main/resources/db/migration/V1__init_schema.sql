@@ -3,6 +3,11 @@
 -- 원본에 있던 DROP TABLE IF EXISTS 블록은 옮기지 않았다.
 -- Flyway 마이그레이션은 전진 전용이며, 되돌리는 문장이 섞이면 재실행이나 baseline 설정이
 -- 어긋났을 때 운영 데이터를 지운다. 로컬 초기화는 compose down -v 로 한다.
+--
+-- 외부 노출 식별자(public_id)는 이 스키마에 넣지 않는다. 추후 고려한다.
+-- 지금은 API 가 설계되지 않아 어느 테이블이 단독 지목 대상인지 답할 수 없다.
+-- 설계와 판단 기준은 docs/code-architecture/identifier-strategy-guideline.md 에 있다.
+-- 도입할 때는 추가만 하는 마이그레이션(V2)으로 컬럼과 UNIQUE 를 얹는다. 이 파일을 고치지 않는다.
 
 -- =====================================================================
 -- 1. 회원 / 권한
@@ -25,7 +30,6 @@ CREATE TABLE member_grade (
 
 CREATE TABLE member (
     member_id        BIGINT       NOT NULL AUTO_INCREMENT, -- member PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     provider         VARCHAR(30)  NOT NULL DEFAULT 'KAKAO', -- 인증 제공자(카카오 OIDC. 확장 대비 컬럼)
     provider_user_id VARCHAR(100) NOT NULL, -- 카카오 회원번호(OIDC sub). 로그 평문 출력 금지
     email            VARCHAR(255) NULL, -- 카카오 제공 이메일(원문, 암호화 저장 대상). 동의 안 하면 NULL 가능
@@ -40,7 +44,6 @@ CREATE TABLE member (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_id),
-    UNIQUE KEY uk_member_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_member_status CHECK (status IN ('PENDING_PROFILE','ACTIVE','BLOCKED','WITHDRAWN')),
     UNIQUE KEY uk_member_active_provider (active_provider_key), -- 활성 회원 한정 카카오 계정당 1회원(탈퇴 행은 NULL이라 제외)
     CONSTRAINT fk_member_grade FOREIGN KEY (member_grade_id) REFERENCES member_grade (member_grade_id)
@@ -65,7 +68,6 @@ CREATE TABLE address (
 
 CREATE TABLE admin (
     admin_id        BIGINT       NOT NULL AUTO_INCREMENT, -- admin PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     login_id        VARCHAR(50)  NOT NULL, -- 관리자 로그인 아이디
     password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
     name            VARCHAR(50)  NOT NULL, -- 관리자 이름
@@ -73,7 +75,6 @@ CREATE TABLE admin (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (admin_id),
-    UNIQUE KEY uk_admin_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
     UNIQUE KEY uk_admin_login_id (login_id)
 ); -- 관리자
@@ -84,32 +85,27 @@ CREATE TABLE admin (
 
 CREATE TABLE category (
     category_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 카테고리 PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     parent_id       BIGINT       NULL, -- 상위 카테고리(확장용)
     name            VARCHAR(50)  NOT NULL, -- 해산물/육류/채소/과일
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (category_id),
-    UNIQUE KEY uk_category_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_category_parent_name (parent_id, name),
     CONSTRAINT fk_category_parent FOREIGN KEY (parent_id) REFERENCES category (category_id)
 ); -- 카테고리
 
 CREATE TABLE supplier (
     supplier_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 공급처 PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     name            VARCHAR(100) NOT NULL, -- 공급처
     contact         VARCHAR(100) NULL, -- 연락처
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (supplier_id),
-    UNIQUE KEY uk_supplier_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_supplier_name (name)
 ); -- 공급처
 
 CREATE TABLE product (
     product_id          BIGINT       NOT NULL AUTO_INCREMENT, -- product PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     product_code        VARCHAR(50)  NOT NULL, -- 자동생성 상품코드
     name                VARCHAR(255) NOT NULL, -- 상품명
     category_id         BIGINT       NOT NULL, -- 카테고리 FK
@@ -123,7 +119,6 @@ CREATE TABLE product (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_id),
-    UNIQUE KEY uk_product_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_product_sale_status CHECK (sale_status IN ('ON_SALE','SOLD_OUT','OFF_SALE')),
     CONSTRAINT chk_product_storage_type CHECK (storage_type IN ('ROOM','COLD','FROZEN')),
     UNIQUE KEY uk_product_active_code (active_code_key), -- 활성 상품 한정 코드 유일(삭제 행은 NULL이라 제외)
@@ -211,7 +206,6 @@ CREATE TABLE cart_item (
 
 CREATE TABLE orders (
     order_id        BIGINT       NOT NULL AUTO_INCREMENT, -- orders PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     order_no        VARCHAR(30)  NOT NULL, -- 주문번호
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
@@ -229,7 +223,6 @@ CREATE TABLE orders (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_id),
-    UNIQUE KEY uk_orders_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
@@ -339,7 +332,6 @@ CREATE TABLE order_status_history (
 
 CREATE TABLE payment (
     payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
     method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD/TRANSFER/EASY_PAY)
     amount          INT          NOT NULL, -- 결제 금액
@@ -350,7 +342,6 @@ CREATE TABLE payment (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (payment_id),
-    UNIQUE KEY uk_payment_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_payment_method CHECK (method IN ('CARD','TRANSFER','EASY_PAY')),
     CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
     UNIQUE KEY uk_payment_order (order_id),
@@ -365,7 +356,6 @@ CREATE TABLE payment (
 
 CREATE TABLE claim (
     claim_id        BIGINT       NOT NULL AUTO_INCREMENT, -- claim PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     order_id        BIGINT       NOT NULL, -- 주문 FK
     type            VARCHAR(30)  NOT NULL, -- 클레임 유형(CANCEL/RETURN/EXCHANGE)
     status          VARCHAR(30)  NOT NULL DEFAULT 'REQUESTED', -- 클레임 상태(REQUESTED/APPROVED/REJECTED/COMPLETED)
@@ -384,7 +374,6 @@ CREATE TABLE claim (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_id),
-    UNIQUE KEY uk_claim_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_claim_type CHECK (type IN ('CANCEL','RETURN','EXCHANGE')),
     CONSTRAINT chk_claim_status CHECK (status IN ('REQUESTED','APPROVED','REJECTED','COMPLETED')),
     CONSTRAINT chk_claim_reason_type CHECK (reason_type IS NULL OR reason_type IN ('CHANGE_OF_MIND','DEFECT')),
@@ -409,7 +398,6 @@ CREATE TABLE claim_item (
 
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     claim_id            BIGINT   NOT NULL, -- 클레임 FK
     payment_id          BIGINT   NOT NULL, -- 원결제 FK
     amount              INT      NOT NULL, -- 환불액
@@ -419,7 +407,6 @@ CREATE TABLE refund (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (refund_id),
-    UNIQUE KEY uk_refund_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_refund_status CHECK (status IN ('PENDING','DONE')),
     UNIQUE KEY uk_refund_claim (claim_id),
     CONSTRAINT fk_refund_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id),
@@ -430,7 +417,6 @@ CREATE TABLE refund (
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     order_id      BIGINT       NOT NULL, -- 최초 출고 전용, order에 귀속
     carrier       VARCHAR(50)  NULL, -- 택배사
     tracking_no   VARCHAR(50)  NULL, -- 송장번호
@@ -440,7 +426,6 @@ CREATE TABLE shipment (
     created_at    DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at    DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (shipment_id),
-    UNIQUE KEY uk_shipment_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_shipment_status CHECK (status IN ('PREPARING','SHIPPING','DELIVERED')),
     CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT chk_shipment_delivered_at CHECK (delivered_at IS NULL OR shipped_at IS NULL OR delivered_at >= shipped_at)
@@ -453,7 +438,6 @@ CREATE TABLE shipment (
 
 CREATE TABLE review (
     review_id       BIGINT       NOT NULL AUTO_INCREMENT, -- review PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     product_id      BIGINT       NOT NULL, -- 상품 FK
     member_id       BIGINT       NOT NULL, -- 작성 회원 FK
     order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(활성 리뷰 한정 구매 건당 1회)
@@ -466,7 +450,6 @@ CREATE TABLE review (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (review_id),
-    UNIQUE KEY uk_review_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_review_active_orderitem (active_orderitem_key), -- 활성 리뷰 한정 구매 건당 1회(삭제 행은 NULL이라 제외, 재작성 허용)
     CONSTRAINT fk_review_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT fk_review_member FOREIGN KEY (member_id) REFERENCES member (member_id),
@@ -476,7 +459,6 @@ CREATE TABLE review (
 
 CREATE TABLE qna (
     qna_id          BIGINT       NOT NULL AUTO_INCREMENT, -- qna PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     product_id      BIGINT       NOT NULL, -- 상품 FK
     member_id       BIGINT       NOT NULL, -- 작성 회원 FK
     title           VARCHAR(255) NOT NULL, -- 질문 제목
@@ -489,7 +471,6 @@ CREATE TABLE qna (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (qna_id),
-    UNIQUE KEY uk_qna_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_qna_status CHECK (status IN ('WAITING','ANSWERED')),
     CONSTRAINT fk_qna_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT fk_qna_member FOREIGN KEY (member_id) REFERENCES member (member_id),
@@ -502,7 +483,6 @@ CREATE TABLE qna (
 
 CREATE TABLE coupon (
     coupon_id        BIGINT      NOT NULL AUTO_INCREMENT, -- coupon PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     name             VARCHAR(100) NOT NULL, -- 쿠폰명
     discount_type    VARCHAR(30)  NOT NULL, -- 할인 유형(AMOUNT 정액/RATE 정률)
     discount_value   INT         NOT NULL, -- 할인 값(정액 원 또는 정률 %)
@@ -513,7 +493,6 @@ CREATE TABLE coupon (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
-    UNIQUE KEY uk_coupon_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
     CONSTRAINT chk_coupon_values CHECK (discount_value >= 0 AND min_order_amount >= 0),
@@ -522,7 +501,6 @@ CREATE TABLE coupon (
 
 CREATE TABLE coupon_campaign (
     coupon_campaign_id BIGINT      NOT NULL AUTO_INCREMENT, -- coupon_campaign PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     coupon_id          BIGINT      NOT NULL, -- 어떤 쿠폰을 선착순으로 뿌리는가
     name               VARCHAR(100) NOT NULL, -- 캠페인명
     total_quantity     INT         NOT NULL, -- 한정 수량(예: 10000)
@@ -533,7 +511,6 @@ CREATE TABLE coupon_campaign (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_campaign_id),
-    UNIQUE KEY uk_coupon_campaign_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT fk_campaign_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT chk_campaign_qty CHECK (total_quantity > 0 AND issued_quantity >= 0 AND issued_quantity <= total_quantity),
     CONSTRAINT chk_campaign_status CHECK (status IN ('SCHEDULED','OPEN','CLOSED')),
@@ -555,7 +532,6 @@ CREATE TABLE coupon_campaign_product (
 
 CREATE TABLE member_coupon (
     member_coupon_id BIGINT      NOT NULL AUTO_INCREMENT, -- member_coupon PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
     coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL)
@@ -566,7 +542,6 @@ CREATE TABLE member_coupon (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_id),
-    UNIQUE KEY uk_member_coupon_public (public_id), -- 외부 식별자 유일성
     UNIQUE KEY uk_mc_campaign_member (coupon_campaign_id, member_id), -- 선착순 1인 1매(campaign별). 일반 발급은 campaign_id=NULL이라 미적용
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
@@ -596,7 +571,6 @@ CREATE TABLE point_history (
 
 CREATE TABLE notification (
     notification_id BIGINT       NOT NULL AUTO_INCREMENT, -- notification PK
-    public_id       BINARY(16)   NOT NULL, -- 외부 노출용 식별자(UUID V7을 BINARY(16)으로 저장, 애플리케이션에서 UUID<->바이너리 변환). URL/API에 PK 대신 노출, 순차 BIGINT 추측 방지(IDOR 방어). BINARY(16)은 CHAR(36) 대비 인덱스/저장 효율 우수, V7의 시간순 정렬성으로 인덱스 단편화 감소
     member_id       BIGINT       NOT NULL, -- 수신 회원 FK
     channel         VARCHAR(30)  NOT NULL, -- 발송 채널(EMAIL/SMS/APP)
     type            VARCHAR(30)  NOT NULL, -- 알림 유형(QNA_ANSWER/ORDER_STATUS/SHIPPING/EXPIRY)
@@ -605,7 +579,6 @@ CREATE TABLE notification (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (notification_id),
-    UNIQUE KEY uk_notification_public (public_id), -- 외부 식별자 유일성
     CONSTRAINT chk_noti_channel CHECK (channel IN ('EMAIL','SMS','APP')),
     CONSTRAINT chk_noti_type CHECK (type IN ('QNA_ANSWER','ORDER_STATUS','SHIPPING','EXPIRY')),
     CONSTRAINT chk_noti_status CHECK (status IN ('SENT','FAILED','RETRY')),
