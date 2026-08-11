@@ -312,39 +312,13 @@ Hibernate가 생성 방식을 바꾸면 `IDS-4-03`이 다시 걸리고, 그때 �
 
 JPA 표준의 `GenerationType.UUID`는 명세가 버전을 규정하지 않으며 Hibernate는 v4로 구현한다. 그래서 이것만은 쓰지 않는다.
 
-### 왜 타입 안전 래퍼가 필요한가
+### 왜 타입 안전 래퍼를 두지 않는가
 
-내부 ID(`Long`)와 외부 ID(`UUID`)가 원시 타입이면 뒤바꿔 넣어도 컴파일이 통과하고, 잘못된 엔티티의 UUID를 넘겨도 **조회 결과가 비었을 뿐 원인이 드러나지 않는다.**
+`UUID`가 원시 타입이라 잘못된 엔티티의 값을 넘겨도 컴파일이 통과하고, 조회 결과가 비었을 뿐 원인이 드러나지 않는다.
+초판은 그래서 `AbstractPublicId`와 엔티티별 하위 타입을 두라고 했다.
 
-```java
-public abstract class AbstractPublicId {
-
-    private final UUID value;
-
-    protected AbstractPublicId(UUID value) {
-        this.value = Objects.requireNonNull(value, "value must not be null");
-    }
-
-    @Override
-    public final boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        /* instanceof 가 아니라 getClass() 로 비교한다.
-           서로 다른 엔티티의 식별자가 같은 UUID 값을 가질 때 동등하다고 판정되면
-           타입으로 막으려던 혼동이 다시 열린다. */
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        return value.equals(((AbstractPublicId) o).value);
-    }
-}
-```
-
-`getClass()` 비교는 리스코프 치환 원칙을 일부 위반하지만, 하위 타입이 상태를 추가하지 않는 값 객체이므로 실용적으로 허용한다.
-**하위 타입에 필드를 추가하면 이 전제가 깨진다.**
-
-파싱 실패는 도메인 예외로 변환한다. `UUID.fromString`의 `IllegalArgumentException`을 그대로 두면 잘못된 사용자 입력이 500으로 나간다.
+**막으려던 실수의 자리를 없애는 쪽이 싸다.** 서비스 진입 메서드가 `UUID`를 나열해서 받지 않고 커맨드 객체로 받으면
+순서를 틀릴 자리가 사라진다. 상세한 비교는 `base-entity-rationale.md` 1장에 있다.
 
 ### 왜 공통 모듈에 모으는가
 

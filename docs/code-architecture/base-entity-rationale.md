@@ -54,16 +54,38 @@ public class AccessLog extends BaseImmutableTimeEntity {
 
 `BasePublic*`은 `Base*`를 상속하므로 `public_id`는 두 곳에만 들어간다.
 
-### 왜 베이스가 UUID를 들고 타입 래퍼는 하위가 씌우는가
+### 왜 타입 래퍼를 두지 않는가
 
-`AbstractPublicId` 하위 타입은 엔티티마다 다르다. 베이스가 그 타입을 직접 들려면 둘 중 하나다.
+`OrderPublicId` 같은 값 객체로 감싸면 서로 다른 엔티티의 식별자를 바꿔 넣었을 때 컴파일이 막아 준다.
+초판은 그래서 `AbstractPublicId`와 하위 타입을 두라고 했다. **지금은 두지 않는다.**
 
-| 방식 | 문제 |
+막으려던 실수가 나는 자리가 **서비스 메서드가 `UUID`를 여럿 나열해서 받을 때**인데,
+그 자리를 없애는 더 싼 방법이 있다.
+
+```java
+// 위험한 형태. 순서를 바꿔도 컴파일이 통과한다
+ClaimId requestClaim(UUID orderId, UUID productOptionId, int qty)
+
+// 인자가 하나면 순서가 없다
+ClaimId requestClaim(ClaimCommand command)
+```
+
+커맨드 객체는 어차피 만들게 되는 것이라 **추가 비용이 0**이다.
+게다가 컨트롤러가 JSON을 그 record로 바로 역직렬화하면 매핑이 이름 기준이라 순서를 틀릴 자리 자체가 없다.
+
+래퍼를 두면 드는 비용은 이렇다.
+
+| 항목 | 내용 |
 |------|------|
-| 제네릭 베이스 `BasePublic...<ID extends AbstractPublicId>` | JPA가 제네릭 필드를 매핑하려면 **엔티티마다 `AttributeConverter`**가 필요하다 |
-| 베이스가 `UUID`를 들고 하위가 래핑 (채택) | 변환기가 하나. 하위는 `publicId()` 한 줄 |
+| 엔티티마다 클래스 | 공개 엔티티 수만큼 늘어난다 |
+| 레포지토리 경계 | `findByPublicId(id.value())`로 매번 벗긴다 |
+| 직렬화 | `@JsonValue`가 없으면 `{"value":"..."}`로 나간다 |
+| API 문서 | springdoc이 객체로 그릴 수 있어 확인이 필요하다 |
 
-`publicIdValue()`를 `protected`로 두어 **밖으로는 타입이 붙은 것만 나가게** 한다.
+**얻는 것에 비해 손이 많이 간다.** 커맨드 객체로 대부분이 해결되므로 래퍼는 두지 않는다.
+
+`UUID`를 둘 이상 나열해서 받는 내부 메서드가 실제로 남으면 그때 그 엔티티 것만 만든다.
+그 판단 기준은 `identifier-strategy-guideline.md` 7절에 있다.
 
 ### 왜 AttributeConverter 를 두지 않는가
 
@@ -82,20 +104,6 @@ bare_uuid   애노테이션 없는 맨 UUID                     -> binary(16)
 변환기를 손으로 쓰면 바이트 순서를 뒤집거나 `null` 처리를 빠뜨릴 수 있고, 그 오류는 저장된 값이 어긋난 뒤에야 드러난다.
 
 `columnDefinition`은 남긴다. 매핑을 바꾸지는 않지만 **스키마 의도가 엔티티에 드러나는 값어치**가 있고, 마이그레이션 스크립트와 대조할 때 기준이 된다.
-
-### 왜 접근자 이름에 get 을 붙이지 않는가
-
-`entity-creation-guideline.md` 1절이 `@Getter`를 허용하기 때문이다.
-
-베이스에 `@Getter`가 붙으면 Lombok 이 `public UUID getPublicId()`를 만든다. 그러면 둘 다 깨진다.
-
-```
-하위가 OrderPublicId getPublicId() 를 선언   반환형이 달라 컴파일 실패
-선언하지 않고 두면                            생 UUID 가 public 으로 새어 나간다
-```
-
-**이름이 겹치지 않으면 두 경우가 다 사라진다.** `publicId()`는 Lombok 이 만드는 어떤 이름과도 부딪히지 않는다.
-그래도 베이스에 `@Getter`를 붙이면 생 `UUID`가 나가므로 `BE-1-09`로 따로 막는다.
 
 ### 왜 베이스에 생성자가 없는가
 

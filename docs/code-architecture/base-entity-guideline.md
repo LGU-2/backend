@@ -9,14 +9,17 @@
 
 ## 1. 계층 구조
 
+> **`BasePublic*` 둘은 지금 쓰지 않는다.** 외부 노출 식별자를 추후 고려하기로 했고, 그 전까지 실제 엔티티는 아래 둘 중 하나를 상속한다.
+> 판단 기준과 도입 방법은 [identifier-strategy-guideline.md](./identifier-strategy-guideline.md)에 있다.
+
 모든 실제 엔티티는 아래 넷 중 하나를 상속한다. **상속하면 안 되는 중간 계층은 두지 않는다.**
 
 | 클래스 | PK | created_at | updated_at | public_id | 상속 대상 |
 |--------|:--:|:----------:|:----------:|:---------:|-----------|
 | `BaseImmutableTimeEntity` | Long | O | X | X | 이력, 로그 (append-only) |
 | `BaseMutableTimeEntity` | Long | O | O | X | 일반 도메인 엔티티, 코드 테이블 |
-| `BasePublicImmutableTimeEntity` | Long | O | X | O | 외부에 노출되는 이력 |
-| `BasePublicMutableTimeEntity` | Long | O | O | O | 외부에 노출되는 도메인 엔티티 |
+| `BasePublicImmutableTimeEntity` | Long | O | X | O | 외부에 노출되는 이력 (**추후**) |
+| `BasePublicMutableTimeEntity` | Long | O | O | O | 외부에 노출되는 도메인 엔티티 (**추후**) |
 
 축이 둘이다. **수정 가능 여부**와 **외부 노출 여부**다.
 
@@ -72,35 +75,27 @@ public class Order extends BasePublicMutableTimeEntity {
     public static Order place(Long memberId) {
         return new Order(memberId);
     }
-
-    /* 타입 래퍼는 하위가 씌운다.
-       get 접두사를 붙이지 않는다. Lombok 이 만드는 접근자와 이름이 겹친다. */
-    public OrderPublicId publicId() {
-        return new OrderPublicId(publicIdValue());
-    }
 }
 ```
 
-### 1.1 `public_id`는 베이스가 `UUID`로 들고 하위가 타입을 씌운다
+### 1.1 `public_id`는 베이스가 `UUID`로 든다 (추후)
 
-`AbstractPublicId` 하위 타입은 엔티티마다 다르다(`OrderPublicId`, `AccountPublicId`).
-베이스가 그 타입을 직접 들면 엔티티마다 `AttributeConverter`가 필요해진다.
+**아래는 도입할 때의 형태이며 지금 코드에는 없다.**
 
-**베이스는 `UUID` 하나만 든다. 변환기는 두지 않는다.**
-Hibernate가 MySQL에서 `UUID`를 `binary(16)`으로 매핑하므로 손으로 옮길 것이 없다.
+**타입 래퍼를 두지 않는다.** 엔티티마다 `OrderPublicId` 같은 값 객체를 만들지 않고 `UUID`를 그대로 쓴다.
+근거는 `identifier-strategy-rationale.md`에 있다.
+
+**변환기도 두지 않는다.** Hibernate가 MySQL에서 `UUID`를 `binary(16)`으로 매핑하므로 손으로 옮길 것이 없다.
 
 ```java
 @MappedSuperclass
+@Getter
 public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity {
 
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)   // ORM 이 INSERT 직전에 채운다
     @Column(name = "public_id", nullable = false, updatable = false,
             columnDefinition = "BINARY(16)")
     private UUID publicId;
-
-    protected UUID publicIdValue() {
-        return publicId;
-    }
 }
 ```
 
@@ -110,17 +105,11 @@ public abstract class BasePublicMutableTimeEntity extends BaseMutableTimeEntity 
 생성 방식은 `identifier-strategy-guideline.md` 5절이 정한다.
 
 점검 항목
-* `BE-1-06` 베이스가 `UUID`를 들고 하위 타입을 직접 들지 않는가
-  `AttributeConverter`를 새로 만들지 않는다. Hibernate 기본 매핑이 `binary(16)`이다.
-* `BE-1-07` 하위 엔티티가 `publicId()`로 자기 타입 래퍼를 돌려주는가
-  `publicIdValue()`가 `protected`인 이유다. 외부에는 타입이 붙은 것만 나간다.
-  `get` 접두사를 쓰지 않는다. `@Getter`가 만드는 `getPublicId()`와 반환형이 달라 컴파일이 깨진다.
-* `BE-1-08` 하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가
+* `BE-1-06` 베이스가 `UUID`를 들고 타입 래퍼를 만들지 않았는가
+  `AttributeConverter`도 새로 만들지 않는다. Hibernate 기본 매핑이 `binary(16)`이다.
+* `BE-1-07` 하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가
   ORM 이 채우므로 받을 이유가 없다. 받아도 INSERT 때 덮어쓰이므로 값이 조용히 사라진다.
   v4 예외 대상 테이블은 `style = RANDOM`으로 바꾸고 사유를 남긴다(`IDS-3-01`).
-* `BE-1-09` 외부 노출 베이스에 `@Getter`가 붙어 있지 않은가
-  붙이면 생 `UUID`를 돌려주는 `public` 접근자가 생겨 타입 래퍼를 우회한다.
-  엔티티 본체의 `@Getter`는 허용이다(`entity-creation-guideline.md` 1절). 이 두 베이스만 예외다.
 
 ## 2. PK 규칙
 
@@ -218,15 +207,25 @@ public class ClaimReason extends BaseMutableTimeEntity {
 |-------------|-----------|
 | 애그리거트 루트 (회원, 주문, 상품) | `BasePublicMutableTimeEntity` |
 | 부가 속성이 딸린 분류 (카테고리, 회원 등급, 공급처) | `BaseMutableTimeEntity` (코드 테이블이 아니다) |
-| 하위 엔티티 (주문 항목, 배송지) | `BaseMutableTimeEntity` |
+| 하위 엔티티 중 부모 안에서 안정적으로 지목되는 것 (주문 항목, 장바구니 항목) | `BaseMutableTimeEntity` |
+| 하위 엔티티 중 그렇지 않은 것 (배송지, 상품 옵션) | `BasePublicMutableTimeEntity` |
 | 운영 관리 코드 테이블 (사유 코드 등) | `BaseMutableTimeEntity` (id + code UNIQUE) |
 | 이력, 로그, append-only | `BaseImmutableTimeEntity` |
 | 외부에 단건으로 노출되는 이력 | `BasePublicImmutableTimeEntity` |
 | 후보값이 정해진 속성 중 운영 관리가 불필요한 것 | 테이블을 만들지 않고 enum |
 | 대량 참조 + 캐싱 곤란한 특수 코드 테이블 | 문자열 PK 예외 (베이스 미상속, 사유 기재) |
 
-**하위 엔티티에 `Public`을 붙이지 않는 이유**는 부모 식별자와 순번으로 도달하기 때문이다 (`/orders/{id}/items/3`).
-이력 테이블도 목록으로만 조회되면 단건 참조 대상이 아니다. 근거는 `identifier-strategy-guideline.md` 2절에 있다.
+**하위 엔티티라고 자동으로 `Public`이 빠지는 것이 아니다.** 부모 안에서 안정적으로 지목할 수단이 있는지를 본다.
+
+```
+주문 항목    (주문, 옵션) 자연키가 있고 확정 후 안 바뀐다        Public 없음
+배송지       자연키가 없고 수시로 지우고 고쳐 순번이 밀린다      Public 붙인다
+```
+
+`/orders/{id}/items/3` 이 성립하는 이유는 주문 항목이 확정 후 불변이기 때문이다.
+가변 목록에 순번을 쓰면 하나를 지우는 순간 뒤 번호가 밀려 클라이언트가 다른 행을 가리킨다.
+
+이력 테이블도 목록으로만 조회되면 단건 참조 대상이 아니다. 판단 기준표는 `identifier-strategy-guideline.md` 2절에 있다.
 
 ## 7. 참고
 

@@ -73,10 +73,8 @@ items:
   - {id: BE-1-03, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`public_id`를 엔티티가 직접 선언하지 않고 `BasePublic*` 상속으로 얻는가"}
   - {id: BE-1-04, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, defers_to: [IDS-2-03], title: "외부에 노출되지 않는 엔티티가 `BasePublic*`을 상속하지 않았는가"}
   - {id: BE-1-05, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`id`와 시각 컬럼을 엔티티가 직접 선언하지 않았는가"}
-  - {id: BE-1-06, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "베이스가 `UUID`를 들고 하위 타입을 직접 들지 않는가"}
-  - {id: BE-1-07, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "하위 엔티티가 `publicId()`로 자기 타입 래퍼를 돌려주는가"}
-  - {id: BE-1-08, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가"}
-  - {id: BE-1-09, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "외부 노출 베이스에 `@Getter`가 붙어 있지 않은가"}
+  - {id: BE-1-06, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "베이스가 `UUID`를 들고 타입 래퍼를 만들지 않았는가"}
+  - {id: BE-1-07, doc: base-entity-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "하위 엔티티의 생성자나 팩터리가 `public_id`를 인자로 받지 않는가"}
   - {id: BE-2-01, doc: base-entity-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "PK가 `Long`(MySQL `BIGINT`)인가"}
   - {id: BE-2-02, doc: base-entity-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "`@GeneratedValue(strategy = GenerationType.IDENTITY)`를 쓰는가"}
   - {id: BE-2-03, doc: base-entity-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "코드 테이블도 정수 PK를 쓰는가"}
@@ -218,8 +216,10 @@ items:
   - {id: IDS-1-01, doc: identifier-strategy-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "하나의 컬럼이 두 층의 역할을 겸하지 않는가"}
   - {id: IDS-1-02, doc: identifier-strategy-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "리소스가 여러 식별자를 가진다면 각각의 소비자와 용도가 문서에 명시되어 있는가"}
   - {id: IDS-2-01, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "구성 선택의 근거가 기록되어 있는가"}
-  - {id: IDS-2-02, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "새 엔티티가 아래 기준에 해당하는데 `public_id`를 누락하지 않았는가"}
-  - {id: IDS-2-03, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "반대로 기준에 해당하지 않는데 습관적으로 달지 않았는가"}
+  - {id: IDS-2-02, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "API 가 단독으로 지목하는데 `public_id`를 누락하지 않았는가"}
+  - {id: IDS-2-03, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "반대로 지목하지 않는데 습관적으로 달지 않았는가"}
+  - {id: IDS-2-04, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "새 테이블의 판단 결과가 기록되어 있는가"}
+  - {id: IDS-2-05, doc: identifier-strategy-guideline.md, ch: 2, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "API 가 정해지지 않았는데 확정으로 적지 않았는가"}
   - {id: IDS-3-01, doc: identifier-strategy-guideline.md, ch: 3, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "v4를 선택한 테이블에 사유가 기록되어 있는가"}
   - {id: IDS-3-02, doc: identifier-strategy-guideline.md, ch: 3, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "v1, v3, v5, v6, v8을 쓰지 않았는가"}
   - {id: IDS-3-03, doc: identifier-strategy-guideline.md, ch: 3, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "외부 식별자로 조회할 때 소유권 또는 권한 검증을 함께 수행하는가"}
@@ -238,8 +238,8 @@ items:
   - {id: IDS-7-01, doc: identifier-strategy-guideline.md, ch: 7, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "응답 DTO나 API 경로에 내부 `Long id`가 없는가"}
   - {id: IDS-7-02, doc: identifier-strategy-guideline.md, ch: 7, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "대량 조회 경로가 외부 식별자 목록으로 돌지 않는가"}
   - {id: IDS-7-03, doc: identifier-strategy-guideline.md, ch: 7, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "응답 DTO의 필드명이 `publicId`가 아니라 `id`인가"}
+  - {id: IDS-7-04, doc: identifier-strategy-guideline.md, ch: 7, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "서비스 진입 메서드가 외부 식별자를 둘 이상 나열해서 받지 않는가"}
   - {id: IDS-8-01, doc: identifier-strategy-guideline.md, ch: 8, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "외부 입력 UUID 파싱 실패가 400으로 매핑되는가"}
-  - {id: IDS-8-02, doc: identifier-strategy-guideline.md, ch: 8, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "`AbstractPublicId` 하위 타입이 상태를 추가하지 않는가"}
   - {id: IDS-9-01, doc: identifier-strategy-guideline.md, ch: 9, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "UUID를 정렬 키나 커서 페이지네이션 키로 쓰지 않는가"}
   - {id: IDS-10-01, doc: identifier-strategy-guideline.md, ch: 10, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database, security], level_verified: false, title: "비즈니스 식별자를 API 식별자로 쓰지 않는가"}
   - {id: JPA-1-01, doc: jpa-rdb-guideline.md, ch: 1, level: 코드, gate: G-PR, gates: [local, ci], ci_stage: 1, domains: [database], level_verified: false, title: "테이블 하나에 엔티티 하나가 대응하도록 최대한 단순하게 유지했는가"}

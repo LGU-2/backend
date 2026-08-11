@@ -3,12 +3,12 @@
 **이 문서는 `gen_status.py` 가 만든다. 손으로 고치지 않는다.**
 레지스트리와 앵커 규칙에서 계산한 값이라, 항목이나 규칙이 바뀌면 다시 생성해야 한다.
 
-생성 시각: 2026-08-10 22:29
+생성 시각: 2026-08-11 13:53
 
 | 저장소 | 커밋 | 항목 |
 |---|---|---:|
 | `common` | `bb5fc9c` | 217 |
-| `backend` | `d3f04af` | 272 |
+| `backend` | `7a10b5f` | 272 |
 | `infra` | `5c06db8` | 96 |
 | | | **585** |
 
@@ -26,7 +26,7 @@
 ### 있는 것과 없는 것
 
 ```
-  있음  backend 의 Java 코드  (6개)
+  있음  backend 의 Java 코드  (12개)
   있음  backend/build.gradle
   있음  backend 앵커 규칙  (규칙 11개)
   없음  infra 앵커 규칙
@@ -40,12 +40,12 @@
 
 | 트리거 | 규칙 | 활성 | 1단계 | 2단계 | backend | common | infra |
 |---|---|---:|---:|---:|---:|---:|---:|
-| `**/domain/controller/*.java`, `**/domain/dto/*.java` | controller | 227 | 173 | 54 | 173 | 48 | 6 |
+| `**/domain/controller/*.java`, `**/domain/dto/*.java` | controller | 229 | 175 | 54 | 175 | 48 | 6 |
 | `**/domain/service/*.java` | service | 189 | 83 | 106 | 83 | 85 | 21 |
 | `**/domain/entity/*.java` | entity | 213 | 180 | 33 | 180 | 30 | 3 |
 | `**/domain/repository/*.java` | repository | 131 | 98 | 33 | 98 | 33 | 0 |
 | `**/domain/client/**/*.java` | external-client | 134 | 83 | 51 | 83 | 44 | 7 |
-| `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 192 | 173 | 19 | 173 | 15 | 4 |
+| `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 194 | 175 | 19 | 175 | 15 | 4 |
 | `src/main/resources/db/migration/*.sql` | migration | 101 | 51 | 50 | 51 | 46 | 4 |
 | `src/main/resources/application*.yml`, `src/main/resources/logback*.xml` | app-config | 115 | 0 | 115 | 0 | 91 | 24 |
 | `src/test/**/*Test.java` | test | 29 | 20 | 9 | 20 | 9 | 0 |
