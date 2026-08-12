@@ -188,7 +188,11 @@ max_discount_amount  min_order_amount  valid_from  valid_to
 
 **쿠폰함도 함께 해결된다.** 관리자가 할인액을 고쳐도 이미 받아 둔 사람의 쿠폰은 안 바뀐다.
 
-### 대상 옵션은 복사하지 않는다
+### 대상 옵션은 필수이고 복사하지 않는다
+
+`ITEM` 쿠폰은 대상 옵션을 하나 이상 반드시 갖는다. 행이 없는 것을 "대상 제한 없음" 으로 해석하지 않는다.
+그 해석은 관리자가 대상을 실수로 지웠을 때 전 상품 할인으로 바뀌고, 그 사고가 조용하다.
+대상이 필수라야 `order_item` 이 복합 외래 키로 대상 여부를 강제할 수 있기도 하다.
 
 `coupon_product_option` 은 참조 그대로 두고 사용 시점의 현재 목록을 본다.
 **금액과 조건은 발급 시점에 고정되어야 하지만, "어디에 쓸 수 있나" 는 운영이 조정하는 것**이라 성질이 다르다.
@@ -348,14 +352,15 @@ CHECK 는 **자기 행만** 볼 수 있다. 다른 행이나 다른 표를 봐�
 | `refund.payment_id` | `claim.order_id -> payment`. `uk_payment_order` 가 주문당 결제 1건을 보장한다 |
 | `stock_disposal.product_id` | `stock_lot -> product_option -> product`. `stock_lot_id` 를 `NOT NULL` 로 바꿔 유도가 항상 성립한다 |
 
-나머지는 복합 외래 키 일곱으로 막는다.
+나머지는 복합 외래 키 열로 막는다.
 
 | 표 | 공유하는 조상 키 | 막는 것 |
 |---|---|---|
 | `claim_item` | `order_id` | 다른 주문의 주문 상품을 클레임에 넣는 것 |
 | `orders` | `member_id` | 남의 쿠폰을 주문에 붙이는 것 |
-| `order_item` | `member_id` | 남의 쿠폰을 라인에 붙이는 것 |
+| `order_item` | `member_id`, `coupon_id` | 남의 쿠폰을 붙이는 것, 대상이 아닌 옵션에 쓰는 것 |
 | `review` | `product_option_id`, `member_id` | 다른 상품에 리뷰를 쓰거나 남의 구매로 쓰는 것 |
+| `coupon_product_option` | `scope` | 장바구니 쿠폰에 대상 옵션을 다는 것 |
 
 `review` 는 사슬이 둘이다. `order_item` 이 `product_id` 를 갖지 않고 `product_option_id` 만 갖기 때문에
 가운데 고리로 `product_option_id` 를 복제해야 두 외래 키가 이어진다.
@@ -371,14 +376,30 @@ review(product_option_id, product_id)               -> product_option
 부모마다 참조 대상 UNIQUE 가 하나씩 필요하다. `claim_id` 처럼 이미 PK 인 컬럼이라도
 그 조합에 인덱스가 있어야 외래 키 대상이 될 수 있다.
 
-### 외래 키로 표현할 수 없어 앱에 남은 것 (`DI-3-05`)
+### 목록 검사도 외래 키로 옮겼다
 
-| 위치 | 확인할 것 |
-|---|---|
-| `order_item.member_coupon_id` | 그 라인의 옵션이 `coupon_product_option` **목록에 있는가** |
-| `coupon_product_option` | `scope='ORDER'` 인 쿠폰에는 행이 없어야 한다 |
+"이 라인의 옵션이 그 쿠폰의 대상 목록에 있는가" 는 언뜻 `EXISTS` 검사라 외래 키로 표현할 수 없어 보인다.
+그런데 **목록 자체가 표이므로 그 표를 참조하면 된다.**
 
-**목록에 들어 있는가** 는 `EXISTS` 검사라 외래 키가 표현하지 못한다.
+```sql
+order_item.coupon_id 를 복제하고
+  FOREIGN KEY (member_coupon_id, coupon_id)    -> member_coupon      그 쿠폰이 맞는지
+  FOREIGN KEY (coupon_id, product_option_id)   -> coupon_product_option  그 대상에 이 옵션이 있는지
+```
+
+두 번째 외래 키가 참조할 행이 없으면 `INSERT` 가 거부된다. **대상이 아닌 옵션에는 쿠폰이 붙지 않는다.**
+
+전제는 **`ITEM` 쿠폰이 대상 옵션을 반드시 하나 이상 갖는 것**이다.
+원래는 "행이 없으면 대상 제한 없음" 이었는데 그 규칙을 버렸다.
+**부재를 의미로 쓰면 사고가 조용하다.** 관리자가 대상을 실수로 전부 지우면 전 상품 할인이 되고,
+데이터가 사라진 것인지 원래 없었던 것인지 구분할 수 없다.
+아무 상품에나 쓰는 쿠폰이 필요하면 `scope='ORDER'` 가 그 자리다.
+
+`coupon_product_option` 쪽도 같은 기법이다. `scope` 를 복제해 `CHECK (scope = 'ITEM')` 으로 못 박고
+`FOREIGN KEY (coupon_id, scope) -> coupon (coupon_id, scope)` 를 걸면
+장바구니 쿠폰은 이 표에 행을 가질 수 없다.
+
+**결과로 `DI-3-05` 로 남는 조합 검증이 없다.** 여섯 중 둘은 컬럼을 지워 없앴고 넷은 외래 키로 막는다.
 
 ### 자식 행 합계 (`DI-3-06`)
 

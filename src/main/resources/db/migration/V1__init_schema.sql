@@ -211,6 +211,7 @@ CREATE TABLE coupon (
     created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
+    UNIQUE KEY uk_coupon_id_scope (coupon_id, scope), -- coupon_product_option 이 복합 외래 키로 참조한다. coupon_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
     CONSTRAINT chk_coupon_scope CHECK (scope IN ('ORDER','ITEM')),
     CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
@@ -228,18 +229,25 @@ CREATE TABLE coupon (
 
 CREATE TABLE coupon_product_option (
     coupon_product_option_id BIGINT NOT NULL AUTO_INCREMENT, -- coupon_product_option PK
-    coupon_id         BIGINT   NOT NULL, -- 쿠폰 FK
-    product_option_id BIGINT   NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
+    coupon_id         BIGINT      NOT NULL, -- 쿠폰 FK
+    scope             VARCHAR(20) NOT NULL DEFAULT 'ITEM', /* 조상 키를 복제한다. 아래 CHECK 가 이 값을 ITEM 으로 못 박고
+                                                              복합 외래 키가 coupon.scope 와 같기를 요구하므로,
+                                                              장바구니 쿠폰(scope='ORDER')은 이 표에 행을 가질 수 없다 */
+    product_option_id BIGINT      NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
     created_at        DATETIME(6) NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_product_option_id),
     UNIQUE KEY uk_cpo_coupon_option (coupon_id, product_option_id), -- 쿠폰당 옵션 1행
-    CONSTRAINT fk_cpo_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
+    CONSTRAINT chk_cpo_scope CHECK (scope = 'ITEM'),
+    CONSTRAINT fk_cpo_coupon FOREIGN KEY (coupon_id, scope) REFERENCES coupon (coupon_id, scope),
     CONSTRAINT fk_cpo_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id)
-); /* 상품 쿠폰의 대상 옵션(행이 하나도 없으면 대상 제한이 없는 쿠폰이다).
+); /* 상품 쿠폰의 대상 옵션. ITEM 쿠폰은 대상을 하나 이상 반드시 지정한다.
+      행이 없는 것을 "대상 제한 없음" 으로 해석하지 않는 이유는 부재를 의미로 쓰면 사고가 조용하기 때문이다.
+      관리자가 대상을 실수로 전부 지웠을 때 전 상품 할인이 되어 버리고, 데이터가 사라진 것인지 원래 없었던 것인지 구분할 수 없다.
+      아무 상품에나 쓰는 쿠폰이 필요하면 장바구니 쿠폰(scope='ORDER')이 그 자리다.
+      대상이 필수라야 order_item 이 복합 외래 키로 "이 라인의 옵션이 그 쿠폰의 대상인가" 를 DB 수준에서 강제할 수 있다.
       상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있어, 상품으로 지정하면 임박하지 않은 옵션까지 할인되기 때문이다.
       member_coupon 이 다른 조건은 복사해 가지만 이 목록은 복사하지 않는다.
-      임박 재고가 팔리면 대상에서 빼는 식으로 운영 중에 조정할 수 있어야 하므로, 사용 시점의 현재 목록을 본다.
-      장바구니 쿠폰(scope='ORDER')에는 행이 있으면 안 되며 두 표에 걸친 조건이라 앱이 확인한다(DI-3-05) */
+      임박 재고가 팔리면 대상에서 빼는 식으로 운영 중에 조정할 수 있어야 하므로, 사용 시점의 현재 목록을 본다 */
 
 CREATE TABLE member_coupon (
     member_coupon_id    BIGINT       NOT NULL AUTO_INCREMENT, -- member_coupon PK
@@ -261,6 +269,7 @@ CREATE TABLE member_coupon (
     PRIMARY KEY (member_coupon_id),
     UNIQUE KEY uk_mc_coupon_member (coupon_id, member_id), -- 쿠폰당 1인 1매
     UNIQUE KEY uk_mc_id_member (member_coupon_id, member_id), -- orders 와 order_item 이 복합 외래 키로 참조한다
+    UNIQUE KEY uk_mc_id_coupon (member_coupon_id, coupon_id), -- order_item 이 복합 외래 키로 참조한다
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
@@ -378,7 +387,11 @@ CREATE TABLE order_item (
     member_id       BIGINT       NOT NULL, /* 조상 키를 복제한다. 아래 두 복합 외래 키가 이 값을 함께 요구하므로
                                               orders.member_id 와 member_coupon.member_id 가 같아야만 쿠폰이 붙는다.
                                               남의 쿠폰을 자기 라인에 붙이는 것이 DB 수준에서 막힌다 */
-    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다. 이 라인의 옵션이 coupon_product_option 에 들어 있는지는 앱이 확인한다(DI-3-05)
+    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다
+    coupon_id       BIGINT       NULL, /* 조상 키를 복제한다. member_coupon 의 쿠폰이며 아래 두 복합 외래 키를 잇는다.
+                                          하나가 member_coupon 의 쿠폰임을 고정하고, 다른 하나가 그 쿠폰의 대상 목록에
+                                          이 라인의 옵션이 있기를 요구한다. 남의 쿠폰도, 대상이 아닌 옵션도 붙지 않는다.
+                                          쿠폰을 안 쓴 라인은 member_coupon_id 와 함께 NULL 이라 두 외래 키가 검사에서 빠진다 */
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
     discount_amount INT          NOT NULL DEFAULT 0, /* 이 라인에 배분된 할인 총액(상품 쿠폰분 + 장바구니 쿠폰에서 이 라인 몫). 주문 시점에 배분해 확정한다.
 
@@ -408,10 +421,13 @@ CREATE TABLE order_item (
     CONSTRAINT fk_orderitem_order FOREIGN KEY (order_id, member_id) REFERENCES orders (order_id, member_id),
     CONSTRAINT fk_orderitem_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT fk_orderitem_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id),
+    CONSTRAINT fk_orderitem_coupon FOREIGN KEY (member_coupon_id, coupon_id) REFERENCES member_coupon (member_coupon_id, coupon_id),
+    CONSTRAINT fk_orderitem_coupon_target FOREIGN KEY (coupon_id, product_option_id) REFERENCES coupon_product_option (coupon_id, product_option_id),
     CONSTRAINT chk_orderitem_qty CHECK (qty > 0),
     CONSTRAINT chk_orderitem_discount CHECK (discount_amount >= 0 AND discount_amount <= unit_price * qty), -- 할인이 라인 금액을 넘으면 환불액이 음수가 된다
     CONSTRAINT chk_orderitem_coupon_amount CHECK (coupon_discount >= 0 AND coupon_discount <= discount_amount), -- 상품 쿠폰분은 이 라인 할인 총액의 일부다
-    CONSTRAINT chk_orderitem_coupon CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0) -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
+    CONSTRAINT chk_orderitem_coupon CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0), -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
+    CONSTRAINT chk_orderitem_coupon_pair CHECK ((member_coupon_id IS NULL) = (coupon_id IS NULL)) -- 한쪽만 채우면 복합 외래 키가 검사에서 빠져 사슬이 끊긴다
 ); -- 주문 상품
 
 CREATE TABLE stock_allocation (
