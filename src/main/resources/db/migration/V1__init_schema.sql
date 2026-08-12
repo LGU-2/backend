@@ -15,8 +15,7 @@
 
 CREATE TABLE member_grade (
     member_grade_id BIGINT       NOT NULL AUTO_INCREMENT, -- 등급 PK
-    name            VARCHAR(50)  NOT NULL, -- 등급명(브론즈/실버/골드. 선착순 등급별 쿠폰 캠페인과 연동)
-    discount_rate   DECIMAL(5,2) NOT NULL DEFAULT 0.00, -- 등급 할인율(%)
+    name            VARCHAR(50)  NOT NULL, -- 등급명(브론즈/실버/골드)
     promotion_rule  VARCHAR(255) NULL, -- 승급 기준
     is_default      BOOLEAN      NOT NULL DEFAULT TRUE, -- 회원가입 시 부여할 기본 등급 여부(정확히 1개여야 함)
     is_default_key  TINYINT GENERATED ALWAYS AS (CASE WHEN is_default THEN 1 ELSE NULL END), -- is_default=TRUE가 항상 1개임을 DB가 강제하기 위한 계산 컬럼
@@ -24,8 +23,7 @@ CREATE TABLE member_grade (
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_grade_id),
     UNIQUE KEY uk_member_grade_name (name),
-    UNIQUE KEY uk_member_grade_single_default (is_default_key),
-    CONSTRAINT chk_member_grade_discount_rate CHECK (discount_rate BETWEEN 0 AND 100)
+    UNIQUE KEY uk_member_grade_single_default (is_default_key)
 ); -- 회원 등급
 
 CREATE TABLE member (
@@ -195,84 +193,66 @@ CREATE TABLE stock_lot (
 -- =====================================================================
 
 CREATE TABLE coupon (
-    coupon_id        BIGINT      NOT NULL AUTO_INCREMENT, -- coupon PK
-    name             VARCHAR(100) NOT NULL, -- 쿠폰명
-    scope            VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER 장바구니 쿠폰, 주문 전체에 적용/ITEM 상품 쿠폰, 라인 하나에 적용). 쿠폰이 어느 층에 붙는지를 발행 시점에 정한다. 이게 없으면 같은 쿠폰을 orders 와 order_item 양쪽에 붙일 수 있고, 두 테이블에 걸친 조건이라 DB가 막지 못한다(DI-3-05)
-    discount_type    VARCHAR(30)  NOT NULL, -- 할인 유형(AMOUNT 정액/RATE 정률)
-    discount_value   INT         NOT NULL, -- 할인 값(정액 원 또는 정률 %)
-    min_order_amount INT         NOT NULL DEFAULT 0, -- 사용조건
-    target_grade_id  BIGINT      NULL, -- 대상 등급(NULL=전체)
-    valid_from       DATE        NOT NULL, -- 사용 유효 시작일
-    valid_to         DATE        NOT NULL, -- 사용 유효 종료일
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    coupon_id           BIGINT       NOT NULL AUTO_INCREMENT, -- coupon PK
+    name                VARCHAR(100) NOT NULL, -- 쿠폰명
+    scope               VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER 장바구니 쿠폰, 주문 전체에 1장/ITEM 상품 쿠폰, 라인 하나에 1장). 붙는 층이 발행 시점에 정해지므로 같은 쿠폰을 두 층에 쓰는 상황이 생기지 않는다
+    discount_type       VARCHAR(30)  NOT NULL, -- 할인 유형(AMOUNT 정액 원/RATE 정률 %)
+    discount_value      INT          NOT NULL, -- 할인 값
+    max_discount_amount INT          NULL, -- 정률 쿠폰의 할인 상한. 없으면 고액 주문에서 할인이 무제한이 된다. 정액 쿠폰에서는 NULL 이다
+    min_order_amount    INT          NOT NULL DEFAULT 0, -- 사용 조건(이 금액 이상일 때만 쓸 수 있다)
+    total_quantity      INT          NULL, -- 발급 한정 수량. NULL 이면 수량 제한이 없는 일반 쿠폰이고, 값이 있으면 선착순 쿠폰이다. 캠페인을 별도 표로 두지 않는 이유는 쿠폰 하나를 여러 캠페인으로 뿌릴 일이 없고, 나누면 member_coupon 이 유도 가능한 참조를 여럿 들게 되기 때문이다
+    issued_quantity     INT          NOT NULL DEFAULT 0, -- 발급된 수. 선착순이면 total_quantity 와 조건부 UPDATE 로 다툰다
+    issue_start_at      DATETIME     NULL, -- 발급 시작 시각(선착순 오픈 시각). NULL 이면 제한 없음
+    issue_end_at        DATETIME     NULL, -- 발급 마감 시각. NULL 이면 소진까지
+    valid_from          DATE         NOT NULL, -- 사용 유효 시작일
+    valid_to            DATE         NOT NULL, -- 사용 유효 종료일
+    target_grade_id     BIGINT       NULL, -- 대상 등급(NULL=전체)
+    is_active           BOOLEAN      NOT NULL DEFAULT TRUE, -- 발급 중단 스위치. 소진 여부는 issued_quantity 로 유도되므로 상태 컬럼을 따로 두지 않고, 사람이 끄는 경우만 이 값으로 표현한다
+    created_at          DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at          DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
-    CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
-    CONSTRAINT chk_coupon_scope CHECK (scope IN ('ORDER','ITEM')),
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
-    CONSTRAINT chk_coupon_values CHECK (discount_value >= 0 AND min_order_amount >= 0),
-    CONSTRAINT chk_coupon_rate_range CHECK (discount_type <> 'RATE' OR discount_value <= 100), -- 정률 쿠폰의 할인율이 100%를 넘을 수 없다. member_grade.discount_rate 와 같은 기준
+    CONSTRAINT chk_coupon_scope CHECK (scope IN ('ORDER','ITEM')),
+    CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
+    CONSTRAINT chk_coupon_values CHECK (discount_value > 0 AND min_order_amount >= 0),
+    CONSTRAINT chk_coupon_rate CHECK ( -- 정률은 100%를 넘을 수 없고 상한은 정률에만 붙는다
+        (discount_type = 'RATE'   AND discount_value <= 100)
+     OR (discount_type = 'AMOUNT' AND max_discount_amount IS NULL)),
+    CONSTRAINT chk_coupon_max_discount CHECK (max_discount_amount IS NULL OR max_discount_amount > 0),
+    CONSTRAINT chk_coupon_quantity CHECK (issued_quantity >= 0 AND (total_quantity IS NULL OR (total_quantity > 0 AND issued_quantity <= total_quantity))),
+    CONSTRAINT chk_coupon_issue_period CHECK (issue_start_at IS NULL OR issue_end_at IS NULL OR issue_end_at >= issue_start_at),
     CONSTRAINT chk_coupon_valid_period CHECK (valid_from <= valid_to)
-); -- 쿠폰 정의
+); -- 쿠폰 정의(발급 수량과 기간을 여기서 함께 갖는다. total_quantity 가 있으면 선착순이다)
 
-CREATE TABLE coupon_campaign (
-    coupon_campaign_id BIGINT      NOT NULL AUTO_INCREMENT, -- coupon_campaign PK
-    coupon_id          BIGINT      NOT NULL, -- 어떤 쿠폰을 선착순으로 뿌리는가
-    name               VARCHAR(100) NOT NULL, -- 캠페인명
-    total_quantity     INT         NOT NULL, -- 한정 수량(예: 10000)
-    issued_quantity    INT         NOT NULL DEFAULT 0, -- 점유 슬롯 수. 1단계에서는 발급(다운로드) 시점에 늘린다. 2단계에서는 결제 시점으로 옮긴다. 다운로드만 하고 사지 않는 사람에게 한정 수량이 소진되는 낭비를 막기 위해서다. 어느 쪽이든 조건부 UPDATE(issued_quantity < total_quantity)로 다투고 affected rows 가 0이면 소진이다. stock_lot.available_qty 가 주문(예약) 시점에 빠지는 것과 시점이 다른데, 재고는 실물이라 두 사람에게 팔 수 없지만 쿠폰은 실제 구매로 이어진 것만 세는 것이 목적이기 때문이다
-    issue_start_at     DATETIME    NOT NULL, -- 발급 오픈 시각
-    issue_end_at       DATETIME    NULL, -- 발급 마감 시각(NULL=소진까지)
-    status             VARCHAR(30)  NOT NULL DEFAULT 'SCHEDULED', -- SCHEDULED/OPEN/CLOSED
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (coupon_campaign_id),
-    CONSTRAINT fk_campaign_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
-    CONSTRAINT chk_campaign_qty CHECK (total_quantity > 0 AND issued_quantity >= 0 AND issued_quantity <= total_quantity),
-    CONSTRAINT chk_campaign_status CHECK (status IN ('SCHEDULED','OPEN','CLOSED')),
-    CONSTRAINT chk_campaign_issue_period CHECK (issue_end_at IS NULL OR issue_end_at >= issue_start_at)
-); -- 선착순 발급 캠페인(한정 수량/오픈 시각. 일반 쿠폰과 분리). 슬롯 차감 시점을 1단계 발급 -> 2단계 결제로 옮길 예정이며, 스키마는 두 방식을 모두 담는다. 옮길 때 바뀌는 것은 issued_quantity 를 늘리는 코드 위치뿐이라 마이그레이션이 필요 없다
-
-CREATE TABLE coupon_campaign_option (
-    coupon_campaign_option_id BIGINT NOT NULL AUTO_INCREMENT, -- PK
-    coupon_campaign_id BIGINT      NOT NULL, -- 캠페인 FK
-    product_option_id  BIGINT      NOT NULL, -- 대상 옵션 FK(기획 1: 소비기한 임박/소진율 저조 선정). 상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있기 때문이다. 상품 단위로 두면 1kg만 임박했는데 200g에도 쿠폰이 먹혀 임박 재고가 안 빠진다
-    issuable_qty       INT         NOT NULL, -- 이 옵션에 발급 가능한 수량(임박 로트 잔량 기준)
-    issued_quantity    INT         NOT NULL DEFAULT 0, -- 이 옵션에서 점유된 슬롯 수. 증감 시점은 coupon_campaign.issued_quantity 와 같다(1단계는 발급 시점, 2단계는 결제 시점). 그쪽이 캠페인 전체 상한이라면 이것은 옵션별 상한이며 둘 다 조건부 UPDATE 로 다툰다
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (coupon_campaign_option_id),
-    UNIQUE KEY uk_cco_campaign_option (coupon_campaign_id, product_option_id), -- 캠페인당 옵션 1행
-    CONSTRAINT fk_cco_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
-    CONSTRAINT fk_cco_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
-    CONSTRAINT chk_cco_qty CHECK (issuable_qty >= 0 AND issued_quantity >= 0 AND issued_quantity <= issuable_qty)
-); -- 선착순 캠페인 대상 옵션(한 캠페인이 여러 옵션 대상, 사용자는 그중 하나에 쓰는 쿠폰. 선정 근거인 daily_sales 와 stock_lot 이 모두 옵션 단위라 같은 단위로 맞췄다)
+CREATE TABLE coupon_product_option (
+    coupon_product_option_id BIGINT NOT NULL AUTO_INCREMENT, -- coupon_product_option PK
+    coupon_id         BIGINT   NOT NULL, -- 쿠폰 FK
+    product_option_id BIGINT   NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
+    created_at        DATETIME NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    PRIMARY KEY (coupon_product_option_id),
+    UNIQUE KEY uk_cpo_coupon_option (coupon_id, product_option_id), -- 쿠폰당 옵션 1행
+    CONSTRAINT fk_cpo_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
+    CONSTRAINT fk_cpo_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id)
+); -- 상품 쿠폰의 대상 옵션(행이 하나도 없으면 대상 제한이 없는 쿠폰이다. 상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있어, 상품으로 지정하면 임박하지 않은 옵션까지 할인되기 때문이다. 장바구니 쿠폰(scope='ORDER')에는 행이 있으면 안 되며 두 표에 걸친 조건이라 앱이 확인한다(DI-3-05))
 
 CREATE TABLE member_coupon (
     member_coupon_id BIGINT      NOT NULL AUTO_INCREMENT, -- member_coupon PK
     coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
-    coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL). coupon_campaign_option_id 로 유도할 수 있지만 uk_mc_campaign_member 가 이 컬럼을 필요로 해서 함께 둔다
-    coupon_campaign_option_id BIGINT NULL, -- 선착순 발급이면 어느 대상 옵션에 대한 발급인지. 이게 없으면 coupon_campaign_option.issuable_qty 를 소진 판정에 쓸 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 옵션이 coupon_campaign_id 의 대상인지 앱이 확인한다
-    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
-    issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
-    used_at          DATETIME    NULL, -- 쿠폰 사용 시각(서버 애플리케이션이 기록)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    status           VARCHAR(30) NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
+    issued_at        DATETIME    NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
+    used_at          DATETIME    NULL, -- 사용 시각(서버 애플리케이션이 기록)
+    created_at       DATETIME    NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at       DATETIME    NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_id),
-    UNIQUE KEY uk_mc_campaign_member (coupon_campaign_id, member_id), -- 선착순 1인 1매(campaign별). 일반 발급은 campaign_id=NULL이라 미적용
+    UNIQUE KEY uk_mc_coupon_member (coupon_id, member_id), -- 쿠폰당 1인 1매
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
-    CONSTRAINT fk_mc_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
-    CONSTRAINT fk_mc_campaign_option FOREIGN KEY (coupon_campaign_option_id) REFERENCES coupon_campaign_option (coupon_campaign_option_id),
-    CONSTRAINT chk_mc_campaign CHECK ( -- 선착순 발급이면 캠페인과 대상 옵션이 함께 있고, 일반 발급이면 둘 다 없다
-        (coupon_campaign_id IS NULL     AND coupon_campaign_option_id IS NULL)
-     OR (coupon_campaign_id IS NOT NULL AND coupon_campaign_option_id IS NOT NULL)),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
     CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
         (status =  'USED' AND used_at IS NOT NULL)
      OR (status <> 'USED' AND used_at IS NULL))
-); -- 발급 쿠폰(쿠폰함. 선착순이면 coupon_campaign_id 참조). 어느 주문이나 라인에 쓰였는지는 orders.member_coupon_id 와 order_item.member_coupon_id 에서 역참조한다. 쿠폰을 주문보다 앞에 두는 이유가 그 참조다
+); -- 발급 쿠폰(쿠폰함). 어느 주문이나 라인에 쓰였는지는 orders.member_coupon_id 와 order_item.member_coupon_id 에서 역참조한다. 쿠폰을 주문보다 앞 장에 두는 이유가 그 참조다
 
 -- =====================================================================
 -- 4. 장바구니
@@ -312,13 +292,11 @@ CREATE TABLE orders (
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
     product_amount  INT          NOT NULL, -- 총상품금액
-    discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 포인트 + 등급 + 상품 쿠폰). 라인별 배분 결과인 order_item.discount_amount 의 합과 같아야 한다(DI-3-06). 등급 할인분은 따로 저장하지 않고 나머지를 뺀 값으로 유도한다
+    discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). 라인별 배분 결과인 order_item.discount_amount 의 합과 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 컬럼이 하나라 주문당 1장이 구조적으로 보장된다. 주문을 취소하면 NULL 로 비워 쿠폰을 되돌린다(그래야 아래 UNIQUE 가 풀린다). 결제 때 서버가 이 값으로 확정하므로 결제 요청이 쿠폰을 보내지 않는다
-    coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의(coupon.discount_value)는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
-    used_point      INT          NOT NULL DEFAULT 0, -- 이 주문에 사용한 포인트. 결제 시점에 point_history 에 USE 행이 생기며 그 금액이 이 값과 같아야 한다(DI-3-05)
+    coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
-    total_amount    INT          NOT NULL, -- 최종결제금액. 전액 쿠폰/포인트면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
-    earned_point    INT          NOT NULL DEFAULT 0, -- 적립예정포인트
+    total_amount    INT          NOT NULL, -- 최종결제금액. 할인이 상품금액과 배송비를 다 덮으면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
     ship_recipient  VARCHAR(50)  NOT NULL, -- 배송지 스냅샷
     ship_phone      VARCHAR(20)  NOT NULL, -- 연락처(원문, 암호화 추후 적용)
     ship_zipcode    VARCHAR(10)  NOT NULL, -- 배송지 우편번호 스냅샷
@@ -333,10 +311,10 @@ CREATE TABLE orders (
     UNIQUE KEY uk_order_coupon (member_coupon_id), -- 한 장바구니 쿠폰은 한 주문에만. NULL 은 여러 개가 허용되므로 쿠폰을 안 쓴 주문끼리는 충돌하지 않는다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
-    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0 AND coupon_discount >= 0 AND used_point >= 0),
-    CONSTRAINT chk_order_amount_parts CHECK (coupon_discount + used_point <= discount_amount), -- 두 조각은 할인 총액의 일부다
-    CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0), -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
-    CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee) -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
+    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND coupon_discount >= 0),
+    CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee), -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
+    CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
+    CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0) -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
 ); -- 주문(헤더)
 
 CREATE TABLE order_item (
@@ -347,9 +325,9 @@ CREATE TABLE order_item (
     option_name_snapshot VARCHAR(100) NOT NULL, -- 주문시점 옵션명
     unit_price      INT          NOT NULL, -- 주문시점 가격
     qty             INT          NOT NULL, -- 주문 수량
-    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다
+    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다. 이 라인의 옵션이 coupon_product_option 에 들어 있는지는 앱이 확인한다(DI-3-05)
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
-    discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액(상품 쿠폰 + 주문 전체 할인에서 이 라인 몫으로 배분된 금액). 주문 시점에 배분해 확정한다. 부분 반품 환불액을 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낼 수 있고, 이게 없으면 어느 라인이 할인받았는지 몰라 안분할 수밖에 없어 상품 쿠폰에서 금액이 틀어진다
+    discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액(상품 쿠폰 + 주문 전체 할인에서 이 라인 몫). 주문 시점에 배분해 확정한다. 부분 반품 환불액을 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낼 수 있고, 이게 없으면 어느 라인이 할인받았는지 몰라 안분할 수밖에 없어 상품 쿠폰에서 금액이 틀어진다
     item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
@@ -473,7 +451,7 @@ CREATE TABLE payment (
         (status IN ('PENDING','FAILED') AND paid_at IS NULL)
      OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
      OR  status = 'CANCELED')
-); -- 결제(주문당 최대 1건. 전액 쿠폰/포인트로 total_amount 가 0인 주문은 PG를 타지 않아 이 행이 없다. 결제 여부를 묻는 조회에 INNER JOIN 을 쓰면 그런 주문이 결과에서 사라진다. 즉시 결제만 받으므로 주문에서 결제까지의 구간이 짧고, 그동안 잡혀 있는 재고 예약(stock_allocation.RESERVED)의 해제 유예도 그만큼 짧게 잡을 수 있다)
+); -- 결제(주문당 최대 1건. total_amount 가 0인 주문은 PG를 타지 않아 이 행이 없다. 결제 여부를 묻는 조회에 INNER JOIN 을 쓰면 그런 주문이 결과에서 사라진다. 즉시 결제만 받으므로 주문에서 결제까지의 구간이 짧고, 그동안 잡혀 있는 재고 예약(stock_allocation.RESERVED)의 해제 유예도 그만큼 짧게 잡을 수 있다)
 
 -- =====================================================================
 -- 6. 클레임 (취소 / 반품 / 교환)
@@ -566,7 +544,7 @@ CREATE TABLE refund (
     CONSTRAINT chk_refund_refunded_at CHECK ( -- 완료된 환불은 완료 시각을 갖는다
         (status = 'PENDING' AND refunded_at IS NULL)
      OR (status = 'DONE'    AND refunded_at IS NOT NULL))
-); -- 환불(돈에 대한 것만 기록한다. total_amount 가 0인 주문은 payment 행이 없어 이 행도 없으며, 쿠폰과 포인트 복원은 member_coupon.status 와 point_history 가 맡는다)
+); -- 환불(돈에 대한 것만 기록한다. total_amount 가 0인 주문은 payment 행이 없어 이 행도 없다)
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
@@ -654,26 +632,7 @@ CREATE TABLE qna (
 ); -- 상품 Q&A
 
 -- =====================================================================
--- 8. 포인트
--- =====================================================================
-
-CREATE TABLE point_history (
-    point_history_id        BIGINT       NOT NULL AUTO_INCREMENT, -- point_history PK
-    member_id       BIGINT       NOT NULL, -- 회원 FK
-    order_id        BIGINT       NULL, -- 관련 주문 FK(nullable)
-    type            VARCHAR(30)  NOT NULL, -- 포인트 유형(EARN 적립/USE 사용/EXPIRE 만료)
-    amount          INT          NOT NULL, -- 변동 포인트(절대값, 증감 방향은 type으로 판단). stock_movement.quantity 와 같은 규칙이다
-    balance         INT          NOT NULL, -- 잔액
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    PRIMARY KEY (point_history_id),
-    CONSTRAINT chk_point_type CHECK (type IN ('EARN','USE','EXPIRE')),
-    CONSTRAINT fk_point_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT fk_point_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_point_amount_balance CHECK (amount > 0 AND balance >= 0)
-); -- 포인트 내역(원장)
-
--- =====================================================================
--- 9. 공통 (알림 / 감사 로그)
+-- 8. 공통 (알림 / 감사 로그)
 -- =====================================================================
 
 -- 알림 테이블은 아직 쓰지 않는다. 발송 대상 리소스(주문, QnA 등)를 가리키는 참조가 없어
