@@ -177,7 +177,7 @@ CREATE TABLE stock_lot (
     received_date   DATE         NOT NULL, -- 입고일
     expiry_date     DATE         NOT NULL, -- 소비기한
     initial_qty     INT          NOT NULL, -- 입고수량
-    available_qty   INT          NOT NULL, -- 가용재고
+    available_qty   INT          NOT NULL, -- 판매 가능 수량. 예약(RESERVE)에서 빼고 예약 해제(RELEASE)에서 되돌린다. 차감 확정(CONFIRM)은 이 값을 바꾸지 않는다. 예약 시점에 이미 뺐기 때문이며 여기서 또 빼면 이중 차감이 된다
     status          VARCHAR(30)  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE/SOLD_OUT/DISPOSED)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
@@ -272,7 +272,7 @@ CREATE TABLE stock_allocation (
     order_item_id   BIGINT       NOT NULL, -- 주문 상품 FK
     stock_lot_id          BIGINT       NOT NULL, -- 차감 대상 로트 FK
     qty             INT          NOT NULL, -- FEFO 예약/차감 수량
-    status          VARCHAR(30)  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(주문), CONFIRMED=차감 확정(결제), RELEASED=해제(결제 취소/만료)
+    status          VARCHAR(30)  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(주문 시점. 이때 stock_lot.available_qty 를 뺀다), CONFIRMED=차감 확정(결제 시점. available_qty 는 예약 때 이미 빠져 있어 바뀌지 않는다), RELEASED=해제(결제 취소/만료. available_qty 를 되돌린다)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_allocation_id),
@@ -303,8 +303,8 @@ CREATE TABLE stock_movement (
     stock_lot_id      BIGINT       NOT NULL, -- 변동이 일어난 로트 FK
     movement_type     VARCHAR(30)  NOT NULL, -- 변동 유형(INBOUND 입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정)
     quantity          INT          NOT NULL, -- 변동 수량(절대값, 증감 방향은 movement_type으로 판단)
-    qty_before        INT          NOT NULL, -- 변동 전 로트 가용재고(available_qty)
-    qty_after         INT          NOT NULL, -- 변동 후 로트 가용재고
+    qty_before        INT          NOT NULL, -- 변동 전 로트 available_qty
+    qty_after         INT          NOT NULL, -- 변동 후 로트 available_qty. CONFIRM 은 두 값이 같다. 이 유형은 재고를 옮기지 않고 예약이 확정으로 넘어간 사실만 남기기 때문이며, movement_type 별로 qty_after 를 검사하려면 이전 행을 봐야 해서 CHECK 로는 막을 수 없다
     order_id          BIGINT       NULL, -- 관련 주문 FK(주문 기인 변동만, 그 외 NULL)
     admin_id          BIGINT       NULL, -- 처리 관리자 FK(수동조정/폐기 등, 시스템 자동은 NULL)
     reason            VARCHAR(200) NULL, -- 사유 상세(폐기/만료/조정 등)
