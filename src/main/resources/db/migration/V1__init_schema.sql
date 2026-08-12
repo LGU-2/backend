@@ -284,7 +284,7 @@ CREATE TABLE stock_allocation (
 
 CREATE TABLE stock_disposal (
     stock_disposal_id     BIGINT       NOT NULL AUTO_INCREMENT, -- stock_disposal PK
-    product_id      BIGINT       NOT NULL, -- 상품 FK
+    product_id      BIGINT       NOT NULL, -- 상품 FK. DB가 못 막는 조합이다(DI-3-05). 로트를 지정했다면 그 로트가 이 상품의 옵션에 속하는지 앱이 확인한다
     stock_lot_id          BIGINT       NULL, -- 폐기 대상 로트 FK
     admin_id        BIGINT       NOT NULL, -- 폐기 처리 관리자 FK
     qty             INT          NOT NULL, -- 폐기수량
@@ -434,8 +434,8 @@ CREATE TABLE claim_attachment (
 CREATE TABLE claim_item (
     claim_item_id   BIGINT       NOT NULL AUTO_INCREMENT, -- claim_item PK
     claim_id        BIGINT       NOT NULL, -- 클레임 FK
-    order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK
-    qty             INT          NOT NULL, -- 부분 처리 수량
+    order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK. DB가 못 막는 조합이다(DI-3-05). 이 주문 상품이 claim.order_id 의 주문 것인지 앱이 확인한다
+    qty             INT          NOT NULL, -- 부분 처리 수량. DB가 못 막는 합계다(DI-3-06). 같은 주문 상품에 클레임을 여러 번 열면 qty 합이 order_item.qty 를 넘을 수 있다. 주문 상품 행을 잠그고 합계를 다시 세어 검사한다
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_item_id),
     UNIQUE KEY uk_claimitem_claim_orderitem (claim_id, order_item_id), -- '클레임 내 동일 항목 중복 방지'
@@ -447,7 +447,7 @@ CREATE TABLE claim_item (
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK
     claim_id            BIGINT   NOT NULL, -- 클레임 FK
-    payment_id          BIGINT   NOT NULL, -- 원결제 FK
+    payment_id          BIGINT   NOT NULL, -- 원결제 FK. DB가 못 막는 조합이다(DI-3-05). 이 결제가 claim.order_id 의 결제인지 앱이 확인한다
     amount              INT      NOT NULL, -- 환불액
     shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감
     status              VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
@@ -511,7 +511,7 @@ CREATE TABLE review (
     review_id       BIGINT       NOT NULL AUTO_INCREMENT, -- review PK
     product_id      BIGINT       NOT NULL, -- 상품 FK
     member_id       BIGINT       NOT NULL, -- 작성 회원 FK
-    order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(활성 리뷰 한정 구매 건당 1회)
+    order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(활성 리뷰 한정 구매 건당 1회). DB가 못 막는 조합이다(DI-3-05). 이 주문 상품의 상품이 product_id 와 같은지, 그 주문의 회원이 member_id 와 같은지 앱이 확인한다
     rating          TINYINT      NOT NULL, -- 1~5
     title           VARCHAR(255) NULL, -- 리뷰 제목
     content         TEXT         NOT NULL, -- 리뷰 본문
@@ -610,7 +610,7 @@ CREATE TABLE member_coupon (
     coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
     coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL)
-    order_id         BIGINT      NULL, -- 예약/사용 대상 주문 FK. RESERVED 부터 채운다. 이게 없으면 결제가 실패했을 때 어느 예약을 풀지 찾을 수 없다
+    order_id         BIGINT      NULL, -- 예약/사용 대상 주문 FK. RESERVED 부터 채운다. 이게 없으면 결제가 실패했을 때 어느 예약을 풀지 찾을 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 주문이 member_id 의 주문인지 앱이 확인한다
     status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/RESERVED 예약/USED 사용/EXPIRED 만료/CANCELED 취소). RESERVED: 쿠폰 다운로드 후 결제 시점 기준 선착순이므로, 주문 시점에 선착순 슬롯을 예약해두고 결제 시점에 차감 확정하기 위해 필요. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
     issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
     used_at          DATETIME    NULL, -- 쿠폰 사용 시각(서버 애플리케이션이 기록)
