@@ -3,14 +3,14 @@
 **이 문서는 `gen_status.py` 가 만든다. 손으로 고치지 않는다.**
 레지스트리와 앵커 규칙에서 계산한 값이라, 항목이나 규칙이 바뀌면 다시 생성해야 한다.
 
-생성 시각: 2026-08-11 16:44
+생성 시각: 2026-08-13 00:52
 
 | 저장소 | 커밋 | 항목 |
 |---|---|---:|
-| `common` | `bb5fc9c` | 217 |
-| `backend` | `676ed17` | 272 |
-| `infra` | `5c06db8` | 98 |
-| | | **587** |
+| `common` | `2310e74` | 219 |
+| `backend` | `7b6502c` | 272 |
+| `infra` | `4960125` | 103 |
+| | | **594** |
 
 ## 게이트가 지금 도는가
 
@@ -40,13 +40,13 @@
 
 | 트리거 | 규칙 | 활성 | 1단계 | 2단계 | backend | common | infra |
 |---|---|---:|---:|---:|---:|---:|---:|
-| `**/domain/controller/*.java`, `**/domain/dto/*.java` | controller | 231 | 175 | 56 | 175 | 48 | 8 |
-| `**/domain/service/*.java` | service | 191 | 83 | 108 | 83 | 85 | 23 |
-| `**/domain/entity/*.java` | entity | 213 | 180 | 33 | 180 | 30 | 3 |
-| `**/domain/repository/*.java` | repository | 131 | 98 | 33 | 98 | 33 | 0 |
+| `**/domain/controller/*.java`, `**/domain/dto/*.java` | controller | 236 | 175 | 61 | 175 | 48 | 13 |
+| `**/domain/service/*.java` | service | 198 | 83 | 115 | 83 | 87 | 28 |
+| `**/domain/entity/*.java` | entity | 215 | 180 | 35 | 180 | 32 | 3 |
+| `**/domain/repository/*.java` | repository | 133 | 98 | 35 | 98 | 35 | 0 |
 | `**/domain/client/**/*.java` | external-client | 134 | 83 | 51 | 83 | 44 | 7 |
 | `**/*Api.java`, `**/*ApiImpl.java` | api-contract | 194 | 175 | 19 | 175 | 15 | 4 |
-| `src/main/resources/db/migration/*.sql` | migration | 101 | 51 | 50 | 51 | 46 | 4 |
+| `src/main/resources/db/migration/*.sql` | migration | 103 | 51 | 52 | 51 | 48 | 4 |
 | `src/main/resources/application*.yml`, `src/main/resources/logback*.xml` | app-config | 115 | 0 | 115 | 0 | 91 | 24 |
 | `src/test/**/*Test.java` | test | 29 | 20 | 9 | 20 | 9 | 0 |
 | `src/test/**/ArchitectureTest.java` | archunit | 33 | 33 | 0 | 33 | 0 | 0 |
@@ -59,7 +59,7 @@
 
 | 층위 | 건수 | 게이트 | 건수 |
 |---|---:|---|---:|
-| `[코드]` | 400 | `G-PR` | 446 |
+| `[코드]` | 407 | `G-PR` | 453 |
 | `[프로세스]` | 50 | `G-AUDIT` | 84 |
 | `[인프라]` | 46 | `G-DESIGN` | 44 |
 | `[설계]` | 44 | `G-RELEASE` | 13 |
@@ -68,7 +68,7 @@
 
 ## PR 로 판정되지 않는 항목
 
-587건 중 **484건**이 어떤 규칙엔가 걸린다. 나머지 103건은 아래와 같다.
+594건 중 **491건**이 어떤 규칙엔가 걸린다. 나머지 103건은 아래와 같다.
 
 | 게이트 | 건수 | 접두사 |
 |---|---:|---|
@@ -120,9 +120,9 @@
 
 이 중 **1건은 위 모순에 가려 동작하지 않는다.** 확정값끼리 어긋나 있으면 확정값을 기준으로 판정하라는 지시가 성립하지 않는다.
 
-### 층위 미검증 370건
+### 층위 미검증 375건
 
-backend 272건, infra 98건 의 층위 태그가 기본값으로 채워져 있다. 실제와 다른 것이 섞여 있어 `levels` 필터가 정확하지 않다.
+backend 272건, infra 103건 의 층위 태그가 기본값으로 채워져 있다. 실제와 다른 것이 섞여 있어 `levels` 필터가 정확하지 않다.
 
 ## 다시 생성하는 법
 

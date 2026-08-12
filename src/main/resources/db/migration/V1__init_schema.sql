@@ -142,6 +142,7 @@ CREATE TABLE product_option (
     updated_at        DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_option_id),
     UNIQUE KEY uk_option_product_name (product_id, name), -- 한 상품 내 옵션명 중복 방지
+    UNIQUE KEY uk_option_id_product (product_option_id, product_id), -- review 가 복합 외래 키로 참조한다. product_option_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
     CONSTRAINT fk_option_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT chk_option_price CHECK (price >= 0),
     CONSTRAINT chk_option_sale_status CHECK (sale_status IN ('ON_SALE','SOLD_OUT','OFF_SALE'))
@@ -259,6 +260,7 @@ CREATE TABLE member_coupon (
     updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_id),
     UNIQUE KEY uk_mc_coupon_member (coupon_id, member_id), -- 쿠폰당 1인 1매
+    UNIQUE KEY uk_mc_id_member (member_coupon_id, member_id), -- orders 와 order_item 이 복합 외래 키로 참조한다
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
@@ -280,6 +282,26 @@ CREATE TABLE member_coupon (
       대상 옵션(coupon_product_option)은 복사하지 않는다. 임박 재고가 팔리면 대상에서 빼는 식으로 운영이 조정할 수 있어야 하기 때문이다.
       어느 주문이나 라인에 쓰였는지는 orders.member_coupon_id 와 order_item.member_coupon_id 에서 역참조한다.
       쿠폰을 주문보다 앞 장에 두는 이유가 그 참조다 */
+
+CREATE TABLE member_coupon_status_history (
+    member_coupon_status_history_id BIGINT NOT NULL AUTO_INCREMENT, -- member_coupon_status_history PK
+    member_coupon_id BIGINT       NOT NULL, -- 발급 쿠폰 FK
+    from_status      VARCHAR(30)  NULL, -- 이전 상태(최초 발급은 NULL)
+    to_status        VARCHAR(30)  NOT NULL, -- 변경 상태(member_coupon.status 와 동일 집합)
+    reason           VARCHAR(255) NULL, -- 사유 상세. 만료가 유효기간 도래인지 어뷰징 발급 취소인지 구분하는 유일한 근거다. status 집합이 셋뿐이라 상태값만으로는 갈리지 않는다
+    changed_by       BIGINT       NULL, -- 처리 관리자 FK. 배치나 사용자 동작으로 자동 전이한 것은 NULL 이다
+    created_at       DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    PRIMARY KEY (member_coupon_status_history_id),
+    KEY idx_mcsh_coupon_time (member_coupon_id, member_coupon_status_history_id), -- 쿠폰별 전이 순서 조회
+    CONSTRAINT chk_mcsh_to_status CHECK (to_status IN ('ISSUED','USED','EXPIRED')),
+    CONSTRAINT chk_mcsh_from_status CHECK (from_status IS NULL OR from_status IN ('ISSUED','USED','EXPIRED')),
+    CONSTRAINT chk_mcsh_transition CHECK (from_status IS NULL OR from_status <> to_status), -- 같은 상태로 바뀌는 전이는 기록할 것이 없다
+    CONSTRAINT fk_mcsh_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
+    CONSTRAINT fk_mcsh_admin FOREIGN KEY (changed_by) REFERENCES admin (admin_id)
+); /* 발급 쿠폰 상태 이력. member_coupon.status 는 현재 상태만 갖고 updated_at 은 마지막 전이 시각만 가리켜,
+      "언제 왜 이렇게 됐나" 를 답할 수 없다. 선착순 쿠폰은 소진과 취소를 두고 분쟁이 생기는 자리라 근거가 남아야 한다.
+      orders 가 order_status_history 로 푸는 것과 같은 형태다.
+      되돌리는 전이(USED -> ISSUED, 주문 취소로 쿠폰을 되살리는 경우)도 행으로 남는다 */
 
 -- =====================================================================
 -- 4. 장바구니
@@ -335,9 +357,10 @@ CREATE TABLE orders (
     PRIMARY KEY (order_id),
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
+    UNIQUE KEY uk_order_id_member (order_id, member_id), -- order_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_order_coupon (member_coupon_id), -- 한 장바구니 쿠폰은 한 주문에만. NULL 은 여러 개가 허용되므로 쿠폰을 안 쓴 주문끼리는 충돌하지 않는다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
+    CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
     CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND coupon_discount >= 0),
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee), -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
     CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
@@ -352,6 +375,9 @@ CREATE TABLE order_item (
     option_name_snapshot VARCHAR(100) NOT NULL, -- 주문시점 옵션명
     unit_price      INT          NOT NULL, -- 주문시점 가격
     qty             INT          NOT NULL, -- 주문 수량
+    member_id       BIGINT       NOT NULL, /* 조상 키를 복제한다. 아래 두 복합 외래 키가 이 값을 함께 요구하므로
+                                              orders.member_id 와 member_coupon.member_id 가 같아야만 쿠폰이 붙는다.
+                                              남의 쿠폰을 자기 라인에 붙이는 것이 DB 수준에서 막힌다 */
     member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다. 이 라인의 옵션이 coupon_product_option 에 들어 있는지는 앱이 확인한다(DI-3-05)
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
     discount_amount INT          NOT NULL DEFAULT 0, /* 이 라인에 배분된 할인 총액(상품 쿠폰분 + 장바구니 쿠폰에서 이 라인 몫). 주문 시점에 배분해 확정한다.
@@ -376,10 +402,12 @@ CREATE TABLE order_item (
     PRIMARY KEY (order_item_id),
     CONSTRAINT chk_orderitem_status CHECK (item_status IN ('ORDERED','CANCELED','RETURN_REQ','RETURNED','EXCHANGE_REQ','EXCHANGED')),
     UNIQUE KEY uk_order_option (order_id, product_option_id), -- 동일 옵션 중복 라인 방지
+    UNIQUE KEY uk_orderitem_id_order (order_item_id, order_id), -- claim_item 이 복합 외래 키로 참조한다
+    UNIQUE KEY uk_orderitem_id_option_member (order_item_id, product_option_id, member_id), -- review 가 복합 외래 키로 참조한다
     UNIQUE KEY uk_order_item_coupon (member_coupon_id), -- 한 상품 쿠폰은 한 라인에만
-    CONSTRAINT fk_orderitem_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
+    CONSTRAINT fk_orderitem_order FOREIGN KEY (order_id, member_id) REFERENCES orders (order_id, member_id),
     CONSTRAINT fk_orderitem_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
-    CONSTRAINT fk_orderitem_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
+    CONSTRAINT fk_orderitem_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id),
     CONSTRAINT chk_orderitem_qty CHECK (qty > 0),
     CONSTRAINT chk_orderitem_discount CHECK (discount_amount >= 0 AND discount_amount <= unit_price * qty), -- 할인이 라인 금액을 넘으면 환불액이 음수가 된다
     CONSTRAINT chk_orderitem_coupon_amount CHECK (coupon_discount >= 0 AND coupon_discount <= discount_amount), -- 상품 쿠폰분은 이 라인 할인 총액의 일부다
@@ -403,19 +431,17 @@ CREATE TABLE stock_allocation (
 
 CREATE TABLE stock_disposal (
     stock_disposal_id     BIGINT       NOT NULL AUTO_INCREMENT, -- stock_disposal PK
-    product_id      BIGINT       NOT NULL, -- 상품 FK. DB가 못 막는 조합이다(DI-3-05). 로트를 지정했다면 그 로트가 이 상품의 옵션에 속하는지 앱이 확인한다
-    stock_lot_id          BIGINT       NULL, -- 폐기 대상 로트 FK
+    stock_lot_id    BIGINT       NOT NULL, -- 폐기 대상 로트 FK. 로트를 특정하지 못하는 폐기는 없다. 상품은 stock_lot -> product_option -> product 로 유도되므로 따로 저장하지 않는다. 저장하면 로트가 속한 상품과 어긋날 수 있고 그 조합은 DB가 못 막는다(DI-3-05)
     admin_id        BIGINT       NOT NULL, -- 폐기 처리 관리자 FK
     qty             INT          NOT NULL, -- 폐기수량
     reason          VARCHAR(30)  NOT NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 회수품). RETURNED 는 잔여 소비기한이 product.min_shelf_life_days 에 못 미치거나 상태가 나빠 재입고(RESTOCK)하지 않은 회수품이다. 로트로 돌아간 적이 없으므로 available_qty 를 줄이지 않으며 stock_movement 행도 남지 않는다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_disposal_id),
     CONSTRAINT chk_disposal_reason CHECK (reason IN ('EXPIRED','DAMAGED','RETURNED')),
-    CONSTRAINT fk_disposal_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT fk_disposal_lot FOREIGN KEY (stock_lot_id) REFERENCES stock_lot (stock_lot_id),
     CONSTRAINT fk_disposal_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id),
     CONSTRAINT chk_disposal_qty CHECK (qty > 0)
-); -- 폐기 이력
+); -- 폐기 이력(로트 단위. 상품은 로트에서 유도한다)
 
 CREATE TABLE stock_movement (
     stock_movement_id BIGINT       NOT NULL AUTO_INCREMENT, -- stock_movement PK
@@ -533,6 +559,7 @@ CREATE TABLE claim (
     CONSTRAINT chk_claim_processed_at CHECK ( -- 처리된 클레임은 처리 시각을 갖는다. processed_by 는 시스템 자동 처리가 있어 NULL 을 허용하므로 시각만 본다
         (status =  'REQUESTED' AND processed_at IS NULL)
      OR (status <> 'REQUESTED' AND processed_at IS NOT NULL)),
+    UNIQUE KEY uk_claim_id_order (claim_id, order_id), -- claim_item 이 복합 외래 키로 참조한다. claim_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
     CONSTRAINT fk_claim_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT fk_claim_admin FOREIGN KEY (processed_by) REFERENCES admin (admin_id)
 ); -- 클레임(취소/반품/교환. 회수/재배송 송장, 시각, 상태 흡수)
@@ -556,20 +583,23 @@ CREATE TABLE claim_attachment (
 CREATE TABLE claim_item (
     claim_item_id   BIGINT       NOT NULL AUTO_INCREMENT, -- claim_item PK
     claim_id        BIGINT       NOT NULL, -- 클레임 FK
-    order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK. DB가 못 막는 조합이다(DI-3-05). 이 주문 상품이 claim.order_id 의 주문 것인지 앱이 확인한다
+    order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK
+    order_id        BIGINT       NOT NULL, /* 조상 키를 복제한다. 아래 두 복합 외래 키가 이 값을 함께 요구하므로
+                                              claim.order_id 와 order_item.order_id 가 같아야만 행이 들어간다.
+                                              다른 주문의 주문 상품을 클레임에 넣는 것이 DB 수준에서 막힌다.
+                                              비정규화처럼 보이지만 값이 외래 키로 강제되어 어긋날 수 없다 */
     qty             INT          NOT NULL, -- 부분 처리 수량. DB가 못 막는 합계다(DI-3-06). 같은 주문 상품에 클레임을 여러 번 열면 qty 합이 order_item.qty 를 넘을 수 있다. 주문 상품 행을 잠그고 합계를 다시 세어 검사한다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_item_id),
     UNIQUE KEY uk_claimitem_claim_orderitem (claim_id, order_item_id), -- '클레임 내 동일 항목 중복 방지'
-    CONSTRAINT fk_claimitem_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id),
-    CONSTRAINT fk_claimitem_orderitem FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
+    CONSTRAINT fk_claimitem_claim FOREIGN KEY (claim_id, order_id) REFERENCES claim (claim_id, order_id),
+    CONSTRAINT fk_claimitem_orderitem FOREIGN KEY (order_item_id, order_id) REFERENCES order_item (order_item_id, order_id),
     CONSTRAINT chk_claimitem_qty CHECK (qty > 0)
-); -- 클레임 대상 상품
+); -- 클레임 대상 상품(복합 외래 키로 클레임과 주문 상품이 같은 주문에 속함을 DB가 강제한다)
 
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK
     claim_id            BIGINT   NOT NULL, -- 클레임 FK
-    payment_id          BIGINT   NOT NULL, -- 원결제 FK. DB가 못 막는 조합이다(DI-3-05). 이 결제가 claim.order_id 의 결제인지 앱이 확인한다
     amount              INT      NOT NULL, -- 환불액
     shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감
     status              VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
@@ -580,13 +610,14 @@ CREATE TABLE refund (
     CONSTRAINT chk_refund_status CHECK (status IN ('PENDING','DONE')),
     UNIQUE KEY uk_refund_claim (claim_id),
     CONSTRAINT fk_refund_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id),
-    CONSTRAINT fk_refund_payment FOREIGN KEY (payment_id) REFERENCES payment (payment_id),
     CONSTRAINT chk_refund_amount CHECK (amount >= 0),
     CONSTRAINT chk_refund_shipping_deduction CHECK (shipping_deduction >= 0),
     CONSTRAINT chk_refund_refunded_at CHECK ( -- 완료된 환불은 완료 시각을 갖는다
         (status = 'PENDING' AND refunded_at IS NULL)
      OR (status = 'DONE'    AND refunded_at IS NOT NULL))
-); -- 환불(돈에 대한 것만 기록한다. total_amount 가 0인 주문은 payment 행이 없어 이 행도 없다)
+); /* 환불(돈에 대한 것만 기록한다. total_amount 가 0인 주문은 payment 행이 없어 이 행도 없다).
+      원결제는 claim.order_id -> payment 로 유도한다. uk_payment_order 가 주문당 결제 1건을 보장하므로 유일하게 결정된다.
+      payment_id 를 따로 저장하면 클레임의 주문과 다른 결제를 가리킬 수 있고, 그 조합은 DB가 못 막는다(DI-3-05) */
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
@@ -631,9 +662,12 @@ CREATE TABLE shipment_photo (
 
 CREATE TABLE review (
     review_id       BIGINT       NOT NULL AUTO_INCREMENT, -- review PK
-    product_id      BIGINT       NOT NULL, -- 상품 FK
-    member_id       BIGINT       NOT NULL, -- 작성 회원 FK
-    order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(구매 건당 1회). DB가 못 막는 조합이다(DI-3-05). 이 주문 상품의 상품이 product_id 와 같은지, 그 주문의 회원이 member_id 와 같은지 앱이 확인한다
+    product_id      BIGINT       NOT NULL, -- 상품 FK. 조회를 위해 들고 있으며 아래 복합 외래 키가 order_item 의 상품과 같음을 강제한다
+    product_option_id BIGINT     NOT NULL, /* 조상 키를 복제한다. order_item 과 product 를 잇는 사슬의 가운데 고리다.
+                                              order_item 이 product_id 를 갖지 않고 product_option_id 만 갖기 때문에
+                                              이 컬럼 없이는 두 복합 외래 키를 연결할 수 없다 */
+    member_id       BIGINT       NOT NULL, -- 작성 회원 FK. 아래 복합 외래 키가 그 주문의 회원과 같음을 강제한다
+    order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(구매 건당 1회)
     rating          TINYINT      NOT NULL, -- 1~5
     title           VARCHAR(255) NULL, -- 리뷰 제목
     content         TEXT         NOT NULL, -- 리뷰 본문
@@ -643,11 +677,15 @@ CREATE TABLE review (
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (review_id),
     UNIQUE KEY uk_review_orderitem (order_item_id), -- 구매 건당 1회. 지운 리뷰의 주문 상품에 다시 쓰지 않는다. 오타 정정은 수정으로 하면 되고, 재작성을 허용하려면 조건부 유일성이 필요해 계산 컬럼을 만들어야 한다
-    CONSTRAINT fk_review_product FOREIGN KEY (product_id) REFERENCES product (product_id),
-    CONSTRAINT fk_review_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT fk_review_orderitem FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
+    CONSTRAINT fk_review_orderitem FOREIGN KEY (order_item_id, product_option_id, member_id) REFERENCES order_item (order_item_id, product_option_id, member_id), -- 옵션과 회원을 함께 요구해 남의 구매나 다른 상품에 리뷰를 쓸 수 없다
+    CONSTRAINT fk_review_option FOREIGN KEY (product_option_id, product_id) REFERENCES product_option (product_option_id, product_id), -- 옵션과 상품을 잇는다. product_id 는 이 사슬로 검증되므로 product 를 직접 참조하지 않는다
     CONSTRAINT chk_review_rating CHECK (rating BETWEEN 1 AND 5)
-); -- 상품 리뷰
+); /* 상품 리뷰. 복합 외래 키 둘이 사슬을 이룬다.
+      review(order_item_id, product_option_id, member_id) -> order_item
+      review(product_option_id, product_id)               -> product_option
+      앞의 것이 주문 상품의 옵션과 구매자를 고정하고, 뒤의 것이 그 옵션의 상품을 고정한다.
+      결과로 A 상품을 사고 B 상품에 리뷰를 쓰거나 남의 구매로 리뷰를 쓰는 것이 DB 수준에서 막힌다.
+      member 와 product 를 직접 참조하지 않는 것은 이 사슬로 유효성이 이미 보장되기 때문이다 */
 
 CREATE TABLE qna (
     qna_id          BIGINT       NOT NULL AUTO_INCREMENT, -- qna PK
