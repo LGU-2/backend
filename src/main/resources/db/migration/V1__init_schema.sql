@@ -288,7 +288,7 @@ CREATE TABLE stock_disposal (
     stock_lot_id          BIGINT       NULL, -- 폐기 대상 로트 FK
     admin_id        BIGINT       NOT NULL, -- 폐기 처리 관리자 FK
     qty             INT          NOT NULL, -- 폐기수량
-    reason          VARCHAR(30)  NOT NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 회수품)
+    reason          VARCHAR(30)  NOT NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 회수품). RETURNED 는 잔여 소비기한이 product.min_shelf_life_days 에 못 미치거나 상태가 나빠 재입고(RESTOCK)하지 않은 회수품이다. 로트로 돌아간 적이 없으므로 available_qty 를 줄이지 않으며 stock_movement 행도 남지 않는다
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_disposal_id),
     CONSTRAINT chk_disposal_reason CHECK (reason IN ('EXPIRED','DAMAGED','RETURNED')),
@@ -301,7 +301,7 @@ CREATE TABLE stock_disposal (
 CREATE TABLE stock_movement (
     stock_movement_id BIGINT       NOT NULL AUTO_INCREMENT, -- stock_movement PK
     stock_lot_id      BIGINT       NOT NULL, -- 변동이 일어난 로트 FK
-    movement_type     VARCHAR(30)  NOT NULL, -- 변동 유형(INBOUND 입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정)
+    movement_type     VARCHAR(30)  NOT NULL, -- 변동 유형(INBOUND 신규 입고/RESTOCK 반품 재입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정). RESTOCK 은 회수한 물건을 원래 로트로 되돌린다. 소비기한이 로트에 달려 있어 다른 로트로 넣으면 기한을 잃기 때문이며, 어느 로트였는지는 claim_item -> order_item -> stock_allocation 으로 찾는다. 잔여 소비기한이 product.min_shelf_life_days 에 못 미치면 되돌리지 않고 폐기한다
     quantity          INT          NOT NULL, -- 변동 수량(절대값, 증감 방향은 movement_type으로 판단)
     qty_before        INT          NOT NULL, -- 변동 전 로트 available_qty
     qty_after         INT          NOT NULL, -- 변동 후 로트 available_qty. CONFIRM 은 두 값이 같다. 이 유형은 재고를 옮기지 않고 예약이 확정으로 넘어간 사실만 남기기 때문이며, movement_type 별로 qty_after 를 검사하려면 이전 행을 봐야 해서 CHECK 로는 막을 수 없다
@@ -315,7 +315,7 @@ CREATE TABLE stock_movement (
     CONSTRAINT fk_movement_lot FOREIGN KEY (stock_lot_id) REFERENCES stock_lot (stock_lot_id),
     CONSTRAINT fk_movement_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT fk_movement_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id),
-    CONSTRAINT chk_movement_type CHECK (movement_type IN ('INBOUND','RESERVE','CONFIRM','RELEASE','DISPOSE','EXPIRE','ADJUST')),
+    CONSTRAINT chk_movement_type CHECK (movement_type IN ('INBOUND','RESTOCK','RESERVE','CONFIRM','RELEASE','DISPOSE','EXPIRE','ADJUST')),
     CONSTRAINT chk_movement_qty CHECK (quantity > 0 AND qty_before >= 0 AND qty_after >= 0)
 ); -- 재고 변동 이력(모든 재고 변동을 로트 단위 시간순 기록. 정합성 추적/감사용 통합 창구. stock_allocation은 예약 상태 관리, stock_disposal은 폐기 상세로 역할 분리. 쓰기 시점: stock_lot.available_qty를 바꾸는 모든 연산(입고/예약/해제/폐기/만료/조정)과 반드시 같은 트랜잭션 안에서 함께 INSERT하여 재고와 이력을 원자적으로 커밋)
 
@@ -324,18 +324,20 @@ CREATE TABLE daily_sales (
     product_option_id BIGINT     NOT NULL, -- 집계 대상 옵션 FK. 재고(stock_lot)와 소비기한이 옵션 단위라 집계도 같은 단위여야 한다. 상품 단위 수치는 옵션을 합산해 얻는다(반대 방향은 불가능하다)
     stat_date       DATE         NOT NULL, -- 집계 일자
     opening_stock   INT          NOT NULL DEFAULT 0, -- 기초 재고(그날 시작 시점 가용재고 스냅샷). 소진율 분모
-    inbound_qty     INT          NOT NULL DEFAULT 0, -- 당일 입고 수량. 소진율 분모
+    inbound_qty     INT          NOT NULL DEFAULT 0, -- 당일 신규 입고 수량. 소진율 분모
+    restocked_qty   INT          NOT NULL DEFAULT 0, -- 당일 반품 재입고 수량. 소진율 분모에는 넣지 않는다. 새로 들여온 물량이 아니라 팔았다가 돌아온 것이라 분모에 넣으면 소진율이 낮아 보인다
     sold_qty        INT          NOT NULL DEFAULT 0, -- 당일 판매 수량(결제 완료 기준). 소진율 분자
     sold_amount     BIGINT       NOT NULL DEFAULT 0, -- 당일 판매 금액(결제 완료 기준)
-    disposed_qty    INT          NOT NULL DEFAULT 0, -- 당일 폐기 수량
+    disposed_qty    INT          NOT NULL DEFAULT 0, -- 당일 폐기 수량. 로트로 돌아가지 않은 회수품 폐기는 available_qty 를 바꾸지 않으므로 여기 안 들어간다
+    expired_qty     INT          NOT NULL DEFAULT 0, -- 당일 만료 전환 수량. 소비기한이 지나 판매 불가로 바뀐 것이며 폐기와 별개다
     closing_stock   INT          NOT NULL DEFAULT 0, -- 기말 재고(그날 마감 시점 가용재고 스냅샷)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (daily_sales_id),
     UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
     CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
-    CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND closing_stock >= 0)
-); -- 판매 집계(일 1회 배치가 결제완료 주문 기준으로 옵션별/일자별 집계. 소진율 산출과 선착순 캠페인 대상 선정(소비기한 임박+판매율 저조)의 원천. 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합). 옵션 단위인 이유는 200g와 1kg의 수량을 더한 값으로는 소진율이 뜻을 잃기 때문이다)
+    CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND restocked_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND expired_qty >= 0 AND closing_stock >= 0)
+); -- 판매 집계(일 1회 배치가 옵션별/일자별로 집계. 소진율 산출과 선착순 캠페인 대상 선정(소비기한 임박+판매율 저조)의 원천. 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합). 옵션 단위인 이유는 200g와 1kg의 수량을 더한 값으로는 소진율이 뜻을 잃기 때문이다. 집계 원천은 stock_movement 이며, available_qty 를 실제로 바꾼 것만 세어야 아래 항등식이 성립한다. closing = opening + inbound + restocked - sold - disposed - expired. 다만 마감 시점에 예약만 되고 결제되지 않은 수량만큼 어긋난다. available_qty 는 예약(RESERVE)에서 빠지는데 sold_qty 는 결제 완료 기준이라 그 사이 구간이 남기 때문이며, 다음 날 결제나 해제로 흡수된다)
 
 CREATE TABLE order_status_history (
     order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
