@@ -653,16 +653,20 @@ CREATE TABLE order_coupon (
     discount_amount  INT         NOT NULL, -- 이 쿠폰 하나가 만든 할인액. 장바구니 쿠폰이면 여러 라인에 나뉘어 배분되고 그 결과는 order_item.discount_amount 에 남는다
     status           VARCHAR(20) NOT NULL DEFAULT 'APPLIED', -- APPLIED 적용중 / CANCELED 적용 취소(주문 취소나 라인 취소). 주문 상태와 같은 트랜잭션에서 바꾼다
     active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN status = 'APPLIED' THEN member_coupon_id ELSE NULL END), -- 적용중인 것 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼
+    cart_coupon_key   BIGINT GENERATED ALWAYS AS (CASE WHEN status = 'APPLIED' AND order_item_id IS NULL THEN order_id ELSE NULL END), -- 주문당 장바구니 쿠폰이 1장임을 DB가 강제하기 위한 계산 컬럼
+    item_coupon_key   BIGINT GENERATED ALWAYS AS (CASE WHEN status = 'APPLIED' THEN order_item_id ELSE NULL END), -- 라인당 상품 쿠폰이 1장임을 DB가 강제하기 위한 계산 컬럼. 장바구니 쿠폰 행은 order_item_id 가 NULL 이라 저절로 빠진다
     created_at       DATETIME    NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at       DATETIME    NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_coupon_id),
     UNIQUE KEY uk_order_coupon_active (active_coupon_key), -- 한 쿠폰은 적용중인 주문 하나에만 붙는다(취소된 적용은 NULL 이라 제외되어 재사용할 수 있다). 헤더와 라인 어느 층에 붙든 같은 컬럼을 다투므로 두 층에 동시에 적용하는 것도 여기서 막힌다
+    UNIQUE KEY uk_order_coupon_cart (cart_coupon_key), -- 주문당 장바구니 쿠폰 1장. 위 제약은 쿠폰 기준이라 서로 다른 쿠폰 두 장을 주문 전체에 붙이는 것은 막지 못한다
+    UNIQUE KEY uk_order_coupon_item (item_coupon_key), -- 라인당 상품 쿠폰 1장. 같은 이유로 필요하다
     CONSTRAINT fk_order_coupon_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT fk_order_coupon_item FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
     CONSTRAINT fk_order_coupon_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
     CONSTRAINT chk_order_coupon_status CHECK (status IN ('APPLIED','CANCELED')),
     CONSTRAINT chk_order_coupon_amount CHECK (discount_amount >= 0)
-); -- 주문에 적용한 쿠폰(주문 전체와 상품 라인 두 층을 한 표로 담는다. 참조를 orders 나 order_item 한쪽에 두면 다른 층을 표현할 수 없고, 양쪽에 두면 한 쿠폰이 두 층에 동시에 붙는 것을 막을 방법이 없다. 결제 때 서버가 이 표를 읽어 확정하므로 결제 요청이 쿠폰을 보내지 않는다)
+); -- 주문에 적용한 쿠폰(주문 전체와 상품 라인 두 층을 한 표로 담는다. 참조를 orders 나 order_item 한쪽에 두면 다른 층을 표현할 수 없고, 양쪽에 두면 한 쿠폰이 두 층에 동시에 붙는 것을 막을 방법이 없다. 결제 때 서버가 이 표를 읽어 확정하므로 결제 요청이 쿠폰을 보내지 않는다. 계산 컬럼 셋으로 쿠폰 재사용, 주문당 장바구니 쿠폰 수, 라인당 상품 쿠폰 수를 모두 DB가 막는다)
 
 CREATE TABLE point_history (
     point_history_id        BIGINT       NOT NULL AUTO_INCREMENT, -- point_history PK
