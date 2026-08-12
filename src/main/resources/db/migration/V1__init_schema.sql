@@ -148,14 +148,23 @@ CREATE TABLE product_option (
 ); -- 상품 옵션(판매 단위 SKU: 가격, 재고 기준)
 
 CREATE TABLE product_image (
-    product_image_id        BIGINT       NOT NULL AUTO_INCREMENT, -- product_image PK
-    product_id      BIGINT       NOT NULL, -- 상품 FK
-    object_key      VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
-    sort_order      INT          NOT NULL DEFAULT 0, -- 정렬 순서
-    is_main         BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    product_image_id BIGINT       NOT NULL AUTO_INCREMENT, -- product_image PK
+    product_id       BIGINT       NOT NULL, -- 상품 FK
+    upload_id        BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
+    object_key       VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
+    content_type     VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
+    byte_size        INT          NOT NULL, -- 서명 조건에 넣은 크기 상한 검증용
+    upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED 업로드 완료 통지를 받음. 조회는 CONFIRMED 만 노출한다
+    sort_order       INT          NOT NULL DEFAULT 0, -- 정렬 순서
+    is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
+    created_at       DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at       DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_image_id),
+    UNIQUE KEY uk_product_image_upload (upload_id),
+    UNIQUE KEY uk_product_image_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
+    CONSTRAINT chk_product_image_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
+    CONSTRAINT chk_product_image_size CHECK (byte_size > 0),
+    CONSTRAINT chk_product_image_main CHECK (is_main = FALSE OR upload_status = 'CONFIRMED'), -- 확정 전인 행이 대표가 되면 상품 목록에 깨진 이미지가 나간다
     CONSTRAINT fk_image_product FOREIGN KEY (product_id) REFERENCES product (product_id)
 ); -- 상품 이미지
 
