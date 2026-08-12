@@ -153,7 +153,7 @@ CREATE TABLE product_image (
     upload_id        BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
     object_key       VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
     upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출한다(INF-11-09)
-    sort_order       INT          NOT NULL DEFAULT 0, -- 정렬 순서
+    sort_order       INT          NOT NULL DEFAULT 0, -- 상품 안에서의 표시 순서(작을수록 앞). 확정할 때 서버가 MAX+1로 정한다. (product_id, sort_order) 유일성은 일부러 걸지 않는다. 재정렬의 중간 상태가 항상 위반이 되기 때문이며, 결정적 순서는 조회 정렬의 product_image_id 타이브레이커로 얻는다
     is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
     is_main_key      BIGINT GENERATED ALWAYS AS (CASE WHEN is_main THEN product_id ELSE NULL END), -- 상품별로 is_main=TRUE가 최대 1개임을 DB가 강제하기 위한 계산 컬럼
     created_at       DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
