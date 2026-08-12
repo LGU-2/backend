@@ -50,6 +50,9 @@ CREATE TABLE member (
     CONSTRAINT chk_member_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
         (refresh_token_hash IS NULL     AND refresh_token_expires_at IS NULL)
      OR (refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL)),
+    CONSTRAINT chk_member_withdrawn CHECK ( -- 탈퇴가 status 와 deleted_at 두 곳에 표현되어 어긋날 수 있다. 둘을 묶는다
+        (status =  'WITHDRAWN' AND deleted_at IS NOT NULL)
+     OR (status <> 'WITHDRAWN' AND deleted_at IS NULL)),
     UNIQUE KEY uk_member_active_provider (active_provider_key), -- 활성 회원 한정 카카오 계정당 1회원(탈퇴 행은 NULL이라 제외)
     CONSTRAINT fk_member_grade FOREIGN KEY (member_grade_id) REFERENCES member_grade (member_grade_id)
 ); -- 회원(카카오 OIDC 인증. 자체 비밀번호 미보관, 인증은 카카오에 위임)
@@ -183,7 +186,8 @@ CREATE TABLE stock_lot (
     KEY idx_lot_fefo (product_option_id, status, expiry_date), -- FEFO 조회 최적화: 옵션+상태별 소비기한 임박순
     CONSTRAINT fk_lot_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT chk_lot_qty CHECK (available_qty >= 0 AND available_qty <= initial_qty),
-    CONSTRAINT chk_lot_expiry_date CHECK (expiry_date >= received_date)
+    CONSTRAINT chk_lot_expiry_date CHECK (expiry_date >= received_date),
+    CONSTRAINT chk_lot_status_qty CHECK (status = 'AVAILABLE' OR available_qty = 0) -- 소진/폐기된 로트에 가용재고가 남아 있으면 FEFO 조회가 없는 재고를 집는다
 ); -- 입고 로트(실재고 단위, 공급처는 product.supplier_id 기준)
 
 -- =====================================================================
@@ -240,7 +244,8 @@ CREATE TABLE orders (
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0)
+    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0),
+    CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee) -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
 ); -- 주문(헤더)
 
 CREATE TABLE order_item (
@@ -361,7 +366,11 @@ CREATE TABLE payment (
     UNIQUE KEY uk_payment_order (order_id),
     UNIQUE KEY uk_payment_pg_tid (pg_tid),
     CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_payment_amount CHECK (amount > 0)
+    CONSTRAINT chk_payment_amount CHECK (amount > 0),
+    CONSTRAINT chk_payment_paid_at CHECK ( -- 상태와 완료 시각이 따로 놀지 않도록. CANCELED 는 결제 전 취소와 결제 후 취소가 모두 정상이라 제외한다
+        (status IN ('PENDING','FAILED') AND paid_at IS NULL)
+     OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
+     OR  status = 'CANCELED')
 ); -- 결제
 
 -- =====================================================================
@@ -392,7 +401,16 @@ CREATE TABLE claim (
     CONSTRAINT chk_claim_status CHECK (status IN ('REQUESTED','APPROVED','REJECTED','COMPLETED')),
     CONSTRAINT chk_claim_reason_type CHECK (reason_type IS NULL OR reason_type IN ('CHANGE_OF_MIND','DEFECT')),
     CONSTRAINT chk_claim_collect_at CHECK (collect_delivered_at IS NULL OR collect_shipped_at IS NULL OR collect_delivered_at >= collect_shipped_at),
+    CONSTRAINT chk_claim_collect_type CHECK ( -- 회수는 반품/교환에만 있다. 취소는 물건이 나간 적이 없다
+        type <> 'CANCEL'
+     OR (collect_carrier IS NULL AND collect_tracking_no IS NULL AND collect_shipped_at IS NULL AND collect_delivered_at IS NULL)),
+    CONSTRAINT chk_claim_reship_type CHECK ( -- 재배송은 교환에만 있다. 취소와 반품은 새 상품을 보내지 않는다
+        type =  'EXCHANGE'
+     OR (reship_carrier IS NULL AND reship_tracking_no IS NULL AND reship_shipped_at IS NULL AND reship_delivered_at IS NULL)),
     CONSTRAINT chk_claim_reship_at CHECK (reship_delivered_at IS NULL OR reship_shipped_at IS NULL OR reship_delivered_at >= reship_shipped_at),
+    CONSTRAINT chk_claim_processed_at CHECK ( -- 처리된 클레임은 처리 시각을 갖는다. processed_by 는 시스템 자동 처리가 있어 NULL 을 허용하므로 시각만 본다
+        (status =  'REQUESTED' AND processed_at IS NULL)
+     OR (status <> 'REQUESTED' AND processed_at IS NOT NULL)),
     CONSTRAINT fk_claim_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT fk_claim_admin FOREIGN KEY (processed_by) REFERENCES admin (admin_id)
 ); -- 클레임(취소/반품/교환. 회수/재배송 송장, 시각, 상태 흡수)
@@ -442,7 +460,10 @@ CREATE TABLE refund (
     CONSTRAINT fk_refund_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id),
     CONSTRAINT fk_refund_payment FOREIGN KEY (payment_id) REFERENCES payment (payment_id),
     CONSTRAINT chk_refund_amount CHECK (amount >= 0),
-    CONSTRAINT chk_refund_shipping_deduction CHECK (shipping_deduction >= 0)
+    CONSTRAINT chk_refund_shipping_deduction CHECK (shipping_deduction >= 0),
+    CONSTRAINT chk_refund_refunded_at CHECK ( -- 완료된 환불은 완료 시각을 갖는다
+        (status = 'PENDING' AND refunded_at IS NULL)
+     OR (status = 'DONE'    AND refunded_at IS NOT NULL))
 ); -- 환불
 
 CREATE TABLE shipment (
@@ -458,7 +479,11 @@ CREATE TABLE shipment (
     PRIMARY KEY (shipment_id),
     CONSTRAINT chk_shipment_status CHECK (status IN ('PREPARING','SHIPPING','DELIVERED')),
     CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_shipment_delivered_at CHECK (delivered_at IS NULL OR shipped_at IS NULL OR delivered_at >= shipped_at)
+    CONSTRAINT chk_shipment_delivered_at CHECK (delivered_at IS NULL OR shipped_at IS NULL OR delivered_at >= shipped_at),
+    CONSTRAINT chk_shipment_status_at CHECK ( -- 상태마다 채워져 있어야 할 시각이 정해진다. 위 제약은 순서만 보고 짝은 보지 않는다
+        (status = 'PREPARING' AND shipped_at IS NULL     AND delivered_at IS NULL)
+     OR (status = 'SHIPPING'  AND shipped_at IS NOT NULL AND delivered_at IS NULL)
+     OR (status = 'DELIVERED' AND shipped_at IS NOT NULL AND delivered_at IS NOT NULL))
 ); -- 배송(최초 출고 전용, order에 귀속. 회수/재배송은 claim이 흡수)
 
 CREATE TABLE shipment_photo (
@@ -520,6 +545,9 @@ CREATE TABLE qna (
     CONSTRAINT chk_qna_status CHECK (status IN ('WAITING','ANSWERED')),
     CONSTRAINT fk_qna_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT fk_qna_member FOREIGN KEY (member_id) REFERENCES member (member_id),
+    CONSTRAINT chk_qna_answered CHECK ( -- 답변 완료 상태는 본문과 답변자를 함께 갖는다
+        (status = 'ANSWERED' AND answer IS NOT NULL AND answered_by IS NOT NULL)
+     OR (status = 'WAITING'  AND answer IS NULL     AND answered_by IS NULL)),
     CONSTRAINT fk_qna_admin FOREIGN KEY (answered_by) REFERENCES admin (admin_id)
 ); -- 상품 Q&A
 
@@ -542,6 +570,7 @@ CREATE TABLE coupon (
     CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
     CONSTRAINT chk_coupon_values CHECK (discount_value >= 0 AND min_order_amount >= 0),
+    CONSTRAINT chk_coupon_rate_range CHECK (discount_type <> 'RATE' OR discount_value <= 100), -- 정률 쿠폰의 할인율이 100%를 넘을 수 없다. member_grade.discount_rate 와 같은 기준
     CONSTRAINT chk_coupon_valid_period CHECK (valid_from <= valid_to)
 ); -- 쿠폰 정의
 
@@ -593,7 +622,10 @@ CREATE TABLE member_coupon (
     CONSTRAINT fk_mc_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_mc_order FOREIGN KEY (used_order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','RESERVED','USED','EXPIRED','CANCELED'))
+    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','RESERVED','USED','EXPIRED','CANCELED')),
+    CONSTRAINT chk_mc_used CHECK ( -- 사용된 쿠폰만 사용 주문과 사용 시각을 갖는다. 예약(RESERVED)은 아직 사용이 아니다
+        (status =  'USED' AND used_order_id IS NOT NULL AND used_at IS NOT NULL)
+     OR (status <> 'USED' AND used_order_id IS NULL     AND used_at IS NULL))
 ); -- 발급 쿠폰(쿠폰함. 선착순이면 coupon_campaign_id 참조)
 
 CREATE TABLE point_history (
@@ -601,7 +633,7 @@ CREATE TABLE point_history (
     member_id       BIGINT       NOT NULL, -- 회원 FK
     order_id        BIGINT       NULL, -- 관련 주문 FK(nullable)
     type            VARCHAR(30)  NOT NULL, -- 포인트 유형(EARN 적립/USE 사용/EXPIRE 만료)
-    amount          INT          NOT NULL, -- 증감 포인트
+    amount          INT          NOT NULL, -- 변동 포인트(절대값, 증감 방향은 type으로 판단). stock_movement.quantity 와 같은 규칙이다
     balance         INT          NOT NULL, -- 잔액
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (point_history_id),
