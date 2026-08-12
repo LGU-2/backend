@@ -262,6 +262,7 @@ CREATE TABLE member_coupon (
     UNIQUE KEY uk_mc_coupon_member (coupon_id, member_id), -- 쿠폰당 1인 1매
     UNIQUE KEY uk_mc_id_member (member_coupon_id, member_id), -- orders 와 order_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_mc_id_coupon (member_coupon_id, coupon_id), -- order_item 이 복합 외래 키로 참조한다
+    UNIQUE KEY uk_mc_id_scope (member_coupon_id, scope), -- orders 가 복합 외래 키로 참조한다
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
@@ -335,6 +336,7 @@ CREATE TABLE orders (
     product_amount  INT          NOT NULL, -- 총상품금액
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소하면 NULL 로 비워 되돌린다
+    coupon_scope    VARCHAR(20)  NULL, -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ITEM 쿠폰을 이 자리에 넣지 못하게 한다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
     total_amount    INT          NOT NULL, -- 최종결제금액. 할인이 상품금액과 배송비를 다 덮으면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
@@ -353,11 +355,15 @@ CREATE TABLE orders (
     UNIQUE KEY uk_order_coupon (member_coupon_id), -- 한 장바구니 쿠폰은 한 주문에만. NULL 은 여러 개가 허용되므로 쿠폰을 안 쓴 주문끼리는 충돌하지 않는다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
+    CONSTRAINT fk_order_coupon_scope FOREIGN KEY (member_coupon_id, coupon_scope) REFERENCES member_coupon (member_coupon_id, scope), -- scope 를 함께 요구해 ITEM 쿠폰을 붙일 수 없다
     CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND coupon_discount >= 0),
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee), -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
     CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
     CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount), -- 할인은 상품금액을 넘지 못한다. 배송비를 깎는 쿠폰이 없으므로 배송비는 할인 대상이 아니다
-    CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0) -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
+    CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0), -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
+    CONSTRAINT chk_order_coupon_scope CHECK ( -- 쿠폰을 썼으면 장바구니 쿠폰이어야 하고, 안 썼으면 비어 있다
+        (member_coupon_id IS NOT NULL AND coupon_scope = 'ORDER')
+     OR (member_coupon_id IS NULL     AND coupon_scope IS NULL))
 ); -- 주문(헤더)
 
 CREATE TABLE order_item (

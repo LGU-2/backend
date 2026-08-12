@@ -272,9 +272,21 @@ max_discount_amount  min_order_amount  valid_from  valid_to
 선착순 쿠폰은 소진과 취소를 두고 분쟁이 생기는 자리라 근거가 남아야 한다.
 주문 취소로 쿠폰을 되살리는 전이(`USED -> ISSUED`)도 행으로 남는다.
 
-### 층은 발행 시점에 정해진다
+### 층은 발행 시점에 정해지고 양쪽에서 강제한다
 
 `coupon.scope` 가 `ORDER`(장바구니 쿠폰) 또는 `ITEM`(상품 쿠폰) 이다.
+**잘못된 층에 붙이는 것을 두 방향 모두 DB 가 막는다.**
+
+```
+ORDER 쿠폰을 라인에    fk_orderitem_coupon_target 이 coupon_product_option 을 찾는데
+                       ORDER 쿠폰은 그 표에 행을 가질 수 없어 참조할 대상이 없다
+
+ITEM 쿠폰을 주문에     orders.coupon_scope 를 복제하고
+                       CHECK (coupon_scope = 'ORDER') + FK (member_coupon_id, coupon_scope)
+                       -> member_coupon (member_coupon_id, scope)
+```
+
+한쪽만 막으면 반대 방향이 조용히 통과한다. 처음에는 라인 쪽만 막혀 있었다.
 주문당 1장과 라인당 1장은 **컬럼이 하나라는 사실만으로** 보장되고,
 한 쿠폰이 두 곳에 쓰이는 것은 각 `UNIQUE (member_coupon_id)` 가 막는다.
 취소하면 `NULL` 로 비워 되돌린다.
@@ -422,6 +434,7 @@ CHECK 는 **자기 행만** 볼 수 있다. 다른 행이나 다른 표를 봐�
 | `order_item` | `member_id`, `coupon_id` | 남의 쿠폰을 붙이는 것, 대상이 아닌 옵션에 쓰는 것 |
 | `review` | `product_option_id`, `member_id` | 다른 상품에 리뷰를 쓰거나 남의 구매로 쓰는 것 |
 | `coupon_product_option` | `scope` | 장바구니 쿠폰에 대상 옵션을 다는 것 |
+| `orders` | `coupon_scope` | 상품 쿠폰을 장바구니 쿠폰 자리에 넣는 것 |
 
 `review` 는 사슬이 둘이다. `order_item` 이 `product_id` 를 갖지 않고 `product_option_id` 만 갖기 때문에
 가운데 고리로 `product_option_id` 를 복제해야 두 외래 키가 이어진다.
