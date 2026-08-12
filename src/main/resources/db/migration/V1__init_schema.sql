@@ -594,7 +594,7 @@ CREATE TABLE coupon_campaign (
     CONSTRAINT chk_campaign_qty CHECK (total_quantity > 0 AND issued_quantity >= 0 AND issued_quantity <= total_quantity),
     CONSTRAINT chk_campaign_status CHECK (status IN ('SCHEDULED','OPEN','CLOSED')),
     CONSTRAINT chk_campaign_issue_period CHECK (issue_end_at IS NULL OR issue_end_at >= issue_start_at)
-); -- 선착순 발급 캠페인(한정 수량/오픈 시각. 일반 쿠폰과 분리). 슬롯 차감 시점을 1단계 발급 -> 2단계 결제로 옮길 예정이며, 스키마는 두 방식을 모두 담는다. 옮길 때 바뀌는 것은 issued_quantity 를 늘리는 코드 위치와 member_coupon 이 RESERVED 를 거치는지 여부뿐이라 마이그레이션이 필요 없다
+); -- 선착순 발급 캠페인(한정 수량/오픈 시각. 일반 쿠폰과 분리). 슬롯 차감 시점을 1단계 발급 -> 2단계 결제로 옮길 예정이며, 스키마는 두 방식을 모두 담는다. 옮길 때 바뀌는 것은 issued_quantity 를 늘리는 코드 위치뿐이라 마이그레이션이 필요 없다
 
 CREATE TABLE coupon_campaign_option (
     coupon_campaign_option_id BIGINT NOT NULL AUTO_INCREMENT, -- PK
@@ -617,8 +617,8 @@ CREATE TABLE member_coupon (
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
     coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL). coupon_campaign_option_id 로 유도할 수 있지만 uk_mc_campaign_member 가 이 컬럼을 필요로 해서 함께 둔다
     coupon_campaign_option_id BIGINT NULL, -- 선착순 발급이면 어느 대상 옵션에 대한 발급인지. 이게 없으면 coupon_campaign_option.issuable_qty 를 소진 판정에 쓸 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 옵션이 coupon_campaign_id 의 대상인지 앱이 확인한다
-    order_id         BIGINT      NULL, -- 예약/사용 대상 주문 FK. RESERVED 부터 채운다. 이게 없으면 결제가 실패했을 때 어느 예약을 풀지 찾을 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 주문이 member_id 의 주문인지 앱이 확인한다
-    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/RESERVED 예약/USED 사용/EXPIRED 만료/CANCELED 취소). RESERVED 는 2단계에서 쓴다. 슬롯을 점유하는 것이 아니라 이 쿠폰이 그 주문에 물렸다는 표시이며(슬롯은 결제 시점에 issued_quantity 를 다툰다), 같은 쿠폰이 두 주문에 동시에 물리는 것을 막는다. 결제하면 USED 로 가고, 결제 기한(payment.payment_due_dt)이 지나면 ISSUED 로 되돌려 다시 쓸 수 있게 한다. 되돌리는 일은 재고 예약 해제와 같은 배치에서 함께 처리한다. 따로 돌면 재고는 풀렸는데 쿠폰은 잠긴 주문이 생긴다. 1단계에서는 이 상태를 거치지 않고 ISSUED -> USED 로 간다. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
+    order_id         BIGINT      NULL, -- 이 쿠폰이 쓰인 주문 FK. 결제 시점에 USED 로 바꾸면서 함께 채운다. DB가 못 막는 조합이다(DI-3-05). 이 주문이 member_id 의 주문인지 앱이 확인한다
+    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료/CANCELED 취소). 예약 상태를 두지 않는다. 슬롯 차감을 결제 시점에 하므로 주문 시점에 잡아둘 것이 없고, 같은 쿠폰이 두 주문에 쓰이는 것은 결제 시점의 조건부 UPDATE(WHERE status='ISSUED')가 함께 막는다. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
     issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
     used_at          DATETIME    NULL, -- 쿠폰 사용 시각(서버 애플리케이션이 기록)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -633,11 +633,11 @@ CREATE TABLE member_coupon (
      OR (coupon_campaign_id IS NOT NULL AND coupon_campaign_option_id IS NOT NULL)),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_mc_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','RESERVED','USED','EXPIRED','CANCELED')),
-    CONSTRAINT chk_mc_order CHECK ( -- 예약과 사용만 주문을 갖는다. 발급/만료/취소 상태에 주문이 남아 있으면 해제가 안 끝난 것이다
-        (status IN     ('RESERVED','USED') AND order_id IS NOT NULL)
-     OR (status NOT IN ('RESERVED','USED') AND order_id IS NULL)),
-    CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다. 예약은 아직 사용이 아니다
+    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED','CANCELED')),
+    CONSTRAINT chk_mc_order CHECK ( -- 사용된 것만 주문을 갖는다
+        (status =  'USED' AND order_id IS NOT NULL)
+     OR (status <> 'USED' AND order_id IS NULL)),
+    CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
         (status =  'USED' AND used_at IS NOT NULL)
      OR (status <> 'USED' AND used_at IS NULL))
 ); -- 발급 쿠폰(쿠폰함. 선착순이면 coupon_campaign_id 참조)
