@@ -155,11 +155,13 @@ CREATE TABLE product_image (
     upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출한다(INF-11-09)
     sort_order       INT          NOT NULL DEFAULT 0, -- 정렬 순서
     is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
+    is_main_key      BIGINT GENERATED ALWAYS AS (CASE WHEN is_main THEN product_id ELSE NULL END), -- 상품별로 is_main=TRUE가 최대 1개임을 DB가 강제하기 위한 계산 컬럼
     created_at       DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at       DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_image_id),
     UNIQUE KEY uk_product_image_upload (upload_id),
     UNIQUE KEY uk_product_image_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
+    UNIQUE KEY uk_product_image_single_main (is_main_key), -- 상품당 대표 최대 1개(대표가 아닌 행은 NULL이라 제외). 교체할 때는 옛 대표를 먼저 내려야 위반이 나지 않는다
     KEY idx_product_image_pending (upload_status, created_at), -- 미확정 행 스윕(조회 확정 대상 조회와 정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_product_image_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
     CONSTRAINT chk_product_image_main CHECK (is_main = FALSE OR upload_status = 'CONFIRMED'), -- 확정 전인 행이 대표가 되면 상품 목록에 깨진 이미지가 나간다
