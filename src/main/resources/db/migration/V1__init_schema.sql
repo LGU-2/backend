@@ -228,7 +228,8 @@ CREATE TABLE orders (
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
     product_amount  INT          NOT NULL, -- 총상품금액
-    discount_amount INT          NOT NULL DEFAULT 0, -- 쿠폰+등급+포인트. 쿠폰분의 근거는 order_coupon 에, 라인별 배분 결과는 order_item.discount_amount 에 있다. 포인트 사용액은 아직 이 표에 없어 재현되지 않는다
+    discount_amount INT          NOT NULL DEFAULT 0, -- 쿠폰+등급+포인트를 합친 할인 총액. 쿠폰분의 근거는 order_coupon 에, 포인트분은 used_point 에, 등급분은 member_grade.discount_rate 로 재현한다. 라인별 배분 결과는 order_item.discount_amount 에 있다
+    used_point      INT          NOT NULL DEFAULT 0, -- 이 주문에 사용한 포인트. discount_amount 안에 포함된다. 결제 시점에 point_history 에 USE 행이 생기며 그 금액이 이 값과 같아야 한다. 이게 없으면 얼마를 포인트로 냈는지 결제 전에는 알 수 없어 discount_amount 를 검증할 수 없다
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
     total_amount    INT          NOT NULL, -- 최종결제금액. 전액 쿠폰/포인트면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
     earned_point    INT          NOT NULL DEFAULT 0, -- 적립예정포인트
@@ -244,7 +245,8 @@ CREATE TABLE orders (
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0),
+    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0 AND used_point >= 0),
+    CONSTRAINT chk_order_used_point CHECK (used_point <= discount_amount), -- 포인트는 할인 총액의 일부다. 넘으면 쿠폰과 등급 할인이 음수가 된다
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee) -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
 ); -- 주문(헤더)
 
