@@ -153,8 +153,8 @@ CREATE TABLE product_image (
     upload_id        BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
     object_key       VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
     content_type     VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
-    byte_size        INT          NOT NULL, -- 서명 조건에 넣은 크기 상한 검증용
-    upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED 업로드 완료 통지를 받음. 조회는 CONFIRMED 만 노출한다
+    byte_size        INT          NOT NULL, -- PENDING 이면 클라이언트가 신고한 크기(서명 조건에 넣은 값), CONFIRMED 면 HeadObject 로 잰 실측값(INF-11-10)
+    upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출한다(INF-11-09)
     sort_order       INT          NOT NULL DEFAULT 0, -- 정렬 순서
     is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
     created_at       DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -403,8 +403,8 @@ CREATE TABLE claim_attachment (
     upload_id           BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
     object_key          VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
     content_type        VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
-    byte_size           INT          NOT NULL, -- 서명 조건에 넣은 크기 상한 검증용
-    upload_status       VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED 업로드 완료 통지를 받음. PENDING 인 채로 남은 행은 정리 대상이다
+    byte_size           INT          NOT NULL, -- PENDING 이면 클라이언트가 신고한 크기(서명 조건에 넣은 값), CONFIRMED 면 HeadObject 로 잰 실측값(INF-11-10)
+    upload_status       VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출하고(INF-11-09) PENDING 인 채로 남은 행은 정리 대상이다
     created_at          DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at          DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_attachment_id),
@@ -469,8 +469,8 @@ CREATE TABLE shipment_photo (
     upload_id         BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). claim_attachment 와 같은 용도다
     object_key        VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
     content_type      VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
-    byte_size         INT          NOT NULL, -- 서명 조건에 넣은 크기 상한 검증용
-    upload_status     VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED 업로드 완료 통지를 받음
+    byte_size         INT          NOT NULL, -- PENDING 이면 클라이언트가 신고한 크기(서명 조건에 넣은 값), CONFIRMED 면 HeadObject 로 잰 실측값(INF-11-10)
+    upload_status     VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출하고(INF-11-09) PENDING 인 채로 남은 행은 정리 대상이다
     created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at        DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (shipment_photo_id),
