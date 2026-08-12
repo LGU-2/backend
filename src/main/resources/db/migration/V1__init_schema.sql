@@ -388,6 +388,24 @@ CREATE TABLE claim (
     CONSTRAINT fk_claim_admin FOREIGN KEY (processed_by) REFERENCES admin (admin_id)
 ); -- 클레임(취소/반품/교환. 회수/재배송 송장, 시각, 상태 흡수)
 
+CREATE TABLE claim_attachment (
+    claim_attachment_id BIGINT       NOT NULL AUTO_INCREMENT, -- claim_attachment PK
+    claim_id            BIGINT       NOT NULL, -- 클레임 FK
+    upload_id           BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
+    object_key          VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
+    content_type        VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
+    byte_size           INT          NOT NULL, -- 서명 조건에 넣은 크기 상한 검증용
+    upload_status       VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED 업로드 완료 통지를 받음. PENDING 인 채로 남은 행은 정리 대상이다
+    created_at          DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at          DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    PRIMARY KEY (claim_attachment_id),
+    UNIQUE KEY uk_claim_attachment_upload (upload_id),
+    UNIQUE KEY uk_claim_attachment_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
+    CONSTRAINT chk_claim_attachment_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
+    CONSTRAINT chk_claim_attachment_size CHECK (byte_size > 0),
+    CONSTRAINT fk_claim_attachment_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id)
+); -- 클레임 증빙 사진(파손, 오배송). 비공개다. 집 안이 배경으로 찍히므로 본인과 처리 담당 관리자만 본다
+
 CREATE TABLE claim_item (
     claim_item_id   BIGINT       NOT NULL AUTO_INCREMENT, -- claim_item PK
     claim_id        BIGINT       NOT NULL, -- 클레임 FK
@@ -435,6 +453,24 @@ CREATE TABLE shipment (
     CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT chk_shipment_delivered_at CHECK (delivered_at IS NULL OR shipped_at IS NULL OR delivered_at >= shipped_at)
 ); -- 배송(최초 출고 전용, order에 귀속. 회수/재배송은 claim이 흡수)
+
+CREATE TABLE shipment_photo (
+    shipment_photo_id BIGINT       NOT NULL AUTO_INCREMENT, -- shipment_photo PK
+    shipment_id       BIGINT       NOT NULL, -- 배송 FK
+    upload_id         BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). claim_attachment 와 같은 용도다
+    object_key        VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
+    content_type      VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
+    byte_size         INT          NOT NULL, -- 서명 조건에 넣은 크기 상한 검증용
+    upload_status     VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED 업로드 완료 통지를 받음
+    created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at        DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    PRIMARY KEY (shipment_photo_id),
+    UNIQUE KEY uk_shipment_photo_upload (upload_id),
+    UNIQUE KEY uk_shipment_photo_key (object_key),
+    CONSTRAINT chk_shipment_photo_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
+    CONSTRAINT chk_shipment_photo_size CHECK (byte_size > 0),
+    CONSTRAINT fk_shipment_photo_shipment FOREIGN KEY (shipment_id) REFERENCES shipment (shipment_id)
+); -- 문앞 배송 완료 사진. 비공개다. 현관과 도어락이 함께 찍혀 주거 형태가 드러나므로 수령인 본인만 본다
 
 
 -- =====================================================================
