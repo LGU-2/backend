@@ -583,7 +583,7 @@ CREATE TABLE coupon_campaign (
     coupon_id          BIGINT      NOT NULL, -- 어떤 쿠폰을 선착순으로 뿌리는가
     name               VARCHAR(100) NOT NULL, -- 캠페인명
     total_quantity     INT         NOT NULL, -- 한정 수량(예: 10000)
-    issued_quantity    INT         NOT NULL DEFAULT 0, -- 점유 슬롯 수(주문 시 예약 증가, 결제 취소/만료 시 감소). 결제 순서 선착순의 재고 카운터
+    issued_quantity    INT         NOT NULL DEFAULT 0, -- 점유 슬롯 수. 주문 시점에 예약으로 늘리고 결제 취소나 기한 만료로 슬롯을 반납할 때 줄인다. 결제 확정은 이 값을 바꾸지 않는다. 예약 시점에 이미 늘렸기 때문이며 여기서 또 늘리면 이중 점유가 된다. stock_lot.available_qty 가 예약에서 빠지고 확정에서 안 바뀌는 것과 같은 구조다. 따라서 주문 순서 선착순이며, 결제 순서가 아닌 이유는 결제까지 갔다가 소진으로 실패하는 경우를 만들지 않기 위해서이고 재고 예약과 수명을 맞추기 위해서다
     issue_start_at     DATETIME    NOT NULL, -- 발급 오픈 시각
     issue_end_at       DATETIME    NULL, -- 발급 마감 시각(NULL=소진까지)
     status             VARCHAR(30)  NOT NULL DEFAULT 'SCHEDULED', -- SCHEDULED/OPEN/CLOSED
@@ -601,7 +601,7 @@ CREATE TABLE coupon_campaign_option (
     coupon_campaign_id BIGINT      NOT NULL, -- 캠페인 FK
     product_option_id  BIGINT      NOT NULL, -- 대상 옵션 FK(기획 1: 소비기한 임박/소진율 저조 선정). 상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있기 때문이다. 상품 단위로 두면 1kg만 임박했는데 200g에도 쿠폰이 먹혀 임박 재고가 안 빠진다
     issuable_qty       INT         NOT NULL, -- 이 옵션에 발급 가능한 수량(임박 로트 잔량 기준)
-    issued_quantity    INT         NOT NULL DEFAULT 0, -- 이 옵션에서 점유된 슬롯 수(주문 시 예약 증가, 결제 취소/만료 시 감소). coupon_campaign.issued_quantity 가 캠페인 전체 상한이라면 이것은 옵션별 상한이며 둘 다 조건부 UPDATE 로 다툰다
+    issued_quantity    INT         NOT NULL DEFAULT 0, -- 이 옵션에서 점유된 슬롯 수. 증감 시점은 coupon_campaign.issued_quantity 와 같다(주문 시 예약으로 증가, 반납 시 감소, 결제 확정은 무변동). 그쪽이 캠페인 전체 상한이라면 이것은 옵션별 상한이며 둘 다 조건부 UPDATE 로 다툰다
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_campaign_option_id),
@@ -618,7 +618,7 @@ CREATE TABLE member_coupon (
     coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL). coupon_campaign_option_id 로 유도할 수 있지만 uk_mc_campaign_member 가 이 컬럼을 필요로 해서 함께 둔다
     coupon_campaign_option_id BIGINT NULL, -- 선착순 발급이면 어느 대상 옵션에 대한 발급인지. 이게 없으면 coupon_campaign_option.issuable_qty 를 소진 판정에 쓸 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 옵션이 coupon_campaign_id 의 대상인지 앱이 확인한다
     order_id         BIGINT      NULL, -- 예약/사용 대상 주문 FK. RESERVED 부터 채운다. 이게 없으면 결제가 실패했을 때 어느 예약을 풀지 찾을 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 주문이 member_id 의 주문인지 앱이 확인한다
-    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/RESERVED 예약/USED 사용/EXPIRED 만료/CANCELED 취소). RESERVED: 쿠폰 다운로드 후 결제 시점 기준 선착순이므로, 주문 시점에 선착순 슬롯을 예약해두고 결제 시점에 차감 확정하기 위해 필요. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
+    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/RESERVED 예약/USED 사용/EXPIRED 만료/CANCELED 취소). RESERVED: 주문 시점에 선착순 슬롯을 예약해 결제까지 그 자리를 지킨다. 결제하면 USED 로 확정하고, 결제 기한(payment.payment_due_dt)이 지나면 슬롯을 반납한다. stock_allocation 의 RESERVED/CONFIRMED/RELEASED 와 같은 수명이므로 반납은 재고 예약 해제와 같은 배치에서 함께 처리한다. 따로 돌면 재고는 풀렸는데 쿠폰은 잠긴 주문이 생긴다. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
     issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
     used_at          DATETIME    NULL, -- 쿠폰 사용 시각(서버 애플리케이션이 기록)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
