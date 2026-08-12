@@ -594,7 +594,7 @@ CREATE TABLE refund (
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
-    order_id      BIGINT       NOT NULL, -- 주문 FK. 유일성을 걸지 않아 한 주문이 여러 번 나눠 나갈 수 있다(분할 배송)
+    order_id      BIGINT       NOT NULL, -- 주문 FK(1:1). 분할 배송을 하지 않으므로 주문의 모든 라인이 이 배송에 실린다
     carrier       VARCHAR(50)  NULL, -- 택배사
     tracking_no   VARCHAR(50)  NULL, -- 송장번호
     status        VARCHAR(30)  NOT NULL DEFAULT 'PREPARING', -- 배송 상태(PREPARING 준비/SHIPPING 배송중/DELIVERED 배송완료)
@@ -603,6 +603,7 @@ CREATE TABLE shipment (
     created_at    DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at    DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (shipment_id),
+    UNIQUE KEY uk_shipment_order (order_id), -- 주문당 1건. 분할 배송을 하면 어느 라인이 어느 송장에 실렸는지 담을 곳이 필요해진다
     CONSTRAINT chk_shipment_status CHECK (status IN ('PREPARING','SHIPPING','DELIVERED')),
     CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT chk_shipment_delivered_at CHECK (delivered_at IS NULL OR shipped_at IS NULL OR delivered_at >= shipped_at),
@@ -610,7 +611,7 @@ CREATE TABLE shipment (
         (status = 'PREPARING' AND shipped_at IS NULL     AND delivered_at IS NULL)
      OR (status = 'SHIPPING'  AND shipped_at IS NOT NULL AND delivered_at IS NULL)
      OR (status = 'DELIVERED' AND shipped_at IS NOT NULL AND delivered_at IS NOT NULL))
-); -- 배송(출고 전용. 분할 배송을 허용하므로 주문당 여러 행이 가능하다. 회수/재배송은 claim이 흡수)
+); -- 배송(출고 전용. 주문당 1건. 회수/재배송은 claim이 흡수)
 
 CREATE TABLE shipment_photo (
     shipment_photo_id BIGINT       NOT NULL AUTO_INCREMENT, -- shipment_photo PK
