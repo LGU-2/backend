@@ -112,7 +112,7 @@ CREATE TABLE supplier (
 
 CREATE TABLE product (
     product_id          BIGINT       NOT NULL AUTO_INCREMENT, -- product PK
-    product_code        VARCHAR(50)  NOT NULL, -- 자동생성 상품코드
+    product_code        VARCHAR(50)  NOT NULL, -- 자동생성 상품코드. 소프트딜리트해도 이 값은 다시 쓰지 않는다
     name                VARCHAR(255) NOT NULL, -- 상품명
     category_id         BIGINT       NOT NULL, -- 카테고리 FK
     supplier_id         BIGINT       NOT NULL, -- 공급처 FK
@@ -121,13 +121,12 @@ CREATE TABLE product (
     min_shelf_life_days INT          NOT NULL DEFAULT 0, -- 판매 최소 잔여 소비기한 N
     description         TEXT         NULL, -- 상품 설명
     deleted_at          DATETIME     NULL, -- 소프트딜리트
-    active_code_key     VARCHAR(50)  GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN product_code ELSE NULL END), -- 삭제 후 같은 상품코드 재등록 허용: 활성 상품만 유일성 강제
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_id),
     CONSTRAINT chk_product_sale_status CHECK (sale_status IN ('ON_SALE','SOLD_OUT','OFF_SALE')),
     CONSTRAINT chk_product_storage_type CHECK (storage_type IN ('ROOM','COLD','FROZEN')),
-    UNIQUE KEY uk_product_active_code (active_code_key), -- 활성 상품 한정 코드 유일(삭제 행은 NULL이라 제외)
+    UNIQUE KEY uk_product_code (product_code), -- 상품코드 유일. 삭제한 코드를 다시 쓰지 않는다. 자동생성 코드라 재사용할 이유가 없고, 재사용을 허용하려면 조건부 유일성이 필요해 계산 컬럼을 만들어야 한다
     CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES category (category_id),
     CONSTRAINT fk_product_supplier FOREIGN KEY (supplier_id) REFERENCES supplier (supplier_id),
     CONSTRAINT chk_product_shelf CHECK (min_shelf_life_days >= 0)
@@ -591,17 +590,16 @@ CREATE TABLE review (
     review_id       BIGINT       NOT NULL AUTO_INCREMENT, -- review PK
     product_id      BIGINT       NOT NULL, -- 상품 FK
     member_id       BIGINT       NOT NULL, -- 작성 회원 FK
-    order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(활성 리뷰 한정 구매 건당 1회). DB가 못 막는 조합이다(DI-3-05). 이 주문 상품의 상품이 product_id 와 같은지, 그 주문의 회원이 member_id 와 같은지 앱이 확인한다
+    order_item_id   BIGINT       NOT NULL, -- 구매 확인용 주문 상품 FK(구매 건당 1회). DB가 못 막는 조합이다(DI-3-05). 이 주문 상품의 상품이 product_id 와 같은지, 그 주문의 회원이 member_id 와 같은지 앱이 확인한다
     rating          TINYINT      NOT NULL, -- 1~5
     title           VARCHAR(255) NULL, -- 리뷰 제목
     content         TEXT         NOT NULL, -- 리뷰 본문
     is_public       BOOLEAN      NOT NULL DEFAULT TRUE, -- 공개 여부
     deleted_at      DATETIME     NULL, -- 소프트딜리트
-    active_orderitem_key BIGINT GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN order_item_id ELSE NULL END), -- 삭제 후 같은 주문상품에 재작성 허용: 활성 리뷰만 구매 건당 1회 강제
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (review_id),
-    UNIQUE KEY uk_review_active_orderitem (active_orderitem_key), -- 활성 리뷰 한정 구매 건당 1회(삭제 행은 NULL이라 제외, 재작성 허용)
+    UNIQUE KEY uk_review_orderitem (order_item_id), -- 구매 건당 1회. 지운 리뷰의 주문 상품에 다시 쓰지 않는다. 오타 정정은 수정으로 하면 되고, 재작성을 허용하려면 조건부 유일성이 필요해 계산 컬럼을 만들어야 한다
     CONSTRAINT fk_review_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT fk_review_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_review_orderitem FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
