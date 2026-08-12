@@ -162,6 +162,7 @@ CREATE TABLE product_image (
     PRIMARY KEY (product_image_id),
     UNIQUE KEY uk_product_image_upload (upload_id),
     UNIQUE KEY uk_product_image_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
+    KEY idx_product_image_pending (upload_status, created_at), -- 미확정 행 스윕(조회 확정 대상 조회와 정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_product_image_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
     CONSTRAINT chk_product_image_size CHECK (byte_size > 0),
     CONSTRAINT chk_product_image_main CHECK (is_main = FALSE OR upload_status = 'CONFIRMED'), -- 확정 전인 행이 대표가 되면 상품 목록에 깨진 이미지가 나간다
@@ -410,6 +411,7 @@ CREATE TABLE claim_attachment (
     PRIMARY KEY (claim_attachment_id),
     UNIQUE KEY uk_claim_attachment_upload (upload_id),
     UNIQUE KEY uk_claim_attachment_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
+    KEY idx_claim_attachment_pending (upload_status, created_at), -- 미확정 행 스윕(정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_claim_attachment_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
     CONSTRAINT chk_claim_attachment_size CHECK (byte_size > 0),
     CONSTRAINT fk_claim_attachment_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id)
@@ -476,6 +478,7 @@ CREATE TABLE shipment_photo (
     PRIMARY KEY (shipment_photo_id),
     UNIQUE KEY uk_shipment_photo_upload (upload_id),
     UNIQUE KEY uk_shipment_photo_key (object_key),
+    KEY idx_shipment_photo_pending (upload_status, created_at), -- 미확정 행 스윕(정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_shipment_photo_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
     CONSTRAINT chk_shipment_photo_size CHECK (byte_size > 0),
     CONSTRAINT fk_shipment_photo_shipment FOREIGN KEY (shipment_id) REFERENCES shipment (shipment_id)
