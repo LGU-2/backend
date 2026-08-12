@@ -19,8 +19,8 @@ CREATE TABLE member_grade (
     promotion_rule  VARCHAR(255) NULL, -- 승급 기준
     is_default      BOOLEAN      NOT NULL DEFAULT TRUE, -- 회원가입 시 부여할 기본 등급 여부(정확히 1개여야 함)
     is_default_key  TINYINT GENERATED ALWAYS AS (CASE WHEN is_default THEN 1 ELSE NULL END), -- is_default=TRUE가 항상 1개임을 DB가 강제하기 위한 계산 컬럼
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_grade_id),
     UNIQUE KEY uk_member_grade_name (name),
     UNIQUE KEY uk_member_grade_single_default (is_default_key)
@@ -38,11 +38,11 @@ CREATE TABLE member (
     is_marketing_agreed BOOLEAN NOT NULL DEFAULT FALSE, -- 마케팅 수신 동의
     status           VARCHAR(30)  NOT NULL DEFAULT 'PENDING_PROFILE', -- 회원 상태(PENDING_PROFILE 카카오 최초 로그인 후 추가정보 미입력/ACTIVE 활성/BLOCKED 차단/WITHDRAWN 탈퇴)
     refresh_token_hash CHAR(64)   NULL, -- 리프레시 토큰의 SHA-256 hex. 평문을 저장하지 않는다(유출되면 그대로 계정 탈취가 된다). 고엔트로피 난수라 bcrypt 가 아니라 단순 해시로 충분하다. NULL 은 로그아웃 상태이며, 액세스 토큰이 stateless 라 서버가 막을 수 있는 유일한 지점이 여기다
-    refresh_token_expires_at DATETIME NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
-    deleted_at       DATETIME     NULL, -- 소프트딜리트(탈퇴 시, 주문 이력은 법정 기간 보존)
+    refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
+    deleted_at       DATETIME(6)  NULL, -- 소프트딜리트(탈퇴 시, 주문 이력은 법정 기간 보존)
     active_provider_key VARCHAR(140) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN CONCAT(provider, ':', provider_user_id) ELSE NULL END), -- 탈퇴 후 같은 카카오 계정 재가입 허용: 활성 회원만 유일성 강제
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_id),
     CONSTRAINT chk_member_status CHECK (status IN ('PENDING_PROFILE','ACTIVE','BLOCKED','WITHDRAWN')),
     CONSTRAINT chk_member_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
@@ -65,8 +65,8 @@ CREATE TABLE address (
     detail_address  VARCHAR(255) NULL, -- 상세 주소
     is_default      BOOLEAN      NOT NULL DEFAULT FALSE, -- 기본 배송지
     is_default_key  BIGINT GENERATED ALWAYS AS (CASE WHEN is_default THEN member_id ELSE NULL END), -- 회원별로 is_default=TRUE가 최대 1개임을 DB가 강제하기 위한 계산 컬럼
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (address_id),
     UNIQUE KEY uk_address_single_default_per_member (is_default_key),
     CONSTRAINT fk_address_member FOREIGN KEY (member_id) REFERENCES member (member_id)
@@ -78,8 +78,8 @@ CREATE TABLE admin (
     password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
     name            VARCHAR(50)  NOT NULL, -- 관리자 이름
     role            VARCHAR(30)  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (admin_id),
     CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
     UNIQUE KEY uk_admin_login_id (login_id)
@@ -93,8 +93,8 @@ CREATE TABLE category (
     category_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 카테고리 PK
     parent_id       BIGINT       NULL, -- 상위 카테고리(확장용)
     name            VARCHAR(50)  NOT NULL, -- 해산물/육류/채소/과일
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (category_id),
     UNIQUE KEY uk_category_parent_name (parent_id, name),
     CONSTRAINT fk_category_parent FOREIGN KEY (parent_id) REFERENCES category (category_id)
@@ -104,8 +104,8 @@ CREATE TABLE supplier (
     supplier_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 공급처 PK
     name            VARCHAR(100) NOT NULL, -- 공급처
     contact         VARCHAR(100) NULL, -- 연락처
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (supplier_id),
     UNIQUE KEY uk_supplier_name (name)
 ); -- 공급처
@@ -120,9 +120,9 @@ CREATE TABLE product (
     storage_type        VARCHAR(30)  NOT NULL, -- 보관 온도(ROOM 실온/COLD 냉장/FROZEN 냉동)
     min_shelf_life_days INT          NOT NULL DEFAULT 0, -- 판매 최소 잔여 소비기한 N
     description         TEXT         NULL, -- 상품 설명
-    deleted_at          DATETIME     NULL, -- 소프트딜리트
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    deleted_at          DATETIME(6)  NULL, -- 소프트딜리트
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_id),
     CONSTRAINT chk_product_sale_status CHECK (sale_status IN ('ON_SALE','SOLD_OUT','OFF_SALE')),
     CONSTRAINT chk_product_storage_type CHECK (storage_type IN ('ROOM','COLD','FROZEN')),
@@ -138,8 +138,8 @@ CREATE TABLE product_option (
     name              VARCHAR(100) NOT NULL, -- 옵션명(예: 200g, 500g, 1kg)
     price             INT          NOT NULL, -- 옵션 판매가(0 이상)
     sale_status       VARCHAR(30)  NOT NULL DEFAULT 'ON_SALE', -- 옵션 판매 상태(ON_SALE/SOLD_OUT/OFF_SALE)
-    created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at        DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at        DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_option_id),
     UNIQUE KEY uk_option_product_name (product_id, name), -- 한 상품 내 옵션명 중복 방지
     CONSTRAINT fk_option_product FOREIGN KEY (product_id) REFERENCES product (product_id),
@@ -156,8 +156,8 @@ CREATE TABLE product_image (
     sort_order       INT          NOT NULL DEFAULT 0, -- 상품 안에서의 표시 순서(작을수록 앞). 확정할 때 서버가 MAX+1로 정한다. (product_id, sort_order) 유일성은 일부러 걸지 않는다. 재정렬의 중간 상태가 항상 위반이 되기 때문이며, 결정적 순서는 조회 정렬의 product_image_id 타이브레이커로 얻는다
     is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
     is_main_key      BIGINT GENERATED ALWAYS AS (CASE WHEN is_main THEN product_id ELSE NULL END), -- 상품별로 is_main=TRUE가 최대 1개임을 DB가 강제하기 위한 계산 컬럼
-    created_at       DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at       DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at       DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at       DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_image_id),
     UNIQUE KEY uk_product_image_upload (upload_id),
     UNIQUE KEY uk_product_image_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
@@ -176,8 +176,8 @@ CREATE TABLE stock_lot (
     initial_qty     INT          NOT NULL, -- 입고수량
     available_qty   INT          NOT NULL, -- 판매 가능 수량. 예약(RESERVE)에서 빼고 예약 해제(RELEASE)에서 되돌린다. 차감 확정(CONFIRM)은 이 값을 바꾸지 않는다. 예약 시점에 이미 뺐기 때문이며 여기서 또 빼면 이중 차감이 된다
     status          VARCHAR(30)  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE/SOLD_OUT/DISPOSED)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_lot_id),
     CONSTRAINT chk_lot_status CHECK (status IN ('AVAILABLE','SOLD_OUT','DISPOSED')),
     KEY idx_lot_fefo (product_option_id, status, expiry_date), -- FEFO 조회 최적화: 옵션+상태별 소비기한 임박순
@@ -201,14 +201,14 @@ CREATE TABLE coupon (
     min_order_amount    INT          NOT NULL DEFAULT 0, -- 사용 조건(이 금액 이상일 때만 쓸 수 있다)
     total_quantity      INT          NULL, -- 발급 한정 수량. NULL 이면 수량 제한이 없는 일반 쿠폰이고, 값이 있으면 선착순 쿠폰이다. 캠페인을 별도 표로 두지 않는 이유는 쿠폰 하나를 여러 캠페인으로 뿌릴 일이 없고, 나누면 member_coupon 이 유도 가능한 참조를 여럿 들게 되기 때문이다
     issued_quantity     INT          NOT NULL DEFAULT 0, -- 발급된 수. 선착순이면 total_quantity 와 조건부 UPDATE 로 다툰다
-    issue_start_at      DATETIME     NULL, -- 발급 시작 시각(선착순 오픈 시각). NULL 이면 제한 없음
-    issue_end_at        DATETIME     NULL, -- 발급 마감 시각. NULL 이면 소진까지
+    issue_start_at      DATETIME(6)  NULL, -- 발급 시작 시각(선착순 오픈 시각). NULL 이면 제한 없음
+    issue_end_at        DATETIME(6)  NULL, -- 발급 마감 시각. NULL 이면 소진까지
     valid_from          DATE         NOT NULL, -- 사용 유효 시작일
     valid_to            DATE         NOT NULL, -- 사용 유효 종료일
     target_grade_id     BIGINT       NULL, -- 대상 등급(NULL=전체)
     is_active           BOOLEAN      NOT NULL DEFAULT TRUE, -- 발급 중단 스위치. 소진 여부는 issued_quantity 로 유도되므로 상태 컬럼을 따로 두지 않고, 사람이 끄는 경우만 이 값으로 표현한다
-    created_at          DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at          DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
     CONSTRAINT chk_coupon_scope CHECK (scope IN ('ORDER','ITEM')),
@@ -227,7 +227,7 @@ CREATE TABLE coupon_product_option (
     coupon_product_option_id BIGINT NOT NULL AUTO_INCREMENT, -- coupon_product_option PK
     coupon_id         BIGINT   NOT NULL, -- 쿠폰 FK
     product_option_id BIGINT   NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
-    created_at        DATETIME NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    created_at        DATETIME(6) NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_product_option_id),
     UNIQUE KEY uk_cpo_coupon_option (coupon_id, product_option_id), -- 쿠폰당 옵션 1행
     CONSTRAINT fk_cpo_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
@@ -239,10 +239,10 @@ CREATE TABLE member_coupon (
     coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
     status           VARCHAR(30) NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
-    issued_at        DATETIME    NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
-    used_at          DATETIME    NULL, -- 사용 시각(서버 애플리케이션이 기록)
-    created_at       DATETIME    NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at       DATETIME    NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    issued_at        DATETIME(6) NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
+    used_at          DATETIME(6) NULL, -- 사용 시각(서버 애플리케이션이 기록)
+    created_at       DATETIME(6) NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at       DATETIME(6) NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_id),
     UNIQUE KEY uk_mc_coupon_member (coupon_id, member_id), -- 쿠폰당 1인 1매
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
@@ -260,8 +260,8 @@ CREATE TABLE member_coupon (
 CREATE TABLE cart (
     cart_id         BIGINT       NOT NULL AUTO_INCREMENT, -- cart PK
     member_id       BIGINT       NOT NULL, -- 회원 FK(회원당 1개 UK)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (cart_id),
     UNIQUE KEY uk_cart_member (member_id), -- 1인 1카트
     CONSTRAINT fk_cart_member FOREIGN KEY (member_id) REFERENCES member (member_id)
@@ -272,8 +272,8 @@ CREATE TABLE cart_item (
     cart_id         BIGINT       NOT NULL, -- 장바구니 FK
     product_option_id BIGINT     NOT NULL, -- 담은 옵션 FK
     qty             INT          NOT NULL DEFAULT 1, -- 수량
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (cart_item_id),
     UNIQUE KEY uk_cart_option (cart_id, product_option_id), -- 동일 옵션 중복 방지
     CONSTRAINT fk_cartitem_cart FOREIGN KEY (cart_id) REFERENCES cart (cart_id),
@@ -301,9 +301,9 @@ CREATE TABLE orders (
     ship_zipcode    VARCHAR(10)  NOT NULL, -- 배송지 우편번호 스냅샷
     ship_address    VARCHAR(500) NOT NULL, -- 배송지 주소 스냅샷
     ship_message    VARCHAR(255) NULL, -- 배송 메시지
-    ordered_at      DATETIME     NOT NULL, -- 주문 접수 시각(서버 애플리케이션이 기록)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    ordered_at      DATETIME(6)  NOT NULL, -- 주문 접수 시각(서버 애플리케이션이 기록)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_id),
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
@@ -328,8 +328,8 @@ CREATE TABLE order_item (
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
     discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액(상품 쿠폰 + 주문 전체 할인에서 이 라인 몫). 주문 시점에 배분해 확정한다. 부분 반품 환불액을 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낼 수 있고, 이게 없으면 어느 라인이 할인받았는지 몰라 안분할 수밖에 없어 상품 쿠폰에서 금액이 틀어진다
     item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_item_id),
     CONSTRAINT chk_orderitem_status CHECK (item_status IN ('ORDERED','CANCELED','RETURN_REQ','RETURNED','EXCHANGE_REQ','EXCHANGED')),
     UNIQUE KEY uk_order_option (order_id, product_option_id), -- 동일 옵션 중복 라인 방지
@@ -349,8 +349,8 @@ CREATE TABLE stock_allocation (
     stock_lot_id          BIGINT       NOT NULL, -- 차감 대상 로트 FK
     qty             INT          NOT NULL, -- FEFO 예약/차감 수량
     status          VARCHAR(30)  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(주문 시점. 이때 stock_lot.available_qty 를 뺀다), CONFIRMED=차감 확정(결제 시점. available_qty 는 예약 때 이미 빠져 있어 바뀌지 않는다), RELEASED=해제(결제 취소/만료. available_qty 를 되돌린다)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_allocation_id),
     CONSTRAINT fk_alloc_orderitem FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
     CONSTRAINT fk_alloc_lot FOREIGN KEY (stock_lot_id) REFERENCES stock_lot (stock_lot_id),
@@ -365,7 +365,7 @@ CREATE TABLE stock_disposal (
     admin_id        BIGINT       NOT NULL, -- 폐기 처리 관리자 FK
     qty             INT          NOT NULL, -- 폐기수량
     reason          VARCHAR(30)  NOT NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 회수품). RETURNED 는 잔여 소비기한이 product.min_shelf_life_days 에 못 미치거나 상태가 나빠 재입고(RESTOCK)하지 않은 회수품이다. 로트로 돌아간 적이 없으므로 available_qty 를 줄이지 않으며 stock_movement 행도 남지 않는다
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_disposal_id),
     CONSTRAINT chk_disposal_reason CHECK (reason IN ('EXPIRED','DAMAGED','RETURNED')),
     CONSTRAINT fk_disposal_product FOREIGN KEY (product_id) REFERENCES product (product_id),
@@ -384,7 +384,7 @@ CREATE TABLE stock_movement (
     order_id          BIGINT       NULL, -- 관련 주문 FK(주문 기인 변동만, 그 외 NULL)
     admin_id          BIGINT       NULL, -- 처리 관리자 FK(수동조정/폐기 등, 시스템 자동은 NULL)
     reason            VARCHAR(200) NULL, -- 사유 상세(폐기/만료/조정 등)
-    created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_movement_id),
     KEY idx_movement_lot_time (stock_lot_id, created_at), -- 로트별 시간순 조회(정합성 추적)
     KEY idx_movement_order (order_id), -- 주문별 변동 추적
@@ -407,8 +407,8 @@ CREATE TABLE daily_sales (
     disposed_qty    INT          NOT NULL DEFAULT 0, -- 당일 폐기 수량. 로트로 돌아가지 않은 회수품 폐기는 available_qty 를 바꾸지 않으므로 여기 안 들어간다
     expired_qty     INT          NOT NULL DEFAULT 0, -- 당일 만료 전환 수량. 소비기한이 지나 판매 불가로 바뀐 것이며 폐기와 별개다
     closing_stock   INT          NOT NULL DEFAULT 0, -- 기말 재고(그날 마감 시점 가용재고 스냅샷)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (daily_sales_id),
     UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
     CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
@@ -420,7 +420,7 @@ CREATE TABLE order_status_history (
     order_id        BIGINT       NOT NULL, -- 주문 FK
     from_status     VARCHAR(30)  NULL, -- 이전 상태
     to_status       VARCHAR(30)  NOT NULL, -- 변경 상태(orders.status와 동일 집합)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_status_history_id),
     CONSTRAINT chk_osh_to_status CHECK (to_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     CONSTRAINT chk_osh_from_status CHECK (from_status IS NULL OR from_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
@@ -434,9 +434,9 @@ CREATE TABLE payment (
     amount          INT          NOT NULL, -- 결제 금액
     status          VARCHAR(30)  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
     pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 발급되지 않아 NULL 이다. UNIQUE 가 막는 것은 한 PG 거래가 두 주문에 붙는 것이며(남의 거래번호를 자기 주문에 실어 보내는 경우), 중복 콜백은 이것이 아니라 status='PENDING' 조건부 UPDATE 가 막는다(DI-2-01)
-    paid_at         DATETIME     NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    paid_at         DATETIME(6)  NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (payment_id),
     CONSTRAINT chk_payment_method CHECK (method IN ('CARD','EASY_PAY')),
     CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
@@ -464,17 +464,17 @@ CREATE TABLE claim (
     reason_type     VARCHAR(30)  NULL, -- 사유 유형(CHANGE_OF_MIND/DEFECT)
     reason          VARCHAR(500) NULL, -- 사유 상세
     processed_by    BIGINT       NULL, -- admin (NULL=시스템 자동)
-    processed_at    DATETIME     NULL, -- 처리 시각
+    processed_at    DATETIME(6)  NULL, -- 처리 시각
     collect_carrier      VARCHAR(50)  NULL, -- 회수 택배사(반품/교환. 회수=고객이 반품할 상품을 창고로 보내는 배송, 고객 -> 창고)
     collect_tracking_no  VARCHAR(50)  NULL, -- 회수 송장번호
-    collect_shipped_at   DATETIME     NULL, -- 회수(수거) 발송 시각
-    collect_delivered_at DATETIME     NULL, -- 회수 완료(입고) 시각
+    collect_shipped_at   DATETIME(6)  NULL, -- 회수(수거) 발송 시각
+    collect_delivered_at DATETIME(6)  NULL, -- 회수 완료(입고) 시각
     reship_carrier       VARCHAR(50)  NULL, -- 재배송 택배사(교환. 재배송=창고가 교환할 새 상품을 고객에게 보내는 배송, 창고 -> 고객)
     reship_tracking_no   VARCHAR(50)  NULL, -- 재배송 송장번호
-    reship_shipped_at    DATETIME     NULL, -- 재배송 발송 시각
-    reship_delivered_at  DATETIME     NULL, -- 재배송 완료 시각
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    reship_shipped_at    DATETIME(6)  NULL, -- 재배송 발송 시각
+    reship_delivered_at  DATETIME(6)  NULL, -- 재배송 완료 시각
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_id),
     CONSTRAINT chk_claim_type CHECK (type IN ('CANCEL','RETURN','EXCHANGE')),
     CONSTRAINT chk_claim_status CHECK (status IN ('REQUESTED','APPROVED','REJECTED','COMPLETED')),
@@ -500,8 +500,8 @@ CREATE TABLE claim_attachment (
     upload_id           BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
     object_key          VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
     upload_status       VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출하고(INF-11-09) PENDING 인 채로 남은 행은 정리 대상이다
-    created_at          DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at          DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_attachment_id),
     UNIQUE KEY uk_claim_attachment_upload (upload_id),
     UNIQUE KEY uk_claim_attachment_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
@@ -515,7 +515,7 @@ CREATE TABLE claim_item (
     claim_id        BIGINT       NOT NULL, -- 클레임 FK
     order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK. DB가 못 막는 조합이다(DI-3-05). 이 주문 상품이 claim.order_id 의 주문 것인지 앱이 확인한다
     qty             INT          NOT NULL, -- 부분 처리 수량. DB가 못 막는 합계다(DI-3-06). 같은 주문 상품에 클레임을 여러 번 열면 qty 합이 order_item.qty 를 넘을 수 있다. 주문 상품 행을 잠그고 합계를 다시 세어 검사한다
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_item_id),
     UNIQUE KEY uk_claimitem_claim_orderitem (claim_id, order_item_id), -- '클레임 내 동일 항목 중복 방지'
     CONSTRAINT fk_claimitem_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id),
@@ -530,9 +530,9 @@ CREATE TABLE refund (
     amount              INT      NOT NULL, -- 환불액
     shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감
     status              VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
-    refunded_at         DATETIME NULL, -- 환불 완료 시각
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    refunded_at         DATETIME(6) NULL, -- 환불 완료 시각
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (refund_id),
     CONSTRAINT chk_refund_status CHECK (status IN ('PENDING','DONE')),
     UNIQUE KEY uk_refund_claim (claim_id),
@@ -551,10 +551,10 @@ CREATE TABLE shipment (
     carrier       VARCHAR(50)  NULL, -- 택배사
     tracking_no   VARCHAR(50)  NULL, -- 송장번호
     status        VARCHAR(30)  NOT NULL DEFAULT 'PREPARING', -- 배송 상태(PREPARING 준비/SHIPPING 배송중/DELIVERED 배송완료)
-    shipped_at    DATETIME     NULL, -- 발송 시각
-    delivered_at  DATETIME     NULL, -- 배송 완료 시각
-    created_at    DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at    DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    shipped_at    DATETIME(6)  NULL, -- 발송 시각
+    delivered_at  DATETIME(6)  NULL, -- 배송 완료 시각
+    created_at    DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at    DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (shipment_id),
     CONSTRAINT chk_shipment_status CHECK (status IN ('PREPARING','SHIPPING','DELIVERED')),
     CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
@@ -571,8 +571,8 @@ CREATE TABLE shipment_photo (
     upload_id         BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). claim_attachment 와 같은 용도다
     object_key        VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
     upload_status     VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출하고(INF-11-09) PENDING 인 채로 남은 행은 정리 대상이다
-    created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at        DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at        DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (shipment_photo_id),
     UNIQUE KEY uk_shipment_photo_upload (upload_id),
     UNIQUE KEY uk_shipment_photo_key (object_key),
@@ -595,9 +595,9 @@ CREATE TABLE review (
     title           VARCHAR(255) NULL, -- 리뷰 제목
     content         TEXT         NOT NULL, -- 리뷰 본문
     is_public       BOOLEAN      NOT NULL DEFAULT TRUE, -- 공개 여부
-    deleted_at      DATETIME     NULL, -- 소프트딜리트
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    deleted_at      DATETIME(6)  NULL, -- 소프트딜리트
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (review_id),
     UNIQUE KEY uk_review_orderitem (order_item_id), -- 구매 건당 1회. 지운 리뷰의 주문 상품에 다시 쓰지 않는다. 오타 정정은 수정으로 하면 되고, 재작성을 허용하려면 조건부 유일성이 필요해 계산 컬럼을 만들어야 한다
     CONSTRAINT fk_review_product FOREIGN KEY (product_id) REFERENCES product (product_id),
@@ -616,9 +616,9 @@ CREATE TABLE qna (
     answered_by     BIGINT       NULL, -- admin
     is_public       BOOLEAN      NOT NULL DEFAULT TRUE, -- 공개 여부
     status          VARCHAR(30)  NOT NULL DEFAULT 'WAITING', -- 답변 상태(WAITING/ANSWERED)
-    deleted_at      DATETIME     NULL, -- 소프트딜리트
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    deleted_at      DATETIME(6)  NULL, -- 소프트딜리트
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (qna_id),
     CONSTRAINT chk_qna_status CHECK (status IN ('WAITING','ANSWERED')),
     CONSTRAINT fk_qna_product FOREIGN KEY (product_id) REFERENCES product (product_id),
@@ -643,8 +643,8 @@ CREATE TABLE qna (
 --     type            VARCHAR(30)  NOT NULL, -- 알림 유형(QNA_ANSWER/ORDER_STATUS/SHIPPING/EXPIRY)
 --     content         TEXT         NOT NULL, -- 알림 내용
 --     status          VARCHAR(30)  NOT NULL DEFAULT 'SENT', -- 발송 상태(SENT/FAILED/RETRY)
---     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
---     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+--     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+--     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
 --     PRIMARY KEY (notification_id),
 --     CONSTRAINT chk_noti_channel CHECK (channel IN ('EMAIL','SMS','APP')),
 --     CONSTRAINT chk_noti_type CHECK (type IN ('QNA_ANSWER','ORDER_STATUS','SHIPPING','EXPIRY')),
@@ -658,7 +658,7 @@ CREATE TABLE audit_log (
     action          VARCHAR(50)  NOT NULL, -- PRODUCT_DELETE/REFUND/GRADE_CHANGE 등
     target          VARCHAR(100) NULL, -- 대상 식별자
     detail          TEXT         NULL, -- 상세 내용
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (audit_log_id),
     CONSTRAINT fk_audit_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id)
 ); -- 감사 로그
