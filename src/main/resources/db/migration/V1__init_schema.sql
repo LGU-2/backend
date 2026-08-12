@@ -373,6 +373,7 @@ CREATE TABLE orders (
     CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND coupon_discount >= 0),
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee), -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
     CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
+    CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount), -- 할인은 상품금액을 넘지 못한다. 배송비를 깎는 쿠폰이 없으므로 배송비는 할인 대상이 아니다
     CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0) -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
 ); -- 주문(헤더)
 
@@ -409,7 +410,7 @@ CREATE TABLE order_item (
 
                                                         부분 반품 환불액은 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낸다.
                                                         이 컬럼이 없으면 어느 라인이 할인받았는지 몰라 전 라인에 안분할 수밖에 없고, 특정 라인만 할인한 경우 금액이 틀어진다 */
-    item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED)
+    item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED). 클레임 중복을 이 컬럼이 막는다. 신청할 때 조건부 UPDATE(WHERE item_status='ORDERED')로 다투므로 같은 라인에 클레임이 두 번 걸리지 않는다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_item_id),
@@ -604,14 +605,17 @@ CREATE TABLE claim_item (
                                               claim.order_id 와 order_item.order_id 가 같아야만 행이 들어간다.
                                               다른 주문의 주문 상품을 클레임에 넣는 것이 DB 수준에서 막힌다.
                                               비정규화처럼 보이지만 값이 외래 키로 강제되어 어긋날 수 없다 */
-    qty             INT          NOT NULL, -- 부분 처리 수량. DB가 못 막는 합계다(DI-3-06). 같은 주문 상품에 클레임을 여러 번 열면 qty 합이 order_item.qty 를 넘을 수 있다. 주문 상품 행을 잠그고 합계를 다시 세어 검사한다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_item_id),
     UNIQUE KEY uk_claimitem_claim_orderitem (claim_id, order_item_id), -- '클레임 내 동일 항목 중복 방지'
     CONSTRAINT fk_claimitem_claim FOREIGN KEY (claim_id, order_id) REFERENCES claim (claim_id, order_id),
-    CONSTRAINT fk_claimitem_orderitem FOREIGN KEY (order_item_id, order_id) REFERENCES order_item (order_item_id, order_id),
-    CONSTRAINT chk_claimitem_qty CHECK (qty > 0)
-); -- 클레임 대상 상품(복합 외래 키로 클레임과 주문 상품이 같은 주문에 속함을 DB가 강제한다)
+    CONSTRAINT fk_claimitem_orderitem FOREIGN KEY (order_item_id, order_id) REFERENCES order_item (order_item_id, order_id)
+); /* 클레임 대상 상품. 라인 단위로 걸고 부분 수량을 지정하지 않는다.
+      수량을 지정하면 같은 주문 상품에 클레임을 여러 번 열었을 때 합이 order_item.qty 를 넘을 수 있고,
+      여러 행의 합계는 CHECK 가 볼 수 없어 order_item 에 카운터를 하나 더 만들어야 한다.
+      라인 단위면 order_item.item_status 조건부 UPDATE(WHERE item_status='ORDERED')가 중복을 막으므로 카운터가 필요 없다.
+      부분 수량 반품이 필요해지면 claim_item.qty 와 order_item.claimed_qty 를 추가만 하는 마이그레이션으로 넣는다.
+      복합 외래 키로 클레임과 주문 상품이 같은 주문에 속함을 DB가 강제한다 */
 
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK

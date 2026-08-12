@@ -111,10 +111,12 @@ UNIQUE KEY uk_review_orderitem (order_item_id)   -- 지운 리뷰의 주문 상�
 ### 항등식을 DB 가 강제한다
 
 ```sql
-CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee)
+CONSTRAINT chk_order_total    CHECK (total_amount = product_amount - discount_amount + shipping_fee)
+CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount)
 ```
 
 각 항목이 0 이상인지만 보면 `total_amount` 가 아무 값이나 될 수 있다. 한 행 안의 값들이라 CHECK 로 닫힌다.
+할인 상한을 상품금액으로 잡은 것은 **배송비를 깎는 쿠폰을 두지 않기 때문**이다. 배송비 할인이 생기면 이 식이 바뀐다.
 
 ### 라인별 배분을 저장한다
 
@@ -403,13 +405,31 @@ order_item.coupon_id 를 복제하고
 
 ### 자식 행 합계 (`DI-3-06`)
 
+행 하나씩은 유효한데 합이 넘는 경우다. **CHECK 는 자기 행만 보므로 원리적으로 표현할 수 없다.**
+
+클레임 수량이 그런 자리였다. 3개 산 것을 2개짜리 반품 두 건으로 나누면 각 행은 정상이고 합만 넘는다.
+**`claim_item` 에서 수량을 없애 이 문제를 만들지 않기로 했다.**
+
+클레임은 라인 단위로 걸고 부분 수량을 지정하지 않는다.
+중복은 `order_item.item_status` 조건부 UPDATE 가 막는다.
+
+```sql
+UPDATE order_item SET item_status = 'RETURN_REQ'
+ WHERE order_item_id = ? AND item_status = 'ORDERED';
+-- affected rows 0 이면 이미 클레임이 걸린 라인이다
+```
+
+수량을 유지하려면 `order_item` 에 카운터를 하나 더 만들어야 했다.
+`stock_lot.available_qty`, `coupon.issued_quantity` 에 이어 세 번째이고, 각각 되돌리기 경로와 정합성 검사가 따라붙는다.
+**부분 수량 반품이 필요해지면 `claim_item.qty` 와 `order_item.claimed_qty` 를 추가만 하는 마이그레이션으로 넣는다.**
+
+남는 것은 하나다.
+
 | 위치 | 확인할 것 |
 |---|---|
-| `claim_item.qty` | 같은 주문 상품에 걸린 클레임 수량의 합이 `order_item.qty` 를 넘지 않는가 |
 | `order_item.discount_amount` | 합이 `orders.discount_amount` 와 같은가 |
 
-행 하나씩은 유효한데 합이 넘는다. **3개 산 것을 2개짜리 반품 두 건으로 나누면 각 행은 정상이다.**
-읽고 더한 뒤 쓰는 사이에 다른 트랜잭션이 끼면 갱신 손실과 같은 형태가 되므로 잠금이 함께 필요하다.
+주문 생성 한 트랜잭션 안에서 함께 쓰이는 값이라 동시성 문제가 없고, 배분 계산이 맞는지만 확인하면 된다.
 
 ### 조건부 유일성 중 앱으로 내린 것
 
