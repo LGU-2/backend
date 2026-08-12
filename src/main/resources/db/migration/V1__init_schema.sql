@@ -617,8 +617,8 @@ CREATE TABLE member_coupon (
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
     coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL). coupon_campaign_option_id 로 유도할 수 있지만 uk_mc_campaign_member 가 이 컬럼을 필요로 해서 함께 둔다
     coupon_campaign_option_id BIGINT NULL, -- 선착순 발급이면 어느 대상 옵션에 대한 발급인지. 이게 없으면 coupon_campaign_option.issuable_qty 를 소진 판정에 쓸 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 옵션이 coupon_campaign_id 의 대상인지 앱이 확인한다
-    order_id         BIGINT      NULL, -- 이 쿠폰이 쓰인 주문 FK. 결제 시점에 USED 로 바꾸면서 함께 채운다. DB가 못 막는 조합이다(DI-3-05). 이 주문이 member_id 의 주문인지 앱이 확인한다
-    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료/CANCELED 취소). 예약 상태를 두지 않는다. 슬롯 차감을 결제 시점에 하므로 주문 시점에 잡아둘 것이 없고, 같은 쿠폰이 두 주문에 쓰이는 것은 결제 시점의 조건부 UPDATE(WHERE status='ISSUED')가 함께 막는다. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
+    order_id         BIGINT      NULL, -- 사용된 주문 FK(nullable)
+    status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
     issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
     used_at          DATETIME    NULL, -- 쿠폰 사용 시각(서버 애플리케이션이 기록)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -633,7 +633,7 @@ CREATE TABLE member_coupon (
      OR (coupon_campaign_id IS NOT NULL AND coupon_campaign_option_id IS NOT NULL)),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_mc_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED','CANCELED')),
+    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
     CONSTRAINT chk_mc_order CHECK ( -- 사용된 것만 주문을 갖는다
         (status =  'USED' AND order_id IS NOT NULL)
      OR (status <> 'USED' AND order_id IS NULL)),
