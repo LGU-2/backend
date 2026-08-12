@@ -594,24 +594,27 @@ CREATE TABLE coupon_campaign (
     CONSTRAINT chk_campaign_issue_period CHECK (issue_end_at IS NULL OR issue_end_at >= issue_start_at)
 ); -- 선착순 발급 캠페인(한정 수량/오픈 시각. 일반 쿠폰과 분리)
 
-CREATE TABLE coupon_campaign_product (
-    coupon_campaign_product_id BIGINT NOT NULL AUTO_INCREMENT, -- PK
+CREATE TABLE coupon_campaign_option (
+    coupon_campaign_option_id BIGINT NOT NULL AUTO_INCREMENT, -- PK
     coupon_campaign_id BIGINT      NOT NULL, -- 캠페인 FK
-    product_id         BIGINT      NOT NULL, -- 대상 상품 FK(기획 1: 소비기한 임박/소진율 저조 선정 상품)
-    issuable_qty       INT         NOT NULL, -- 상품별 발급 가능 수량(임박 로트 잔량 기준)
+    product_option_id  BIGINT      NOT NULL, -- 대상 옵션 FK(기획 1: 소비기한 임박/소진율 저조 선정). 상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있기 때문이다. 상품 단위로 두면 1kg만 임박했는데 200g에도 쿠폰이 먹혀 임박 재고가 안 빠진다
+    issuable_qty       INT         NOT NULL, -- 이 옵션에 발급 가능한 수량(임박 로트 잔량 기준)
+    issued_quantity    INT         NOT NULL DEFAULT 0, -- 이 옵션에서 점유된 슬롯 수(주문 시 예약 증가, 결제 취소/만료 시 감소). coupon_campaign.issued_quantity 가 캠페인 전체 상한이라면 이것은 옵션별 상한이며 둘 다 조건부 UPDATE 로 다툰다
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    PRIMARY KEY (coupon_campaign_product_id),
-    UNIQUE KEY uk_ccp_campaign_product (coupon_campaign_id, product_id), -- 캠페인당 상품 1행
-    CONSTRAINT fk_ccp_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
-    CONSTRAINT fk_ccp_product FOREIGN KEY (product_id) REFERENCES product (product_id),
-    CONSTRAINT chk_ccp_qty CHECK (issuable_qty >= 0)
-); -- 선착순 캠페인 대상 상품(한 캠페인이 여러 상품 대상, 사용자는 그 중 하나에 쓰는 쿠폰. 상품별 발급 가능 수량 보유)
+    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    PRIMARY KEY (coupon_campaign_option_id),
+    UNIQUE KEY uk_cco_campaign_option (coupon_campaign_id, product_option_id), -- 캠페인당 옵션 1행
+    CONSTRAINT fk_cco_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
+    CONSTRAINT fk_cco_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
+    CONSTRAINT chk_cco_qty CHECK (issuable_qty >= 0 AND issued_quantity >= 0 AND issued_quantity <= issuable_qty)
+); -- 선착순 캠페인 대상 옵션(한 캠페인이 여러 옵션 대상, 사용자는 그중 하나에 쓰는 쿠폰. 선정 근거인 daily_sales 와 stock_lot 이 모두 옵션 단위라 같은 단위로 맞췄다)
 
 CREATE TABLE member_coupon (
     member_coupon_id BIGINT      NOT NULL AUTO_INCREMENT, -- member_coupon PK
     coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
-    coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL)
+    coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL). coupon_campaign_option_id 로 유도할 수 있지만 uk_mc_campaign_member 가 이 컬럼을 필요로 해서 함께 둔다
+    coupon_campaign_option_id BIGINT NULL, -- 선착순 발급이면 어느 대상 옵션에 대한 발급인지. 이게 없으면 coupon_campaign_option.issuable_qty 를 소진 판정에 쓸 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 옵션이 coupon_campaign_id 의 대상인지 앱이 확인한다
     order_id         BIGINT      NULL, -- 예약/사용 대상 주문 FK. RESERVED 부터 채운다. 이게 없으면 결제가 실패했을 때 어느 예약을 풀지 찾을 수 없다. DB가 못 막는 조합이다(DI-3-05). 이 주문이 member_id 의 주문인지 앱이 확인한다
     status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/RESERVED 예약/USED 사용/EXPIRED 만료/CANCELED 취소). RESERVED: 쿠폰 다운로드 후 결제 시점 기준 선착순이므로, 주문 시점에 선착순 슬롯을 예약해두고 결제 시점에 차감 확정하기 위해 필요. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
     issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
@@ -622,6 +625,10 @@ CREATE TABLE member_coupon (
     UNIQUE KEY uk_mc_campaign_member (coupon_campaign_id, member_id), -- 선착순 1인 1매(campaign별). 일반 발급은 campaign_id=NULL이라 미적용
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
+    CONSTRAINT fk_mc_campaign_option FOREIGN KEY (coupon_campaign_option_id) REFERENCES coupon_campaign_option (coupon_campaign_option_id),
+    CONSTRAINT chk_mc_campaign CHECK ( -- 선착순 발급이면 캠페인과 대상 옵션이 함께 있고, 일반 발급이면 둘 다 없다
+        (coupon_campaign_id IS NULL     AND coupon_campaign_option_id IS NULL)
+     OR (coupon_campaign_id IS NOT NULL AND coupon_campaign_option_id IS NOT NULL)),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_mc_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','RESERVED','USED','EXPIRED','CANCELED')),
