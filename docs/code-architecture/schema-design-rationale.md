@@ -94,6 +94,18 @@ UNIQUE KEY uk_review_orderitem (order_item_id)   -- 지운 리뷰의 주문 상�
 `product_code` 는 자동 생성 코드라 재사용할 이유가 없고, 리뷰는 수정으로 정정하면 된다.
 **잃는 것이 거의 없어서 트릭을 쓸 값이 없었다.**
 
+### 일부러 걸지 않은 유일성
+
+`product_image` 의 `(product_id, sort_order)` 에는 UNIQUE 를 걸지 않는다.
+
+**재정렬의 중간 상태가 항상 위반이 되기 때문이다.** `A:0 B:1 C:2` 에서 `C` 를 맨 앞으로 옮기려면
+`C` 를 `0` 으로 바꿔야 하는데 그 순간 `A:0 C:0` 이 된다. 임시값이나 간격 저장(10, 20, 30)으로 우회할 수 있지만
+순서 변경이 흔한 목록에서 그 복잡도를 지불할 이유가 없다.
+
+대신 **결정적 순서는 타이브레이커로 얻는다.** 조회 정렬의 마지막 키가 `product_image_id` 인 이유가 그것이다.
+값은 확정할 때 서버가 `MAX(sort_order) + 1` 로 정한다. 컬럼 기본값이 `0` 이라 앱이 안 넣으면 전부 `0` 이 되어
+실질 정렬이 올린 순서로 떨어지고 컬럼이 무의미해진다.
+
 ### 검토했다가 안 쓴 방법
 
 * **함수 인덱스** (`UNIQUE KEY uk_... ((CASE WHEN ...)))`, MySQL 8.0.13+)
@@ -154,6 +166,26 @@ CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount)
 `refund` 도 없다. 돌려줄 돈이 없다는 것이 사실이기 때문이다.
 
 **대가는 조회가 갈린다는 것이다.** 결제 여부를 묻는 조회에 `INNER JOIN payment` 를 쓰면 그런 주문이 결과에서 사라진다.
+
+### 결제 콜백의 방어는 둘로 나뉜다
+
+`payment.pg_tid` 는 결제 요청 전에 발급되지 않아 `NULL` 이다. UNIQUE 와 `NULL` 여러 개 허용이 맞물려
+발급 전 행이 몇이든 충돌하지 않고, 값이 붙은 것끼리만 유일해진다.
+
+**UNIQUE 가 막는 것과 중복 콜백을 막는 것이 다르다.**
+
+```
+UNIQUE (pg_tid)   한 PG 거래가 두 주문에 붙는 것
+                    남의 거래번호를 자기 주문에 실어 보내는 경우
+
+조건부 UPDATE     같은 콜백이 두 번 오는 것
+                    UPDATE ... WHERE payment_id = ? AND status = 'PENDING'
+                    affected rows 0 이면 이미 처리됐다 (DI-2-01)
+```
+
+콜백을 두 번 받는 것은 같은 행을 두 번 `UPDATE` 하는 일이라 UNIQUE 가 막지 못한다. 둘 다 필요하다.
+
+`chk_payment_pg_tid` 가 `status='PAID'` 인 행에 거래번호를 강제한다. 모든 결제 수단이 PG 를 타므로 예외가 없다.
 
 ### 무통장입금을 두지 않는다
 
@@ -258,6 +290,12 @@ EXPIRE    -qty
 재고를 옮기지 않고 예약이 확정으로 넘어간 사실만 남긴다. `movement_type` 별로 `qty_after` 를 검사하려면
 이전 행을 봐야 해서 CHECK 로는 막을 수 없다.
 
+### 원장은 같은 트랜잭션에서 함께 쓴다
+
+`stock_movement` 는 `available_qty` 를 바꾸는 **모든** 연산과 같은 트랜잭션 안에서 함께 `INSERT` 한다.
+따로 쓰면 재고와 이력이 어긋나고, 어긋난 뒤에는 어느 쪽이 맞는지 판단할 근거가 사라진다.
+`stock_allocation` 은 예약 상태를, `stock_disposal` 은 폐기 상세를 맡고, 이 표는 변동 자체를 시간순으로 모으는 통합 창구다.
+
 ### 반품은 원래 로트로 되돌린다
 
 소비기한이 로트에 달려 있어 다른 로트에 넣으면 기한을 잃는다.
@@ -328,6 +366,11 @@ CONSTRAINT chk_payment_paid_at CHECK (
 
 시각 순서를 보는 CHECK 는 있는데 **상태와 시각의 짝은 없던** 비대칭을 메운 것이다.
 `payment.CANCELED` 만 예외인데, 결제 전 취소와 결제 후 취소가 모두 정상이라 한쪽으로 묶을 수 없다.
+
+`member.refresh_token_hash` 와 `refresh_token_expires_at` 도 같은 형태다.
+해시만 남고 만료가 `NULL` 이면 영구 토큰이 된다. 평문을 저장하지 않는 것은 유출이 그대로 계정 탈취가 되기 때문이고,
+고엔트로피 난수라 bcrypt 가 아니라 단순 해시로 충분하다. `NULL` 은 로그아웃 상태이며,
+액세스 토큰이 stateless 라 **서버가 세션을 끊을 수 있는 유일한 지점**이 이 컬럼이다.
 
 `member` 의 탈퇴도 같은 형태다. `status='WITHDRAWN'` 과 `deleted_at` 이 어긋나면
 `active_provider_key` 가 잘못 계산되어 탈퇴자가 재가입을 못 하거나 활성 회원이 중복 가입된다.
