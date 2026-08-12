@@ -221,7 +221,9 @@ CREATE TABLE coupon (
     CONSTRAINT chk_coupon_quantity CHECK (issued_quantity >= 0 AND (total_quantity IS NULL OR (total_quantity > 0 AND issued_quantity <= total_quantity))),
     CONSTRAINT chk_coupon_issue_period CHECK (issue_start_at IS NULL OR issue_end_at IS NULL OR issue_end_at >= issue_start_at),
     CONSTRAINT chk_coupon_valid_period CHECK (valid_from <= valid_to)
-); -- 쿠폰 정의(발급 수량과 기간을 여기서 함께 갖는다. total_quantity 가 있으면 선착순이다)
+); /* 쿠폰 정의. 발급할 때 쓰는 틀이고, 발급된 쿠폰은 member_coupon 이 조건을 복사해 갖는다.
+      그래서 이 표를 고쳐도 이미 발급된 것에는 영향이 없고, 이후 발급분부터 새 조건이 적용된다.
+      total_quantity 가 있으면 선착순이다 */
 
 CREATE TABLE coupon_product_option (
     coupon_product_option_id BIGINT NOT NULL AUTO_INCREMENT, -- coupon_product_option PK
@@ -232,17 +234,29 @@ CREATE TABLE coupon_product_option (
     UNIQUE KEY uk_cpo_coupon_option (coupon_id, product_option_id), -- 쿠폰당 옵션 1행
     CONSTRAINT fk_cpo_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_cpo_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id)
-); -- 상품 쿠폰의 대상 옵션(행이 하나도 없으면 대상 제한이 없는 쿠폰이다. 상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있어, 상품으로 지정하면 임박하지 않은 옵션까지 할인되기 때문이다. 장바구니 쿠폰(scope='ORDER')에는 행이 있으면 안 되며 두 표에 걸친 조건이라 앱이 확인한다(DI-3-05))
+); /* 상품 쿠폰의 대상 옵션(행이 하나도 없으면 대상 제한이 없는 쿠폰이다).
+      상품이 아니라 옵션인 이유는 소비기한이 로트 단위이고 로트가 옵션에 달려 있어, 상품으로 지정하면 임박하지 않은 옵션까지 할인되기 때문이다.
+      member_coupon 이 다른 조건은 복사해 가지만 이 목록은 복사하지 않는다.
+      임박 재고가 팔리면 대상에서 빼는 식으로 운영 중에 조정할 수 있어야 하므로, 사용 시점의 현재 목록을 본다.
+      장바구니 쿠폰(scope='ORDER')에는 행이 있으면 안 되며 두 표에 걸친 조건이라 앱이 확인한다(DI-3-05) */
 
 CREATE TABLE member_coupon (
-    member_coupon_id BIGINT      NOT NULL AUTO_INCREMENT, -- member_coupon PK
-    coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
-    member_id        BIGINT      NOT NULL, -- 보유 회원 FK
-    status           VARCHAR(30) NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
-    issued_at        DATETIME(6) NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
-    used_at          DATETIME(6) NULL, -- 사용 시각(서버 애플리케이션이 기록)
-    created_at       DATETIME(6) NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at       DATETIME(6) NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    member_coupon_id    BIGINT       NOT NULL AUTO_INCREMENT, -- member_coupon PK
+    coupon_id           BIGINT       NOT NULL, -- 발급 틀 FK. 대상 옵션을 찾을 때와 어느 틀에서 나왔는지 추적할 때만 쓴다. 아래 조건 값들은 이 참조를 따라가지 않는다
+    member_id           BIGINT       NOT NULL, -- 보유 회원 FK
+    coupon_name         VARCHAR(100) NOT NULL, -- 발급 시점 쿠폰명
+    scope               VARCHAR(20)  NOT NULL, -- 발급 시점 적용 범위(ORDER/ITEM)
+    discount_type       VARCHAR(30)  NOT NULL, -- 발급 시점 할인 유형(AMOUNT/RATE)
+    discount_value      INT          NOT NULL, -- 발급 시점 할인 값
+    max_discount_amount INT          NULL, -- 발급 시점 정률 할인 상한
+    min_order_amount    INT          NOT NULL DEFAULT 0, -- 발급 시점 사용 조건
+    valid_from          DATE         NOT NULL, -- 발급 시점 사용 유효 시작일
+    valid_to            DATE         NOT NULL, -- 발급 시점 사용 유효 종료일
+    status              VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
+    issued_at           DATETIME(6)  NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
+    used_at             DATETIME(6)  NULL, -- 사용 시각(서버 애플리케이션이 기록)
+    created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_id),
     UNIQUE KEY uk_mc_coupon_member (coupon_id, member_id), -- 쿠폰당 1인 1매
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
@@ -250,8 +264,22 @@ CREATE TABLE member_coupon (
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
     CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
         (status =  'USED' AND used_at IS NOT NULL)
-     OR (status <> 'USED' AND used_at IS NULL))
-); -- 발급 쿠폰(쿠폰함). 어느 주문이나 라인에 쓰였는지는 orders.member_coupon_id 와 order_item.member_coupon_id 에서 역참조한다. 쿠폰을 주문보다 앞 장에 두는 이유가 그 참조다
+     OR (status <> 'USED' AND used_at IS NULL)),
+    CONSTRAINT chk_mc_scope CHECK (scope IN ('ORDER','ITEM')),
+    CONSTRAINT chk_mc_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
+    CONSTRAINT chk_mc_values CHECK (discount_value > 0 AND min_order_amount >= 0),
+    CONSTRAINT chk_mc_rate CHECK ( -- 정률은 100%를 넘을 수 없고 상한은 정률에만 붙는다
+        (discount_type = 'RATE'   AND discount_value <= 100)
+     OR (discount_type = 'AMOUNT' AND max_discount_amount IS NULL)),
+    CONSTRAINT chk_mc_max_discount CHECK (max_discount_amount IS NULL OR max_discount_amount > 0),
+    CONSTRAINT chk_mc_valid_period CHECK (valid_from <= valid_to)
+); /* 발급 쿠폰(쿠폰함). 발급 시점에 coupon 의 조건을 복사해 온다.
+      복사하는 이유는 coupon 이 살아 있는 표라 관리자가 고칠 수 있기 때문이다.
+      참조만 두면 이미 받아 둔 쿠폰의 이름과 할인액이 나중에 바뀌고, 과거 주문 내역의 표시도 함께 바뀐다.
+      order_item 이 name_snapshot 과 unit_price 를 남기는 것과 같은 이유이며, coupon 은 발급 틀이 되고 이 표가 실제 쿠폰이 된다.
+      대상 옵션(coupon_product_option)은 복사하지 않는다. 임박 재고가 팔리면 대상에서 빼는 식으로 운영이 조정할 수 있어야 하기 때문이다.
+      어느 주문이나 라인에 쓰였는지는 orders.member_coupon_id 와 order_item.member_coupon_id 에서 역참조한다.
+      쿠폰을 주문보다 앞 장에 두는 이유가 그 참조다 */
 
 -- =====================================================================
 -- 4. 장바구니
