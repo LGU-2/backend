@@ -321,7 +321,7 @@ CREATE TABLE stock_movement (
 
 CREATE TABLE daily_sales (
     daily_sales_id  BIGINT       NOT NULL AUTO_INCREMENT, -- daily_sales PK
-    product_id      BIGINT       NOT NULL, -- 집계 대상 상품 FK
+    product_option_id BIGINT     NOT NULL, -- 집계 대상 옵션 FK. 재고(stock_lot)와 소비기한이 옵션 단위라 집계도 같은 단위여야 한다. 상품 단위 수치는 옵션을 합산해 얻는다(반대 방향은 불가능하다)
     stat_date       DATE         NOT NULL, -- 집계 일자
     opening_stock   INT          NOT NULL DEFAULT 0, -- 기초 재고(그날 시작 시점 가용재고 스냅샷). 소진율 분모
     inbound_qty     INT          NOT NULL DEFAULT 0, -- 당일 입고 수량. 소진율 분모
@@ -332,10 +332,10 @@ CREATE TABLE daily_sales (
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (daily_sales_id),
-    UNIQUE KEY uk_daily_product_date (product_id, stat_date), -- 상품+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
-    CONSTRAINT fk_daily_product FOREIGN KEY (product_id) REFERENCES product (product_id),
+    UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
+    CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND closing_stock >= 0)
-); -- 상품 판매 집계(일 1회 배치가 결제완료 주문 기준으로 상품별/일자별 집계. 소진율 산출과 선착순 캠페인 대상 선정(소비기한 임박+판매율 저조)의 원천. 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합))
+); -- 판매 집계(일 1회 배치가 결제완료 주문 기준으로 옵션별/일자별 집계. 소진율 산출과 선착순 캠페인 대상 선정(소비기한 임박+판매율 저조)의 원천. 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합). 옵션 단위인 이유는 200g와 1kg의 수량을 더한 값으로는 소진율이 뜻을 잃기 때문이다)
 
 CREATE TABLE order_status_history (
     order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
@@ -468,7 +468,7 @@ CREATE TABLE refund (
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
-    order_id      BIGINT       NOT NULL, -- 최초 출고 전용, order에 귀속
+    order_id      BIGINT       NOT NULL, -- 주문 FK. 유일성을 걸지 않아 한 주문이 여러 번 나눠 나갈 수 있다(분할 배송)
     carrier       VARCHAR(50)  NULL, -- 택배사
     tracking_no   VARCHAR(50)  NULL, -- 송장번호
     status        VARCHAR(30)  NOT NULL DEFAULT 'PREPARING', -- 배송 상태(PREPARING 준비/SHIPPING 배송중/DELIVERED 배송완료)
@@ -484,7 +484,7 @@ CREATE TABLE shipment (
         (status = 'PREPARING' AND shipped_at IS NULL     AND delivered_at IS NULL)
      OR (status = 'SHIPPING'  AND shipped_at IS NOT NULL AND delivered_at IS NULL)
      OR (status = 'DELIVERED' AND shipped_at IS NOT NULL AND delivered_at IS NOT NULL))
-); -- 배송(최초 출고 전용, order에 귀속. 회수/재배송은 claim이 흡수)
+); -- 배송(출고 전용. 분할 배송을 허용하므로 주문당 여러 행이 가능하다. 회수/재배송은 claim이 흡수)
 
 CREATE TABLE shipment_photo (
     shipment_photo_id BIGINT       NOT NULL AUTO_INCREMENT, -- shipment_photo PK
@@ -610,7 +610,7 @@ CREATE TABLE member_coupon (
     coupon_id        BIGINT      NOT NULL, -- 쿠폰 정의 FK
     member_id        BIGINT      NOT NULL, -- 보유 회원 FK
     coupon_campaign_id BIGINT    NULL, -- 선착순 발급이면 캠페인 참조(일반 발급은 NULL)
-    used_order_id    BIGINT      NULL, -- 사용된 주문 FK(nullable)
+    order_id         BIGINT      NULL, -- 예약/사용 대상 주문 FK. RESERVED 부터 채운다. 이게 없으면 결제가 실패했을 때 어느 예약을 풀지 찾을 수 없다
     status           VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/RESERVED 예약/USED 사용/EXPIRED 만료/CANCELED 취소). RESERVED: 쿠폰 다운로드 후 결제 시점 기준 선착순이므로, 주문 시점에 선착순 슬롯을 예약해두고 결제 시점에 차감 확정하기 위해 필요. CANCELED: 봇 어뷰징 발급 취소, 재고 오류, 기획 오류 등으로 발급을 무효화하기 위해 필요
     issued_at        DATETIME    NOT NULL, -- 쿠폰 발급 시각(서버 애플리케이션이 기록)
     used_at          DATETIME    NULL, -- 쿠폰 사용 시각(서버 애플리케이션이 기록)
@@ -621,11 +621,14 @@ CREATE TABLE member_coupon (
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_campaign FOREIGN KEY (coupon_campaign_id) REFERENCES coupon_campaign (coupon_campaign_id),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT fk_mc_order FOREIGN KEY (used_order_id) REFERENCES orders (order_id),
+    CONSTRAINT fk_mc_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','RESERVED','USED','EXPIRED','CANCELED')),
-    CONSTRAINT chk_mc_used CHECK ( -- 사용된 쿠폰만 사용 주문과 사용 시각을 갖는다. 예약(RESERVED)은 아직 사용이 아니다
-        (status =  'USED' AND used_order_id IS NOT NULL AND used_at IS NOT NULL)
-     OR (status <> 'USED' AND used_order_id IS NULL     AND used_at IS NULL))
+    CONSTRAINT chk_mc_order CHECK ( -- 예약과 사용만 주문을 갖는다. 발급/만료/취소 상태에 주문이 남아 있으면 해제가 안 끝난 것이다
+        (status IN     ('RESERVED','USED') AND order_id IS NOT NULL)
+     OR (status NOT IN ('RESERVED','USED') AND order_id IS NULL)),
+    CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다. 예약은 아직 사용이 아니다
+        (status =  'USED' AND used_at IS NOT NULL)
+     OR (status <> 'USED' AND used_at IS NULL))
 ); -- 발급 쿠폰(쿠폰함. 선착순이면 coupon_campaign_id 참조)
 
 CREATE TABLE point_history (
@@ -647,21 +650,24 @@ CREATE TABLE point_history (
 -- 8. 공통 (알림 / 감사 로그)
 -- =====================================================================
 
-CREATE TABLE notification (
-    notification_id BIGINT       NOT NULL AUTO_INCREMENT, -- notification PK
-    member_id       BIGINT       NOT NULL, -- 수신 회원 FK
-    channel         VARCHAR(30)  NOT NULL, -- 발송 채널(EMAIL/SMS/APP)
-    type            VARCHAR(30)  NOT NULL, -- 알림 유형(QNA_ANSWER/ORDER_STATUS/SHIPPING/EXPIRY)
-    content         TEXT         NOT NULL, -- 알림 내용
-    status          VARCHAR(30)  NOT NULL DEFAULT 'SENT', -- 발송 상태(SENT/FAILED/RETRY)
-    created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (notification_id),
-    CONSTRAINT chk_noti_channel CHECK (channel IN ('EMAIL','SMS','APP')),
-    CONSTRAINT chk_noti_type CHECK (type IN ('QNA_ANSWER','ORDER_STATUS','SHIPPING','EXPIRY')),
-    CONSTRAINT chk_noti_status CHECK (status IN ('SENT','FAILED','RETRY')),
-    CONSTRAINT fk_noti_member FOREIGN KEY (member_id) REFERENCES member (member_id)
-); -- 알림
+-- 알림 테이블은 아직 쓰지 않는다. 발송 대상 리소스(주문, QnA 등)를 가리키는 참조가 없어
+-- 알림을 눌러 이동할 곳을 찾을 수 없고, 그 참조 형태는 알림 기능을 설계할 때 정해진다.
+-- 지금 만들어 두면 쓰이지 않는 채로 형태가 굳는다. 필요해질 때 추가 마이그레이션으로 넣는다.
+-- CREATE TABLE notification (
+--     notification_id BIGINT       NOT NULL AUTO_INCREMENT, -- notification PK
+--     member_id       BIGINT       NOT NULL, -- 수신 회원 FK
+--     channel         VARCHAR(30)  NOT NULL, -- 발송 채널(EMAIL/SMS/APP)
+--     type            VARCHAR(30)  NOT NULL, -- 알림 유형(QNA_ANSWER/ORDER_STATUS/SHIPPING/EXPIRY)
+--     content         TEXT         NOT NULL, -- 알림 내용
+--     status          VARCHAR(30)  NOT NULL DEFAULT 'SENT', -- 발송 상태(SENT/FAILED/RETRY)
+--     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+--     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+--     PRIMARY KEY (notification_id),
+--     CONSTRAINT chk_noti_channel CHECK (channel IN ('EMAIL','SMS','APP')),
+--     CONSTRAINT chk_noti_type CHECK (type IN ('QNA_ANSWER','ORDER_STATUS','SHIPPING','EXPIRY')),
+--     CONSTRAINT chk_noti_status CHECK (status IN ('SENT','FAILED','RETRY')),
+--     CONSTRAINT fk_noti_member FOREIGN KEY (member_id) REFERENCES member (member_id)
+-- ); -- 알림
 
 CREATE TABLE audit_log (
     audit_log_id          BIGINT       NOT NULL AUTO_INCREMENT, -- audit_log PK
