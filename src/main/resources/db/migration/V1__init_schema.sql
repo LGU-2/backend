@@ -319,7 +319,7 @@ CREATE TABLE orders (
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
     product_amount  INT          NOT NULL, -- 총상품금액
-    discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). 라인별 배분 결과인 order_item.discount_amount 의 합과 같아야 한다(DI-3-06)
+    discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). coupon_discount + SUM(order_item.coupon_discount) 와 같고, 라인별 배분 결과인 SUM(order_item.discount_amount) 와도 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 컬럼이 하나라 주문당 1장이 구조적으로 보장된다. 주문을 취소하면 NULL 로 비워 쿠폰을 되돌린다(그래야 아래 UNIQUE 가 풀린다). 결제 때 서버가 이 값으로 확정하므로 결제 요청이 쿠폰을 보내지 않는다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
@@ -354,7 +354,22 @@ CREATE TABLE order_item (
     qty             INT          NOT NULL, -- 주문 수량
     member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다. 이 라인의 옵션이 coupon_product_option 에 들어 있는지는 앱이 확인한다(DI-3-05)
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
-    discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액(상품 쿠폰 + 주문 전체 할인에서 이 라인 몫). 주문 시점에 배분해 확정한다. 부분 반품 환불액을 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낼 수 있고, 이게 없으면 어느 라인이 할인받았는지 몰라 안분할 수밖에 없어 상품 쿠폰에서 금액이 틀어진다
+    discount_amount INT          NOT NULL DEFAULT 0, /* 이 라인에 배분된 할인 총액(상품 쿠폰분 + 장바구니 쿠폰에서 이 라인 몫). 주문 시점에 배분해 확정한다.
+
+                                                        배분 절차
+                                                          1) 상품 쿠폰을 각 라인에 적용해 coupon_discount 를 확정한다
+                                                          2) 라인 잔액 = unit_price * qty - coupon_discount
+                                                          3) 장바구니 쿠폰을 라인 잔액 비례로 안분한다. 몫 = 장바구니 쿠폰액 * 라인 잔액 / 잔액 합계
+                                                          4) discount_amount = coupon_discount + 안분액
+                                                          5) 나누어떨어지지 않는 잔차는 잔액이 가장 큰 라인에 더해 SUM 이 정확히 맞게 한다
+
+                                                        정가가 아니라 잔액으로 비율을 잡는 이유는 이미 깎인 만큼은 더 깎을 수 없기 때문이다.
+                                                        정가 비례로 하면 상품 쿠폰이 큰 라인에서 몫이 잔액을 넘어 아래 CHECK 를 깬다.
+                                                        10,000원 라인에 상품 쿠폰 9,500원이 붙은 경우, 정가 비례는 1,667원을 더 배정해 할인이 11,167원이 된다.
+                                                        잔액 비례는 잔액 500원에 비례해 122원만 배정하므로 넘칠 수가 없다.
+
+                                                        부분 반품 환불액은 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낸다.
+                                                        이 컬럼이 없으면 어느 라인이 할인받았는지 몰라 전 라인에 안분할 수밖에 없고, 특정 라인만 할인한 경우 금액이 틀어진다 */
     item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
