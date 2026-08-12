@@ -230,7 +230,7 @@ CREATE TABLE orders (
     product_amount  INT          NOT NULL, -- 총상품금액
     discount_amount INT          NOT NULL DEFAULT 0, -- 쿠폰+등급+포인트
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
-    total_amount    INT          NOT NULL, -- 최종결제금액
+    total_amount    INT          NOT NULL, -- 최종결제금액. 전액 쿠폰/포인트면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
     earned_point    INT          NOT NULL DEFAULT 0, -- 적립예정포인트
     ship_recipient  VARCHAR(50)  NOT NULL, -- 배송지 스냅샷
     ship_phone      VARCHAR(20)  NOT NULL, -- 연락처(원문, 암호화 추후 적용)
@@ -352,10 +352,10 @@ CREATE TABLE order_status_history (
 CREATE TABLE payment (
     payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
     order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
-    method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD/TRANSFER/EASY_PAY)
+    method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD 카드/TRANSFER 무통장입금, PG 가상계좌를 쓴다/EASY_PAY 간편결제)
     amount          INT          NOT NULL, -- 결제 금액
     status          VARCHAR(30)  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
-    pg_tid          VARCHAR(100) NULL, -- PG 거래번호(중복 콜백 멱등성 보장용)
+    pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 발급되지 않아 NULL 이다. UNIQUE 가 막는 것은 한 PG 거래가 두 주문에 붙는 것이며(남의 거래번호를 자기 주문에 실어 보내는 경우), 중복 콜백은 이것이 아니라 status='PENDING' 조건부 UPDATE 가 막는다(DI-2-01)
     payment_due_dt  DATETIME     NULL, -- 입금기한 = 주문+24h (무통장입금만 사용, 그 외 NULL)
     paid_at         DATETIME     NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -366,12 +366,14 @@ CREATE TABLE payment (
     UNIQUE KEY uk_payment_order (order_id),
     UNIQUE KEY uk_payment_pg_tid (pg_tid),
     CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT chk_payment_amount CHECK (amount > 0),
+    CONSTRAINT chk_payment_amount CHECK (amount > 0), -- 0원 주문은 이 행을 만들지 않으므로 0을 허용하지 않는다
+    CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 무통장입금도 PG 가상계좌를 쓰므로 예외가 없다
+        status <> 'PAID' OR pg_tid IS NOT NULL),
     CONSTRAINT chk_payment_paid_at CHECK ( -- 상태와 완료 시각이 따로 놀지 않도록. CANCELED 는 결제 전 취소와 결제 후 취소가 모두 정상이라 제외한다
         (status IN ('PENDING','FAILED') AND paid_at IS NULL)
      OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
      OR  status = 'CANCELED')
-); -- 결제
+); -- 결제(주문당 최대 1건. 전액 쿠폰/포인트로 total_amount 가 0인 주문은 PG를 타지 않아 이 행이 없다. 결제 여부를 묻는 조회에 INNER JOIN 을 쓰면 그런 주문이 결과에서 사라진다)
 
 -- =====================================================================
 -- 5. 클레임 (취소 / 반품 / 교환)
@@ -464,7 +466,7 @@ CREATE TABLE refund (
     CONSTRAINT chk_refund_refunded_at CHECK ( -- 완료된 환불은 완료 시각을 갖는다
         (status = 'PENDING' AND refunded_at IS NULL)
      OR (status = 'DONE'    AND refunded_at IS NOT NULL))
-); -- 환불
+); -- 환불(돈에 대한 것만 기록한다. total_amount 가 0인 주문은 payment 행이 없어 이 행도 없으며, 쿠폰과 포인트 복원은 member_coupon.status 와 point_history 가 맡는다)
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
