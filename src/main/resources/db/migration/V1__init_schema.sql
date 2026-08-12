@@ -354,28 +354,27 @@ CREATE TABLE order_status_history (
 CREATE TABLE payment (
     payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
     order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
-    method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD 카드/TRANSFER 무통장입금, PG 가상계좌를 쓴다/EASY_PAY 간편결제)
+    method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD 카드/EASY_PAY 간편결제). 무통장입금은 두지 않는다. 입금까지 최대 24시간 재고를 붙잡는데 신선식품은 그동안 소비기한이 줄어들고, 그 로트를 살 수 있었던 다른 손님을 막는다
     amount          INT          NOT NULL, -- 결제 금액
     status          VARCHAR(30)  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
     pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 발급되지 않아 NULL 이다. UNIQUE 가 막는 것은 한 PG 거래가 두 주문에 붙는 것이며(남의 거래번호를 자기 주문에 실어 보내는 경우), 중복 콜백은 이것이 아니라 status='PENDING' 조건부 UPDATE 가 막는다(DI-2-01)
-    payment_due_dt  DATETIME     NULL, -- 입금기한 = 주문+24h (무통장입금만 사용, 그 외 NULL)
     paid_at         DATETIME     NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (payment_id),
-    CONSTRAINT chk_payment_method CHECK (method IN ('CARD','TRANSFER','EASY_PAY')),
+    CONSTRAINT chk_payment_method CHECK (method IN ('CARD','EASY_PAY')),
     CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
     UNIQUE KEY uk_payment_order (order_id),
     UNIQUE KEY uk_payment_pg_tid (pg_tid),
     CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT chk_payment_amount CHECK (amount > 0), -- 0원 주문은 이 행을 만들지 않으므로 0을 허용하지 않는다
-    CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 무통장입금도 PG 가상계좌를 쓰므로 예외가 없다
+    CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 모든 결제 수단이 PG를 타므로 예외가 없다
         status <> 'PAID' OR pg_tid IS NOT NULL),
     CONSTRAINT chk_payment_paid_at CHECK ( -- 상태와 완료 시각이 따로 놀지 않도록. CANCELED 는 결제 전 취소와 결제 후 취소가 모두 정상이라 제외한다
         (status IN ('PENDING','FAILED') AND paid_at IS NULL)
      OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
      OR  status = 'CANCELED')
-); -- 결제(주문당 최대 1건. 전액 쿠폰/포인트로 total_amount 가 0인 주문은 PG를 타지 않아 이 행이 없다. 결제 여부를 묻는 조회에 INNER JOIN 을 쓰면 그런 주문이 결과에서 사라진다)
+); -- 결제(주문당 최대 1건. 전액 쿠폰/포인트로 total_amount 가 0인 주문은 PG를 타지 않아 이 행이 없다. 결제 여부를 묻는 조회에 INNER JOIN 을 쓰면 그런 주문이 결과에서 사라진다. 즉시 결제만 받으므로 주문에서 결제까지의 구간이 짧고, 그동안 잡혀 있는 재고 예약(stock_allocation.RESERVED)의 해제 유예도 그만큼 짧게 잡을 수 있다)
 
 -- =====================================================================
 -- 5. 클레임 (취소 / 반품 / 교환)
