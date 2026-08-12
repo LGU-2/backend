@@ -153,7 +153,7 @@ CREATE TABLE product_image (
     upload_id        BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
     object_key       VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
     content_type     VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
-    byte_size        INT          NOT NULL, -- PENDING 이면 클라이언트가 신고한 크기(서명 조건에 넣은 값), CONFIRMED 면 HeadObject 로 잰 실측값(INF-11-10)
+    byte_size        INT          NULL, -- S3 가 실제로 잰 크기. 확정할 때 HeadObject 의 Content-Length 로 채운다(INF-11-10). NULL 은 아직 확인하지 않았다는 뜻이며 upload_status='PENDING' 과 짝이다. 클라이언트가 신고한 크기는 발급 때 상한과 비교하고 서명 조건에 넣을 뿐 저장하지 않는다
     upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출한다(INF-11-09)
     sort_order       INT          NOT NULL DEFAULT 0, -- 정렬 순서
     is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
@@ -164,7 +164,9 @@ CREATE TABLE product_image (
     UNIQUE KEY uk_product_image_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
     KEY idx_product_image_pending (upload_status, created_at), -- 미확정 행 스윕(조회 확정 대상 조회와 정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_product_image_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
-    CONSTRAINT chk_product_image_size CHECK (byte_size > 0),
+    CONSTRAINT chk_product_image_size CHECK ( -- 확정된 행만 크기를 갖는다. 0바이트도 막는다(S3 는 빈 본문 PUT 을 정상으로 받아들인다)
+        (upload_status = 'PENDING'   AND byte_size IS NULL)
+     OR (upload_status = 'CONFIRMED' AND byte_size > 0)),
     CONSTRAINT chk_product_image_main CHECK (is_main = FALSE OR upload_status = 'CONFIRMED'), -- 확정 전인 행이 대표가 되면 상품 목록에 깨진 이미지가 나간다
     CONSTRAINT fk_image_product FOREIGN KEY (product_id) REFERENCES product (product_id)
 ); -- 상품 이미지
@@ -404,7 +406,7 @@ CREATE TABLE claim_attachment (
     upload_id           BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). presigned 발급 때 서버가 만들어 클라이언트에 주고, 완료 통지에서 돌려받아 이 행을 찾는다. key 를 클라이언트에 주지 않기 위한 것이며(INF-11-04) 리소스 식별자가 아니다
     object_key          VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
     content_type        VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
-    byte_size           INT          NOT NULL, -- PENDING 이면 클라이언트가 신고한 크기(서명 조건에 넣은 값), CONFIRMED 면 HeadObject 로 잰 실측값(INF-11-10)
+    byte_size           INT          NULL, -- S3 가 실제로 잰 크기. 확정할 때 HeadObject 의 Content-Length 로 채운다(INF-11-10). NULL 은 아직 확인하지 않았다는 뜻이며 upload_status='PENDING' 과 짝이다. 클라이언트가 신고한 크기는 발급 때 상한과 비교하고 서명 조건에 넣을 뿐 저장하지 않는다
     upload_status       VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출하고(INF-11-09) PENDING 인 채로 남은 행은 정리 대상이다
     created_at          DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at          DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
@@ -413,7 +415,9 @@ CREATE TABLE claim_attachment (
     UNIQUE KEY uk_claim_attachment_key (object_key), -- 완료 통지를 두 번 받아도 같은 key 가 두 행이 되지 않는다
     KEY idx_claim_attachment_pending (upload_status, created_at), -- 미확정 행 스윕(정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_claim_attachment_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
-    CONSTRAINT chk_claim_attachment_size CHECK (byte_size > 0),
+    CONSTRAINT chk_claim_attachment_size CHECK ( -- 확정된 행만 크기를 갖는다. 0바이트도 막는다(S3 는 빈 본문 PUT 을 정상으로 받아들인다)
+        (upload_status = 'PENDING'   AND byte_size IS NULL)
+     OR (upload_status = 'CONFIRMED' AND byte_size > 0)),
     CONSTRAINT fk_claim_attachment_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id)
 ); -- 클레임 증빙 사진(파손, 오배송). 비공개다. 집 안이 배경으로 찍히므로 본인과 처리 담당 관리자만 본다
 
@@ -471,7 +475,7 @@ CREATE TABLE shipment_photo (
     upload_id         BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). claim_attachment 와 같은 용도다
     object_key        VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
     content_type      VARCHAR(100) NOT NULL, -- presigned 서명 조건에 넣은 값(INF-11-06)
-    byte_size         INT          NOT NULL, -- PENDING 이면 클라이언트가 신고한 크기(서명 조건에 넣은 값), CONFIRMED 면 HeadObject 로 잰 실측값(INF-11-10)
+    byte_size         INT          NULL, -- S3 가 실제로 잰 크기. 확정할 때 HeadObject 의 Content-Length 로 채운다(INF-11-10). NULL 은 아직 확인하지 않았다는 뜻이며 upload_status='PENDING' 과 짝이다. 클라이언트가 신고한 크기는 발급 때 상한과 비교하고 서명 조건에 넣을 뿐 저장하지 않는다
     upload_status     VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 객체 존재와 서명 조건 일치를 확인함(INF-11-10). 통지를 받은 것만으로는 확정하지 않는다. 조회는 CONFIRMED 만 노출하고(INF-11-09) PENDING 인 채로 남은 행은 정리 대상이다
     created_at        DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at        DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
@@ -480,7 +484,9 @@ CREATE TABLE shipment_photo (
     UNIQUE KEY uk_shipment_photo_key (object_key),
     KEY idx_shipment_photo_pending (upload_status, created_at), -- 미확정 행 스윕(정리 배치)이 풀스캔이 되지 않도록
     CONSTRAINT chk_shipment_photo_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
-    CONSTRAINT chk_shipment_photo_size CHECK (byte_size > 0),
+    CONSTRAINT chk_shipment_photo_size CHECK ( -- 확정된 행만 크기를 갖는다. 0바이트도 막는다(S3 는 빈 본문 PUT 을 정상으로 받아들인다)
+        (upload_status = 'PENDING'   AND byte_size IS NULL)
+     OR (upload_status = 'CONFIRMED' AND byte_size > 0)),
     CONSTRAINT fk_shipment_photo_shipment FOREIGN KEY (shipment_id) REFERENCES shipment (shipment_id)
 ); -- 문앞 배송 완료 사진. 비공개다. 현관과 도어락이 함께 찍혀 주거 형태가 드러나므로 수령인 본인만 본다
 
