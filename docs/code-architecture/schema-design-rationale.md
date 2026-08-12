@@ -495,13 +495,37 @@ UPDATE order_item SET item_status = 'RETURN_REQ'
 `stock_lot.available_qty`, `coupon.issued_quantity` 에 이어 세 번째이고, 각각 되돌리기 경로와 정합성 검사가 따라붙는다.
 **부분 수량 반품이 필요해지면 `claim_item.qty` 와 `order_item.claimed_qty` 를 추가만 하는 마이그레이션으로 넣는다.**
 
-남는 것은 하나다.
+남는 것은 둘이고 성질이 같다.
 
 | 위치 | 확인할 것 |
 |---|---|
-| `order_item.discount_amount` | 합이 `orders.discount_amount` 와 같은가 |
+| `orders.product_amount` | `SUM(order_item.unit_price * qty)` 와 같은가 |
+| `orders.discount_amount` | `SUM(order_item.discount_amount)` 와 같은가 |
 
-주문 생성 한 트랜잭션 안에서 함께 쓰이는 값이라 동시성 문제가 없고, 배분 계산이 맞는지만 확인하면 된다.
+**이 둘은 클레임 수량과 성질이 다르다.** 주문 생성 한 트랜잭션 안에서 `orders` 와 라인을 함께 쓰므로
+다투는 상대가 없다. **동시성 위험이 아니라 계산 버그**이고, 그래서 잠금도 카운터도 답이 아니다.
+
+구분해 두지 않으면 나중에 여기에도 카운터를 만들거나 잠금을 걸게 된다.
+
+증분으로 채울 수도 없다. `order_item` 이 `orders` 를 참조하므로 `orders` 가 먼저 들어가야 하고,
+`chk_order_total` 은 그 행이 들어가는 순간부터 성립해야 한다. **주문을 넣는 시점에 이미 합계를 알고 있어야 한다.**
+
+`product_amount` 를 없애 문제를 지울 수도 없다. 그러면 `chk_order_total` 이 사라져
+**관리자가 `total_amount` 만 고치는 것**도 못 막게 된다. 지금 그 CHECK 가 실제로 잡는 것이 부분 수정이다.
+
+정합성 검사(`DI-7-01`)가 쿼리 하나로 둘을 함께 본다.
+
+```sql
+SELECT o.order_id, o.product_amount, SUM(i.unit_price * i.qty) AS line_sum,
+       o.discount_amount, SUM(i.discount_amount) AS line_discount
+  FROM orders o
+  JOIN order_item i ON i.order_id = o.order_id
+ GROUP BY o.order_id, o.product_amount, o.discount_amount
+HAVING o.product_amount  <> SUM(i.unit_price * i.qty)
+    OR o.discount_amount <> SUM(i.discount_amount);
+```
+
+어긋난 주문이 나오면 그 주문을 만든 코드에 버그가 있다는 뜻이고, 동시성 때문이 아니라 재현과 수정이 쉽다.
 
 ### 조건부 유일성 중 앱으로 내린 것
 

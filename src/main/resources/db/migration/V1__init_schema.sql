@@ -333,7 +333,7 @@ CREATE TABLE orders (
     order_no        VARCHAR(30)  NOT NULL, -- 주문번호
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
-    product_amount  INT          NOT NULL, -- 총상품금액
+    product_amount  INT          NOT NULL, -- 총상품금액. SUM(order_item.unit_price * qty) 와 같아야 한다(DI-3-06)
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소하면 NULL 로 비워 되돌린다
     coupon_scope    VARCHAR(20)  NULL, -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ITEM 쿠폰을 이 자리에 넣지 못하게 한다
