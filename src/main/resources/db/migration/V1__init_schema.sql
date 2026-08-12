@@ -228,7 +228,10 @@ CREATE TABLE orders (
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
     product_amount  INT          NOT NULL, -- 총상품금액
-    discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액. 종류별 근거는 order_discount 에 있고 이 값은 적용중인 그 행들의 합이어야 한다(DI-3-06). 라인별 배분 결과는 order_item.discount_amount 에 있다
+    discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 포인트 + 등급 + 상품 쿠폰). 라인별 배분 결과인 order_item.discount_amount 의 합과 같아야 한다(DI-3-06). 등급 할인분은 따로 저장하지 않고 나머지를 뺀 값으로 유도한다
+    member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 컬럼이 하나라 주문당 1장이 구조적으로 보장된다. 주문을 취소하면 NULL 로 비워 쿠폰을 되돌린다(그래야 아래 UNIQUE 가 풀린다). 결제 때 서버가 이 값으로 확정하므로 결제 요청이 쿠폰을 보내지 않는다
+    coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의(coupon.discount_value)는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
+    used_point      INT          NOT NULL DEFAULT 0, -- 이 주문에 사용한 포인트. 결제 시점에 point_history 에 USE 행이 생기며 그 금액이 이 값과 같아야 한다(DI-3-05)
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
     total_amount    INT          NOT NULL, -- 최종결제금액. 전액 쿠폰/포인트면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
     earned_point    INT          NOT NULL DEFAULT 0, -- 적립예정포인트
@@ -243,8 +246,11 @@ CREATE TABLE orders (
     PRIMARY KEY (order_id),
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
+    UNIQUE KEY uk_order_coupon (member_coupon_id), -- 한 장바구니 쿠폰은 한 주문에만. NULL 은 여러 개가 허용되므로 쿠폰을 안 쓴 주문끼리는 충돌하지 않는다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0),
+    CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND earned_point >= 0 AND coupon_discount >= 0 AND used_point >= 0),
+    CONSTRAINT chk_order_amount_parts CHECK (coupon_discount + used_point <= discount_amount), -- 두 조각은 할인 총액의 일부다
+    CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0), -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee) -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
 ); -- 주문(헤더)
 
@@ -256,17 +262,22 @@ CREATE TABLE order_item (
     option_name_snapshot VARCHAR(100) NOT NULL, -- 주문시점 옵션명
     unit_price      INT          NOT NULL, -- 주문시점 가격
     qty             INT          NOT NULL, -- 주문 수량
-    discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인액(종류 무관 합계. 근거는 order_discount 에 있다). 주문 시점에 배분해 확정한다. 부분 반품 환불액을 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낼 수 있고, 이게 없으면 어느 라인이 할인받았는지 몰라 안분할 수밖에 없어 옵션 전용 쿠폰에서 금액이 틀어진다
+    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다
+    coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
+    discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액(상품 쿠폰 + 주문 전체 할인에서 이 라인 몫으로 배분된 금액). 주문 시점에 배분해 확정한다. 부분 반품 환불액을 (unit_price * qty - discount_amount) * 반품수량 / qty 로 낼 수 있고, 이게 없으면 어느 라인이 할인받았는지 몰라 안분할 수밖에 없어 상품 쿠폰에서 금액이 틀어진다
     item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED)
     created_at      DATETIME     NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_item_id),
     CONSTRAINT chk_orderitem_status CHECK (item_status IN ('ORDERED','CANCELED','RETURN_REQ','RETURNED','EXCHANGE_REQ','EXCHANGED')),
     UNIQUE KEY uk_order_option (order_id, product_option_id), -- 동일 옵션 중복 라인 방지
+    UNIQUE KEY uk_order_item_coupon (member_coupon_id), -- 한 상품 쿠폰은 한 라인에만
     CONSTRAINT fk_orderitem_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT fk_orderitem_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT chk_orderitem_qty CHECK (qty > 0),
-    CONSTRAINT chk_orderitem_discount CHECK (discount_amount >= 0 AND discount_amount <= unit_price * qty) -- 할인이 라인 금액을 넘으면 환불액이 음수가 된다
+    CONSTRAINT chk_orderitem_discount CHECK (discount_amount >= 0 AND discount_amount <= unit_price * qty), -- 할인이 라인 금액을 넘으면 환불액이 음수가 된다
+    CONSTRAINT chk_orderitem_coupon_amount CHECK (coupon_discount >= 0 AND coupon_discount <= discount_amount), -- 상품 쿠폰분은 이 라인 할인 총액의 일부다
+    CONSTRAINT chk_orderitem_coupon CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0) -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
 ); -- 주문 상품
 
 CREATE TABLE stock_allocation (
@@ -563,6 +574,7 @@ CREATE TABLE qna (
 CREATE TABLE coupon (
     coupon_id        BIGINT      NOT NULL AUTO_INCREMENT, -- coupon PK
     name             VARCHAR(100) NOT NULL, -- 쿠폰명
+    scope            VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER 장바구니 쿠폰, 주문 전체에 적용/ITEM 상품 쿠폰, 라인 하나에 적용). 쿠폰이 어느 층에 붙는지를 발행 시점에 정한다. 이게 없으면 같은 쿠폰을 orders 와 order_item 양쪽에 붙일 수 있고, 두 테이블에 걸친 조건이라 DB가 막지 못한다(DI-3-05)
     discount_type    VARCHAR(30)  NOT NULL, -- 할인 유형(AMOUNT 정액/RATE 정률)
     discount_value   INT         NOT NULL, -- 할인 값(정액 원 또는 정률 %)
     min_order_amount INT         NOT NULL DEFAULT 0, -- 사용조건
@@ -573,6 +585,7 @@ CREATE TABLE coupon (
     updated_at      DATETIME     NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
     CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
+    CONSTRAINT chk_coupon_scope CHECK (scope IN ('ORDER','ITEM')),
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
     CONSTRAINT chk_coupon_values CHECK (discount_value >= 0 AND min_order_amount >= 0),
     CONSTRAINT chk_coupon_rate_range CHECK (discount_type <> 'RATE' OR discount_value <= 100), -- 정률 쿠폰의 할인율이 100%를 넘을 수 없다. member_grade.discount_rate 와 같은 기준
@@ -641,35 +654,15 @@ CREATE TABLE member_coupon (
     CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
         (status =  'USED' AND used_at IS NOT NULL)
      OR (status <> 'USED' AND used_at IS NULL))
-); -- 발급 쿠폰(쿠폰함. 선착순이면 coupon_campaign_id 참조). 어느 주문에 쓰였는지는 order_discount 에서 역참조한다
+); -- 발급 쿠폰(쿠폰함. 선착순이면 coupon_campaign_id 참조). 어느 주문이나 라인에 쓰였는지는 orders.member_coupon_id 와 order_item.member_coupon_id 에서 역참조한다
 
-CREATE TABLE order_discount (
-    order_discount_id BIGINT      NOT NULL AUTO_INCREMENT, -- order_discount PK
-    order_id          BIGINT      NOT NULL, -- 주문 FK
-    order_item_id     BIGINT      NULL, -- 적용 대상. NULL 이면 주문 전체에 적용한 것이고, 값이 있으면 그 라인에만 적용한 것이다. DB가 못 막는 조합이다(DI-3-05). 이 라인이 order_id 의 라인인지 앱이 확인한다
-    discount_type     VARCHAR(30) NOT NULL, -- 할인 종류(COUPON 쿠폰/GRADE 등급 할인/POINT 포인트 사용/PROMOTION 기간 할인). 종류를 컬럼으로 두면 새 할인이 생겨도 테이블을 더 만들지 않는다
-    member_coupon_id  BIGINT      NULL, -- COUPON 일 때 어느 보유 쿠폰인지. 다른 종류에서는 NULL 이다
-    discount_amount   INT         NOT NULL, -- 이 할인 하나가 만든 금액. 주문 전체에 적용한 것이면 여러 라인에 나뉘어 배분되고 그 결과는 order_item.discount_amount 에 남는다
-    status            VARCHAR(20) NOT NULL DEFAULT 'APPLIED', -- APPLIED 적용중 / CANCELED 적용 취소(주문 취소나 라인 취소). 주문 상태와 같은 트랜잭션에서 바꾼다
-    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN status = 'APPLIED' THEN member_coupon_id ELSE NULL END), -- 적용중인 것 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼
-    order_type_key    VARCHAR(64) GENERATED ALWAYS AS (CASE WHEN status = 'APPLIED' AND order_item_id IS NULL THEN CONCAT(order_id, ':', discount_type) ELSE NULL END), -- 주문 전체 층에 종류별 1건임을 DB가 강제하기 위한 계산 컬럼
-    line_type_key     VARCHAR(64) GENERATED ALWAYS AS (CASE WHEN status = 'APPLIED' THEN CONCAT(order_item_id, ':', discount_type) ELSE NULL END), -- 라인 층에 종류별 1건임을 DB가 강제하기 위한 계산 컬럼. 주문 전체 행은 order_item_id 가 NULL 이라 CONCAT 결과도 NULL 이 되어 저절로 빠진다
-    created_at        DATETIME    NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at        DATETIME    NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (order_discount_id),
-    UNIQUE KEY uk_order_discount_coupon (active_coupon_key), -- 한 쿠폰은 적용중인 주문 하나에만 붙는다(취소된 적용은 NULL 이라 제외되어 재사용할 수 있다). 주문 전체와 라인 어느 층에 붙든 같은 컬럼을 다투므로 두 층에 동시에 적용하는 것도 여기서 막힌다
-    UNIQUE KEY uk_order_discount_order_type (order_type_key), -- 주문 전체 층에 같은 종류 2건 금지. 위 제약은 쿠폰 기준이라 서로 다른 쿠폰 두 장을 주문 전체에 붙이는 것은 막지 못한다
-    UNIQUE KEY uk_order_discount_line_type (line_type_key), -- 라인 층에 같은 종류 2건 금지. 같은 이유로 필요하다
-    CONSTRAINT fk_order_discount_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
-    CONSTRAINT fk_order_discount_item FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
-    CONSTRAINT fk_order_discount_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
-    CONSTRAINT chk_order_discount_type CHECK (discount_type IN ('COUPON','GRADE','POINT','PROMOTION')),
-    CONSTRAINT chk_order_discount_status CHECK (status IN ('APPLIED','CANCELED')),
-    CONSTRAINT chk_order_discount_amount CHECK (discount_amount >= 0),
-    CONSTRAINT chk_order_discount_coupon CHECK ( -- 쿠폰일 때만 보유 쿠폰을 가리킨다
-        (discount_type =  'COUPON' AND member_coupon_id IS NOT NULL)
-     OR (discount_type <> 'COUPON' AND member_coupon_id IS NULL))
-); -- 주문에 적용한 할인(쿠폰, 등급, 포인트, 기간 할인을 한 표에 담는다. 종류마다 테이블을 만들면 새 할인이 생길 때마다 늘어나고, orders 나 order_item 한쪽에 컬럼으로 두면 주문 전체와 라인 두 층을 함께 표현할 수 없다. orders.discount_amount 는 적용중인 이 표의 합이어야 하고, 결제 때 서버가 이 표를 읽어 확정하므로 결제 요청이 할인 정보를 보내지 않는다)
+-- orders 와 order_item 이 member_coupon 을 참조하는 외래 키는 여기서 건다.
+-- 이 파일은 위에서 아래로 실행되고 두 테이블은 4장, member_coupon 은 7장이라
+-- 정의 안에 두면 아직 만들어지지 않은 테이블을 가리키게 된다.
+ALTER TABLE orders
+    ADD CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id);
+ALTER TABLE order_item
+    ADD CONSTRAINT fk_orderitem_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id);
 
 CREATE TABLE point_history (
     point_history_id        BIGINT       NOT NULL AUTO_INCREMENT, -- point_history PK
