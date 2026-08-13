@@ -81,10 +81,15 @@ CREATE TABLE admin (
     password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
     name            VARCHAR(50)  NOT NULL, -- 관리자 이름
     role            VARCHAR(30)  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
+    refresh_token_hash CHAR(64)  NULL, -- 리프레시 토큰의 SHA-256 hex. 평문은 저장하지 않는다. NULL 은 로그아웃 상태다
+    refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (admin_id),
     CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
+    CONSTRAINT chk_admin_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
+        (refresh_token_hash IS NULL     AND refresh_token_expires_at IS NULL)
+     OR (refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL)),
     UNIQUE KEY uk_admin_login_id (login_id)
 ); -- 관리자
 
