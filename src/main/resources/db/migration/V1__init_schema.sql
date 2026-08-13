@@ -364,6 +364,7 @@ CREATE TABLE orders (
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
     UNIQUE KEY uk_order_id_member (order_id, member_id), -- order_item 이 복합 외래 키로 참조한다
+    UNIQUE KEY uk_order_id_total (order_id, total_amount), -- payment 가 복합 외래 키로 참조한다. order_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
     UNIQUE KEY uk_order_active_coupon (active_coupon_key), -- 취소되지 않은 주문 한정 쿠폰당 1건. 취소하면 계산 컬럼이 NULL 이 되어 그 쿠폰을 다시 쓸 수 있다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
@@ -493,8 +494,9 @@ CREATE TABLE payment (
     payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
     order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
     method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD 카드/EASY_PAY 간편결제). 무통장입금은 두지 않는다
-    amount          INT          NOT NULL, -- 결제 금액
+    amount          INT          NOT NULL, -- 결제 금액. 아래 복합 외래 키가 orders.total_amount 와 같기를 요구한다
     status          VARCHAR(30)  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
+    refunded_amount INT          NOT NULL DEFAULT 0, -- 환불 누적액(PENDING 환불 포함). refund 행을 만들 때 조건부 UPDATE 로 올린다
     pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 NULL 이다. UNIQUE 는 한 거래가 두 주문에 붙는 것을 막는다
     paid_at         DATETIME(6)  NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -504,15 +506,17 @@ CREATE TABLE payment (
     CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
     UNIQUE KEY uk_payment_order (order_id),
     UNIQUE KEY uk_payment_pg_tid (pg_tid),
-    CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
+    CONSTRAINT fk_payment_order FOREIGN KEY (order_id, amount) REFERENCES orders (order_id, total_amount), /* 결제 금액이 주문 최종금액과 다를 수 없다.
+                                                                                                              결제 행이 있는 동안 orders.total_amount 수정도 막힌다 */
     CONSTRAINT chk_payment_amount CHECK (amount > 0), -- 0원 주문은 이 행을 만들지 않으므로 0을 허용하지 않는다
+    CONSTRAINT chk_payment_refunded CHECK (refunded_amount >= 0 AND refunded_amount <= amount), -- 환불 총액이 결제액을 넘을 수 없다
     CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 모든 결제 수단이 PG를 타므로 예외가 없다
         status <> 'PAID' OR pg_tid IS NOT NULL),
     CONSTRAINT chk_payment_paid_at CHECK ( -- 상태와 완료 시각이 따로 놀지 않도록. CANCELED 는 결제 전 취소와 결제 후 취소가 모두 정상이라 제외한다
         (status IN ('PENDING','FAILED') AND paid_at IS NULL)
      OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
      OR  status = 'CANCELED')
-); -- 결제(주문당 최대 1건). total_amount 가 0인 주문은 이 행이 없다
+); -- 결제(주문당 최대 1건). total_amount 가 0인 주문은 이 행이 없다. refunded_amount 가 환불 총액의 상한을 쥔다
 
 -- =====================================================================
 -- 6. 클레임 (취소 / 반품 / 교환)
@@ -588,6 +592,9 @@ CREATE TABLE claim_item (
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK
     claim_id            BIGINT   NOT NULL, -- 클레임 FK
+    order_id            BIGINT   NOT NULL, /* 조상 키 복제. 아래 외래 키 둘이 이 값을 함께 요구한다.
+                                              하나는 클레임의 주문임을 고정하고, 다른 하나는 그 주문에 결제가 있기를 요구한다.
+                                              0원 주문은 payment 행이 없으므로 환불 행도 만들 수 없다 */
     amount              INT      NOT NULL, -- 환불액
     shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감
     status              VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
@@ -597,13 +604,14 @@ CREATE TABLE refund (
     PRIMARY KEY (refund_id),
     CONSTRAINT chk_refund_status CHECK (status IN ('PENDING','DONE')),
     UNIQUE KEY uk_refund_claim (claim_id),
-    CONSTRAINT fk_refund_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id),
+    CONSTRAINT fk_refund_claim FOREIGN KEY (claim_id, order_id) REFERENCES claim (claim_id, order_id),
+    CONSTRAINT fk_refund_payment FOREIGN KEY (order_id) REFERENCES payment (order_id), -- 환불 상한(payment.refunded_amount)을 쥔 행에 직접 닿는다
     CONSTRAINT chk_refund_amount CHECK (amount >= 0),
     CONSTRAINT chk_refund_shipping_deduction CHECK (shipping_deduction >= 0),
     CONSTRAINT chk_refund_refunded_at CHECK ( -- 완료된 환불은 완료 시각을 갖는다
         (status = 'PENDING' AND refunded_at IS NULL)
      OR (status = 'DONE'    AND refunded_at IS NOT NULL))
-); -- 환불(돈에 대한 것만). 원결제는 claim.order_id 로 유도한다
+); -- 환불(돈에 대한 것만). 클레임당 1건이고, 총액 상한은 payment.refunded_amount 가 쥔다
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK

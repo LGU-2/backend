@@ -169,6 +169,54 @@ CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount)
 
 **대가는 조회가 갈린다는 것이다.** 결제 여부를 묻는 조회에 `INNER JOIN payment` 를 쓰면 그런 주문이 결과에서 사라진다.
 
+### 결제액과 환불 총액을 DB 가 쥔다
+
+검토 과정에서 돈에 관한 두 값이 어느 제약에도 걸려 있지 않은 것을 발견했다.
+
+```
+payment.amount 가 orders.total_amount 와 달라도 아무도 보지 않는다
+한 주문에 클레임이 여럿이면 환불 총액이 결제액을 넘을 수 있다
+```
+
+둘 다 표를 넘나드는 값이라 CHECK 범위 밖인데, **성질이 달라서 답도 다르다.**
+
+앞의 것은 값 하나 대 값 하나라 **복합 외래 키로 옮겼다.**
+
+```sql
+orders:  UNIQUE KEY uk_order_id_total (order_id, total_amount)
+payment: FOREIGN KEY (order_id, amount) REFERENCES orders (order_id, total_amount)
+```
+
+`amount` 를 따로 저장하지만 그 값이 외래 키로 강제되므로 어긋날 수 없다. `claim_item` 이 `order_id` 를 복제한 것과 같은 기법이다.
+덤으로 **결제 행이 있는 동안 `orders.total_amount` 수정이 막힌다.** 10장이 불변으로 두고 싶다고 적어 둔 컬럼이라 방향이 같다.
+
+뒤의 것은 **자식 행의 합**이라 외래 키로 표현할 수 없다. 부모에 소진 카운터를 둔다.
+
+```sql
+payment: refunded_amount INT NOT NULL DEFAULT 0,
+         CHECK (refunded_amount >= 0 AND refunded_amount <= amount)
+```
+
+```sql
+UPDATE payment SET refunded_amount = refunded_amount + :amt
+ WHERE payment_id = :id AND refunded_amount + :amt <= amount;
+-- affected rows 0 이면 초과 환불이다
+```
+
+조건부 UPDATE 가 동시성을, CHECK 가 최종 상한을 맡는다. `coupon.issued_quantity` 와 같은 구조다.
+
+`refund` 에 `order_id` 를 복제해 결제에 직접 닿게 했다.
+
+```sql
+FOREIGN KEY (claim_id, order_id) REFERENCES claim (claim_id, order_id)
+FOREIGN KEY (order_id)           REFERENCES payment (order_id)
+```
+
+**0원 주문은 `payment` 행이 없으므로 환불 행을 만들 수 없다.** 이걸 넣지 않으면 상한을 쥔 행이 없는 자리에서 환불이 무제한이 된다.
+
+라인 단위로 환불을 쪼개 각 라인 금액을 넘지 않게 하는 안(`refund_item`)도 있었다. 강제는 더 촘촘해지지만
+표가 하나 늘고 `claim_item` 과 거의 같은 모양이 된다. **부분 수량 반품을 하지 않기로 한 것과 같은 이유로 접었다.**
+
 ### 결제 콜백의 방어는 둘로 나뉜다
 
 `payment.pg_tid` 는 결제 요청 전에 발급되지 않아 `NULL` 이다. UNIQUE 와 `NULL` 여러 개 허용이 맞물려
@@ -590,7 +638,7 @@ CHECK 는 **자기 행만** 볼 수 있다. 다른 행이나 다른 표를 봐�
 
 | 없앤 컬럼 | 어디서 유도되나 |
 |---|---|
-| `refund.payment_id` | `claim.order_id -> payment`. `uk_payment_order` 가 주문당 결제 1건을 보장한다 |
+| `refund.payment_id` | `claim.order_id -> payment`. `uk_payment_order` 가 주문당 결제 1건을 보장한다. 뒤에 `order_id` 를 복제해 결제를 직접 참조하게 했지만 `payment_id` 는 여전히 저장하지 않는다 |
 | `stock_disposal.product_id` | `stock_lot -> product_option -> product`. `stock_lot_id` 를 `NOT NULL` 로 바꿔 유도가 항상 성립했다. 그 뒤 표 자체가 `stock_movement` 로 흡수됐다 |
 
 나머지는 복합 외래 키 열로 막는다.
@@ -603,6 +651,8 @@ CHECK 는 **자기 행만** 볼 수 있다. 다른 행이나 다른 표를 봐�
 | `review` | `product_option_id`, `member_id` | 다른 상품에 리뷰를 쓰거나 남의 구매로 쓰는 것 |
 | `coupon_product_option` | `scope` | 장바구니 쿠폰에 대상 옵션을 다는 것 |
 | `orders` | `coupon_scope` | 상품 쿠폰을 장바구니 쿠폰 자리에 넣는 것 |
+| `payment` | `total_amount` | 결제 금액이 주문 최종금액과 다른 것 |
+| `refund` | `order_id` | 다른 주문의 결제에 환불을 다는 것, 결제 없는 주문에 환불을 만드는 것 |
 
 `review` 는 사슬이 둘이다. `order_item` 이 `product_id` 를 갖지 않고 `product_option_id` 만 갖기 때문에
 가운데 고리로 `product_option_id` 를 복제해야 두 외래 키가 이어진다.
@@ -754,6 +804,11 @@ UPDATE order_item SET item_status = 'RETURN_REQ'
 수량을 유지하려면 `order_item` 에 카운터를 하나 더 만들어야 했다.
 `stock_lot.available_qty`, `coupon.issued_quantity` 에 이어 세 번째이고, 각각 되돌리기 경로와 정합성 검사가 따라붙는다.
 **부분 수량 반품이 필요해지면 `claim_item.qty` 와 `order_item.claimed_qty` 를 추가만 하는 마이그레이션으로 넣는다.**
+
+뒤에 두 개를 더 찾았는데 **둘 다 DB 로 옮겨서 여기 남지 않았다.**
+`payment.amount` 대 `orders.total_amount` 는 값 하나 대 값 하나라 복합 외래 키로,
+환불 총액 대 결제액은 진짜 합계라 `payment.refunded_amount` 카운터로 처리했다(4장).
+**합계라고 다 앱으로 내려오지 않는다. 대응하는 값이 하나면 외래 키가 받는다.**
 
 남는 것은 둘이고 성질이 같다.
 
