@@ -944,6 +944,41 @@ OR (member_coupon_id IS NULL  AND coupon_scope IS NULL)
 `x IS NULL OR y IS NULL OR y >= x` 처럼 `NULL` 을 **명시적으로 통과시키려는** CHECK 는 이 규칙과 무관하다.
 문제는 통과시킬 의도가 없었는데 통과하는 경우다.
 
+### 삭제된 부모에 자식이 붙는 것은 못 막는다
+
+`member` 와 `product` 는 소프트딜리트다. **행이 남아 있으므로 외래 키가 통과시킨다.**
+탈퇴한 회원에게 새 주문을 만들거나 삭제된 상품에 새 옵션을 다는 것을 DB 가 거부하지 않는다. 자식이 여덟이다.
+
+```
+member  <- address, cart, member_coupon, orders, qna
+product <- product_option, product_image, qna
+```
+
+계산 컬럼으로 막으려 하면 **정확히 반대 방향으로 부러진다.**
+
+```sql
+member.active_member_id GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN member_id ELSE NULL END)
+orders.member_id FOREIGN KEY -> member (active_member_id)
+```
+
+탈퇴하는 순간 계산 컬럼이 `NULL` 이 되어 **기존 주문의 참조 대상이 사라지고 탈퇴 자체가 막힌다.**
+주문 이력은 법정 기간 보존해야 하므로 자식을 지울 수도 없다.
+쿠폰 대상 옵션에서 겪은 것과 같은 형태이고, 살아 있는 값을 이력의 참조 대상으로 삼으면 늘 이렇게 된다.
+
+`product` 는 더하다. 삭제된 상품의 옵션을 주문 라인이 참조하므로 어떤 방법으로도 지울 수 없다.
+
+**자식 중 부모와 함께 없어져도 되는 것(`cart`, `address`)만은 이 방법이 통한다.**
+탈퇴할 때 먼저 지우면 되고, 그러면 `RESTRICT` 가 삭제 순서를 강제하는 장치가 된다.
+넣지 않은 이유는 **탈퇴 시 장바구니와 배송지를 파기하는 것이 정책인지 정해지지 않았기 때문**이다.
+보관하는 정책이면 이 외래 키가 정상 탈퇴를 막는다. 정해지면 추가만 하는 마이그레이션으로 얹는다.
+
+지금은 정합성 검사가 받는다. **부모가 삭제된 뒤에 생긴 자식**을 `created_at` 비교로 찾으므로
+삭제 전에 만들어진 정상 이력은 오탐하지 않는다.
+
+실제 위험도는 경로에 따라 다르다. **탈퇴하면 `refresh_token_hash` 가 비워지고 `status='WITHDRAWN'` 이라 로그인이 안 된다.**
+사용자 경로로는 새 주문이 생길 수 없고 남는 것은 관리자 API 나 배치의 실수다.
+`product` 쪽이 더 현실적이다. 관리자 화면이 삭제된 상품을 목록에서 안 빼면 옵션과 이미지가 계속 붙는다.
+
 ### 자식 행 합계 (`DI-3-06`)
 
 행 하나씩은 유효한데 합이 넘는 경우다. **CHECK 는 자기 행만 보므로 원리적으로 표현할 수 없다.**
@@ -1019,6 +1054,7 @@ DB 로 옮길 수 있는 것은 옮겼고, 남은 것이 이만큼이다. **전�
 | 주문 취소 | `member_coupon.status` 를 `ISSUED` 로 되돌린다 | 5장 |
 | 주문 취소 | `order_item.item_status` 도 함께 `CANCELED` 로 바꾼다 | 5장. 라인 계산 컬럼이 `orders.status` 를 보지 않는다 |
 | 주문 상태 | `CANCELED` 와 `RETURNED` 는 전체에만 쓴다. 부분 반품은 라인만 바꾼다 | 5장. 두 계산 컬럼이 이 전제 위에 선다 |
+| 소프트딜리트 | 삭제된 부모에 새 자식을 만들지 않는다(탈퇴 회원의 주문, 삭제된 상품의 옵션과 이미지) | 9장. 외래 키는 행이 남아 있어 통과시킨다 |
 | 재고 변동 | `available_qty` 를 바꾸는 연산과 `stock_movement` INSERT 를 한 트랜잭션에 | 6장 |
 | 클레임 | `order_item.item_status` 조건부 `UPDATE` 로 중복을 막는다 | 9장 |
 | 부모와 자식 | `orders` 와 `claim` 은 라인 없이 저장하는 경로를 만들지 않는다 | 9장 행의 부재 |
@@ -1083,7 +1119,40 @@ SELECT r.refund_id, r.shipping_deduction, o.shipping_fee
   FROM refund r JOIN orders o ON o.order_id = r.order_id
  WHERE r.shipping_deduction > o.shipping_fee;
 
--- 10. 자식이 하나도 없는 부모가 있는가
+-- 10. 부모가 삭제된 뒤에 생긴 자식이 있는가 (created_at 비교라 정상 이력은 잡히지 않는다)
+SELECT 'address' AS child, a.address_id AS id FROM address a
+  JOIN member m ON m.member_id = a.member_id
+ WHERE m.deleted_at IS NOT NULL AND a.created_at > m.deleted_at
+UNION ALL
+SELECT 'cart', c.cart_id FROM cart c
+  JOIN member m ON m.member_id = c.member_id
+ WHERE m.deleted_at IS NOT NULL AND c.created_at > m.deleted_at
+UNION ALL
+SELECT 'member_coupon', mc.member_coupon_id FROM member_coupon mc
+  JOIN member m ON m.member_id = mc.member_id
+ WHERE m.deleted_at IS NOT NULL AND mc.created_at > m.deleted_at
+UNION ALL
+SELECT 'orders', o.order_id FROM orders o
+  JOIN member m ON m.member_id = o.member_id
+ WHERE m.deleted_at IS NOT NULL AND o.created_at > m.deleted_at
+UNION ALL
+SELECT 'qna(member)', q.qna_id FROM qna q
+  JOIN member m ON m.member_id = q.member_id
+ WHERE m.deleted_at IS NOT NULL AND q.created_at > m.deleted_at
+UNION ALL
+SELECT 'qna(product)', q.qna_id FROM qna q
+  JOIN product p ON p.product_id = q.product_id
+ WHERE p.deleted_at IS NOT NULL AND q.created_at > p.deleted_at
+UNION ALL
+SELECT 'product_option', o.product_option_id FROM product_option o
+  JOIN product p ON p.product_id = o.product_id
+ WHERE p.deleted_at IS NOT NULL AND o.created_at > p.deleted_at
+UNION ALL
+SELECT 'product_image', i.product_image_id FROM product_image i
+  JOIN product p ON p.product_id = i.product_id
+ WHERE p.deleted_at IS NOT NULL AND i.created_at > p.deleted_at;
+
+-- 11. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL
