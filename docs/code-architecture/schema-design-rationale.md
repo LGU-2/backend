@@ -731,6 +731,47 @@ CONSTRAINT chk_claim_reship_type CHECK (
 
 **두 배송이 대칭으로 생겼다고 제약도 대칭이어야 하는 것은 아니다.** 회수는 고객이 시작하고 재배송은 우리가 시작한다.
 
+### 소프트딜리트도 상태와 짝이다
+
+`deleted_at` 을 가진 표가 넷인데 상태와 묶인 것은 `member` 뿐이었다.
+
+```
+member   status='WITHDRAWN' <-> deleted_at IS NOT NULL   묶여 있다
+product  deleted_at 이 있어도 sale_status='ON_SALE' 로 남는다
+review   deleted_at 이 있어도 is_public=TRUE 로 남는다
+qna      status(WAITING/ANSWERED) 는 삭제와 다른 축이라 묶을 것이 없다
+```
+
+`product` 만 묶었다.
+
+```sql
+CONSTRAINT chk_product_deleted CHECK (deleted_at IS NULL OR sale_status = 'OFF_SALE')
+```
+
+**삭제한 상품이 판매중 상태로 남지 않는다.** 조회가 `deleted_at IS NULL` 을 빠뜨려도 `sale_status` 로 한 번 더 걸린다.
+되살릴 때 `OFF_SALE` 로 남아 사람이 다시 켜야 하는 것은 안전한 방향이라 그대로 뒀다.
+
+`review` 는 걸지 않았다. `is_public` 은 **사용자가 정한 값**이라 삭제하면서 강제로 내리면 복원할 때 원래 의도가 사라진다.
+`sale_status` 는 운영이 정하는 값이라 성격이 다르다.
+
+### 자식 쪽 외래 키 인덱스는 선언하지 않는다
+
+복합 외래 키를 걸 때 **부모 쪽 참조 대상 UNIQUE 는 반드시 명시하지만**(그게 없으면 외래 키를 만들 수 없다),
+자식 쪽 인덱스는 선언하지 않고 MySQL 이 자동 생성하는 것에 맡긴다.
+
+```
+order_item   복합 외래 키 넷    자동 생성 넷
+claim_item   둘               자동 생성 둘
+payment      하나             자동 생성 하나
+```
+
+그래서 `payment` 처럼 `uk_payment_order (order_id)` 와 자동 생성된 `(order_id, amount)` 가
+**같은 컬럼으로 시작하는 인덱스 둘**이 되는 곳이 생긴다. 쓰기 비용이 조금 늘지만 기능에는 문제가 없다.
+
+전부 명시하면 인덱스 선언이 열 개 넘게 늘고, **DDL 에 드러나는 것과 실제가 같아지는 것 말고 얻는 것이 없다.**
+`uk_payment_order` 를 `(order_id, amount)` 로 합치는 방법은 쓸 수 없다.
+`refund` 가 `payment (order_id)` 를 참조하므로 `order_id` 단독 UNIQUE 가 필요하다.
+
 ---
 
 ## 9. DB 가 못 막아서 앱이 지켜야 하는 것
@@ -1035,7 +1076,12 @@ SELECT coupon_id, COUNT(*) AS issued, MAX(issue_limit) AS cap
  GROUP BY coupon_id
 HAVING MAX(issue_limit) IS NOT NULL AND COUNT(*) > MAX(issue_limit);
 
--- 9. 자식이 하나도 없는 부모가 있는가
+-- 9. 배송비 차감이 실제 배송비를 넘었는가
+SELECT r.refund_id, r.shipping_deduction, o.shipping_fee
+  FROM refund r JOIN orders o ON o.order_id = r.order_id
+ WHERE r.shipping_deduction > o.shipping_fee;
+
+-- 10. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL

@@ -132,7 +132,8 @@ CREATE TABLE product (
     UNIQUE KEY uk_product_code (product_code), -- 상품코드 유일. 삭제한 코드를 다시 쓰지 않는다
     CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES category (category_id),
     CONSTRAINT fk_product_supplier FOREIGN KEY (supplier_id) REFERENCES supplier (supplier_id),
-    CONSTRAINT chk_product_shelf CHECK (min_shelf_life_days >= 0)
+    CONSTRAINT chk_product_shelf CHECK (min_shelf_life_days >= 0),
+    CONSTRAINT chk_product_deleted CHECK (deleted_at IS NULL OR sale_status = 'OFF_SALE') -- 삭제한 상품이 판매중으로 남지 않는다. 되살릴 때는 사람이 다시 켠다
 ); -- 상품
 
 CREATE TABLE product_option (
@@ -608,8 +609,8 @@ CREATE TABLE refund (
     order_id            BIGINT   NOT NULL, /* 조상 키 복제. 아래 외래 키 둘이 이 값을 함께 요구한다.
                                               하나는 클레임의 주문임을 고정하고, 다른 하나는 그 주문에 결제가 있기를 요구한다.
                                               0원 주문은 payment 행이 없으므로 환불 행도 만들 수 없다 */
-    amount              INT      NOT NULL, -- 환불액
-    shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감
+    amount              INT      NOT NULL, -- 환불액. 배송비 차감 후 실지급액이다. payment.refunded_amount 가 이 값을 더해 상한을 재므로 차감 전 금액을 넣으면 정상 환불이 거부된다
+    shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감. amount 에서 이미 빠진 금액이며 얼마를 뺐는지 남기는 용도다. orders.shipping_fee 를 넘지 않아야 하고 그 검사는 배치가 한다
     status              VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
     refunded_at         DATETIME(6) NULL, -- 환불 완료 시각
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
