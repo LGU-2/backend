@@ -261,6 +261,29 @@ max_discount_amount  min_order_amount  valid_from  valid_to
 `is_active` 만 두고 `SCHEDULED/OPEN/CLOSED` 상태는 뺐다.
 **소진 여부는 `issued_quantity` 로 유도되므로** 저장하면 어긋날 자리만 생긴다. 사람이 끄는 경우만 컬럼으로 표현한다.
 
+### 쿠폰을 한 표로 모으지 않는다
+
+`order_coupon` 같은 표에 두 층을 모으는 안을 검토했다가 걷어냈다.
+**지금은 층 구분이 공짜인데, 한 표로 모으면 그것이 조건이 되기 때문이다.**
+
+```
+컬럼으로 두면   orders.member_coupon_id      컬럼이 하나라 주문당 1장이 구조적으로 보장된다
+                order_item.member_coupon_id  컬럼이 하나라 라인당 1장이 구조적으로 보장된다
+
+한 표로 모으면   order_item_id 의 NULL 여부가 층을 가른다
+                주문당 1장   -> order_item_id IS NULL AND status='APPLIED'  조건부 유일성
+                라인당 1장   -> status='APPLIED'                            조건부 유일성
+```
+
+계산 컬럼이 둘에서 셋으로 늘고, 표와 조인이 하나씩 는다.
+취소 시 행을 지우면 계산 컬럼은 줄지만 이력을 잃는다.
+
+한 표가 주는 것은 **할인 종류가 늘어도 표를 안 만드는 것**과 **한 주문에 쿠폰 여러 장**인데,
+할인 원천이 쿠폰 둘로 고정이고 주문당 1장으로 정해서 둘 다 값을 못 낸다.
+
+**전제가 바뀌면 답도 바뀐다.** 포인트가 돌아오거나 쿠폰 중복 사용을 허용하기로 하면
+그때는 `order_discount` 로 넓히는 쪽이 자연스럽다.
+
 ### 상태 전이를 이력으로 남긴다
 
 `member_coupon.status` 는 현재 상태만 갖고 `updated_at` 은 마지막 전이 시각만 가리킨다.
@@ -563,7 +586,56 @@ HAVING o.product_amount  <> SUM(i.unit_price * i.qty)
 
 ---
 
-## 10. 의도적으로 넣지 않은 것
+## 10. 삽입 후 바뀌면 안 되는 컬럼
+
+**CHECK 는 이전 값을 볼 수 없다.** "한 번 채웠으면 못 비운다" 는 전이 규칙이라 제약으로 표현할 수 없다.
+엔티티에서 `@Column(updatable = false)` 로 막는다. 필드에 한 번 선언하면 Hibernate 가 `UPDATE` 문의
+`SET` 절에서 그 컬럼을 아예 빼므로, **호출 지점마다 규율이 필요한 조건부 UPDATE 와 성격이 다르다.**
+
+`updatable` 은 필드 단위라 같은 엔티티의 다른 컬럼은 그대로 갱신된다.
+`orders.status` 는 전이하고 `orders.member_coupon_id` 는 고정되는 식이다.
+엔티티 전체를 잠그는 `@Immutable` 은 이력 표들(`order_status_history`,
+`member_coupon_status_history`, `stock_movement`, `audit_log`)에만 어울린다.
+
+### 주문 시점 스냅샷
+
+바뀌면 과거가 왜곡된다.
+
+```
+orders         order_no, member_id, ordered_at, product_amount,
+               member_coupon_id, coupon_scope, coupon_discount
+order_item     name_snapshot, option_name_snapshot, unit_price, qty, coupon_discount
+member_coupon  coupon_id, member_id, coupon_name, scope, discount_type,
+               discount_value, max_discount_amount, min_order_amount, valid_from, valid_to
+```
+
+### 조상 키 복제
+
+바뀌면 **복합 외래 키가 다른 부모를 가리키게 된다.**
+
+```
+order_item              order_id, member_id, product_option_id, coupon_id, member_coupon_id
+claim_item              claim_id, order_item_id, order_id
+review                  order_item_id, product_option_id, product_id, member_id
+coupon_product_option   coupon_id, scope
+orders                  coupon_scope
+```
+
+`claim_item.order_id` 를 바꾸면 두 복합 외래 키가 새 값으로 다시 검사되고,
+그 값을 만족하는 다른 클레임과 다른 주문 상품 조합이 있으면 통과한다. **클레임이 통째로 다른 주문으로 옮겨간다.**
+
+### 정하지 않은 것
+
+```
+orders.ship_recipient, ship_phone, ship_zipcode, ship_address, ship_message
+```
+
+주문 시점 스냅샷이지만 **출고 전까지 고칠 수 있는 값**이라 성격이 다르다.
+배송지 변경 기능을 둘지에 따라 불변 여부가 갈린다.
+
+---
+
+## 11. 의도적으로 넣지 않은 것
 
 | | 이유 |
 |---|---|
@@ -575,10 +647,23 @@ HAVING o.product_amount  <> SUM(i.unit_price * i.qty)
 
 ---
 
-## 11. 검증 상태
+## 12. 검증 상태
 
-**이 스키마는 아직 실행된 적이 없다.** 정적 검사만 거쳤다.
+**지금 형태로는 아직 실행된 적이 없다.** 정적 검사만 거쳤다.
 
-MySQL 8.4 컨테이너에 올려 35개 표(당시)를 만들고 제약 18건이 실제로 동작하는지 확인한 적은 있으나,
-그 이후 쿠폰 재설계, `DATETIME(6)` 전환, 계산 컬럼 정리가 들어갔다.
-Flyway 로 한 번에 실행해 보는 것이 다음 순서다.
+MySQL 8.4 컨테이너에 올려 표를 만들고 제약이 실제로 동작하는지 확인한 적은 있으나,
+그것은 표가 35개이고 쿠폰이 캠페인 구조이던 시점이다. 그 이후 이만큼이 바뀌었다.
+
+```
+쿠폰 재설계             캠페인 표 제거, member_coupon 이 조건을 복사
+포인트와 등급 할인 제거
+DATETIME(6) 전환        시각 컬럼 77개
+복합 외래 키 11건        조상 키 복제 여섯
+계산 컬럼 6개
+```
+
+**복합 외래 키와 계산 컬럼은 실행해야 확실해진다.** 참조 대상 UNIQUE 가 전부 맞는지,
+계산 컬럼이 참조하는 컬럼 순서가 MySQL 요구를 만족하는지는 정적으로 확인했지만
+`CREATE TABLE` 이 실제로 통과하는지는 다른 문제다.
+
+Flyway 로 한 번에 실행하는 것이 다음 순서다.
