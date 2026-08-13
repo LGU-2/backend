@@ -81,6 +81,8 @@ UNIQUE KEY uk_... (<이름>_key)
 | `address` | `is_default_key` | 회원별 기본 배송지 1개 |
 | `product_image` | `is_main_key` | 상품별 대표 이미지 1개 |
 | `member` | `active_provider_key` | 활성 회원만 카카오 계정 유일 |
+| `orders` | `active_coupon_key` | 취소되지 않은 주문만 쿠폰당 1건 |
+| `order_item` | `active_coupon_key` | 살아 있는 라인만 쿠폰당 1건 |
 
 ### 걷어낸 둘
 
@@ -291,8 +293,36 @@ ITEM 쿠폰을 주문에     orders.coupon_scope 를 복제하고
 한 쿠폰이 두 곳에 쓰이는 것은 각 `UNIQUE (member_coupon_id)` 가 막는다.
 취소하면 `NULL` 로 비워 되돌린다.
 
-**계산 컬럼을 쓰지 않은 이유가 이 `NULL` 처리다.** 취소 이력을 남기는 대신 참조를 비우기로 해서
-조건부 유일성이 필요 없어졌다.
+### 취소해도 참조를 비우지 않는다
+
+주문이나 라인을 취소해도 `member_coupon_id` 를 그대로 둔다. **참조는 "이 주문이 그 쿠폰을 썼다" 는 사실이고,
+취소해도 그 사실은 변하지 않는다.** 변한 것은 주문의 상태이고 `orders.status='CANCELED'` 가 이미 표현한다.
+
+비우면 참조가 관계와 상태를 겸하게 되어, 상태를 바꾸려고 관계를 지우게 된다. 그 순간
+`chk_order_coupon` 이 `coupon_discount` 도 0으로 만들라고 요구하고 **할인 5,000원의 근거가 사라진다.**
+
+대신 계산 컬럼이 상태를 유일성 검사가 볼 수 있는 형태로 바꾼다.
+
+```sql
+active_coupon_key BIGINT GENERATED ALWAYS AS
+    (CASE WHEN status <> 'CANCELED' THEN member_coupon_id ELSE NULL END),
+UNIQUE KEY uk_order_active_coupon (active_coupon_key)
+```
+
+```
+member_coupon_id  = 42         관계. 영원히 안 바뀐다
+status            = 'CANCELED' 상태
+active_coupon_key = NULL       파생. 유일성 검사에서 빠진다
+```
+
+**`NULL` 이 되는 것은 계산 컬럼이지 외래 키가 아니다.** 취소하면서 `status` 만 바꾸면 그 쿠폰이 자동으로 풀려
+다른 주문에서 다시 쓸 수 있다. `member_coupon.status` 를 `ISSUED` 로 되돌리는 것은 앱이 한다.
+
+`order_item` 은 `item_status NOT IN ('CANCELED','RETURNED')` 를 조건으로 쓴다.
+교환은 상품이 유지되므로 쿠폰도 유지한다.
+
+이 방식만 **앱이 무언가를 잊어도 막힌다.** `UNIQUE` 를 떼고 `member_coupon.status` 조건부 UPDATE 에 맡기거나
+잠금 표를 두는 방법은, 앱이 그 UPDATE 나 INSERT 를 빼먹으면 아무 오류 없이 쿠폰이 두 번 먹힌다.
 
 ---
 

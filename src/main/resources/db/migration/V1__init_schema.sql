@@ -335,9 +335,10 @@ CREATE TABLE orders (
     status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
     product_amount  INT          NOT NULL, -- 총상품금액. SUM(order_item.unit_price * qty) 와 같아야 한다(DI-3-06)
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
-    member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소하면 NULL 로 비워 되돌린다
+    member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소해도 비우지 않는다. 어느 쿠폰을 썼는지가 이력이고, 재사용은 계산 컬럼이 연다
     coupon_scope    VARCHAR(20)  NULL, -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ITEM 쿠폰을 이 자리에 넣지 못하게 한다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
+    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN status <> 'CANCELED' THEN member_coupon_id ELSE NULL END), -- 취소되지 않은 주문 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
     total_amount    INT          NOT NULL, -- 최종결제금액. 할인이 상품금액과 배송비를 다 덮으면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
     ship_recipient  VARCHAR(50)  NOT NULL, -- 배송지 스냅샷
@@ -352,7 +353,7 @@ CREATE TABLE orders (
     CONSTRAINT chk_order_status CHECK (status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
     UNIQUE KEY uk_order_no (order_no),
     UNIQUE KEY uk_order_id_member (order_id, member_id), -- order_item 이 복합 외래 키로 참조한다
-    UNIQUE KEY uk_order_coupon (member_coupon_id), -- 한 장바구니 쿠폰은 한 주문에만. NULL 은 여러 개가 허용되므로 쿠폰을 안 쓴 주문끼리는 충돌하지 않는다
+    UNIQUE KEY uk_order_active_coupon (active_coupon_key), -- 취소되지 않은 주문 한정 쿠폰당 1건. 취소하면 계산 컬럼이 NULL 이 되어 그 쿠폰을 다시 쓸 수 있다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
     CONSTRAINT fk_order_coupon_scope FOREIGN KEY (member_coupon_id, coupon_scope) REFERENCES member_coupon (member_coupon_id, scope), -- scope 를 함께 요구해 ITEM 쿠폰을 붙일 수 없다
@@ -375,11 +376,12 @@ CREATE TABLE order_item (
     unit_price      INT          NOT NULL, -- 주문시점 가격
     qty             INT          NOT NULL, -- 주문 수량
     member_id       BIGINT       NOT NULL, -- 조상 키 복제. 복합 외래 키가 쿠폰 소유자와 주문자를 묶는다
-    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 라인을 취소하면 NULL 로 비운다
+    member_coupon_id BIGINT      NULL, -- 이 라인에만 적용한 상품 쿠폰. 컬럼이 하나라 라인당 1장이 구조적으로 보장된다. 취소해도 비우지 않는다
     coupon_id       BIGINT       NULL, -- 조상 키 복제. 복합 외래 키가 이 라인의 옵션이 쿠폰 대상인지 강제한다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
     discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액. 부분 반품 환불액의 근거다. 배분 규칙은 schema-design-rationale.md 4장
     item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED). 클레임 중복을 조건부 UPDATE 로 이 컬럼이 막는다
+    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN item_status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END), -- 살아 있는 라인 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼. 교환은 상품이 유지되므로 쿠폰도 유지한다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_item_id),
@@ -387,7 +389,7 @@ CREATE TABLE order_item (
     UNIQUE KEY uk_order_option (order_id, product_option_id), -- 동일 옵션 중복 라인 방지
     UNIQUE KEY uk_orderitem_id_order (order_item_id, order_id), -- claim_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_orderitem_id_option_member (order_item_id, product_option_id, member_id), -- review 가 복합 외래 키로 참조한다
-    UNIQUE KEY uk_order_item_coupon (member_coupon_id), -- 한 상품 쿠폰은 한 라인에만
+    UNIQUE KEY uk_orderitem_active_coupon (active_coupon_key), -- 살아 있는 라인 한정 쿠폰당 1건. 취소나 반품이면 계산 컬럼이 NULL 이 되어 그 쿠폰을 다시 쓸 수 있다
     CONSTRAINT fk_orderitem_order FOREIGN KEY (order_id, member_id) REFERENCES orders (order_id, member_id),
     CONSTRAINT fk_orderitem_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT fk_orderitem_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id),
