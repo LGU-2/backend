@@ -233,13 +233,17 @@ CREATE TABLE coupon_product_option (
     coupon_id         BIGINT      NOT NULL, -- 쿠폰 FK
     scope             VARCHAR(20) NOT NULL DEFAULT 'ITEM', -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ORDER 쿠폰의 행을 막는다
     product_option_id BIGINT      NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
+    is_active         BOOLEAN     NOT NULL DEFAULT TRUE, /* 현재 대상인지 여부. 대상에서 뺄 때 행을 지우지 않고 이 값을 내린다.
+                                                            order_item 이 이 표를 복합 외래 키로 참조하므로 지우면 이미 팔린 조합에서 삭제가 막힌다.
+                                                            쿠폰을 적용할 때 현재 대상인지는 앱이 이 값으로 본다 */
     created_at        DATETIME(6) NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at        DATETIME(6) NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_product_option_id),
     UNIQUE KEY uk_cpo_coupon_option (coupon_id, product_option_id), -- 쿠폰당 옵션 1행
     CONSTRAINT chk_cpo_scope CHECK (scope = 'ITEM'),
     CONSTRAINT fk_cpo_coupon FOREIGN KEY (coupon_id, scope) REFERENCES coupon (coupon_id, scope),
     CONSTRAINT fk_cpo_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id)
-); -- 상품 쿠폰의 대상 옵션. ITEM 쿠폰은 대상을 하나 이상 반드시 지정한다
+); -- 상품 쿠폰의 대상 옵션. ITEM 쿠폰은 활성 대상을 하나 이상 반드시 지정한다. 행은 지우지 않고 is_active 로 내린다
 
 CREATE TABLE member_coupon (
     member_coupon_id    BIGINT       NOT NULL AUTO_INCREMENT, -- member_coupon PK

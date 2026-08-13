@@ -250,6 +250,14 @@ max_discount_amount  min_order_amount  valid_from  valid_to
 **금액과 조건은 발급 시점에 고정되어야 하지만, "어디에 쓸 수 있나" 는 운영이 조정하는 것**이라 성질이 다르다.
 임박 재고가 팔리면 대상에서 빼는 식으로 조정할 수 있어야 한다.
 
+**대상에서 뺄 때 행을 지우지 않고 `is_active` 를 내린다.**
+`order_item` 이 이 표를 복합 외래 키로 참조하기 때문이다. 지우려 하면 그 쿠폰으로 그 옵션을 산 라인이
+하나라도 있을 때 `RESTRICT` 에 걸리는데, **빼고 싶어지는 이유가 바로 그 옵션이 팔렸다는 것**이라
+필요한 순간에 정확히 막힌다. 살아 있는 운영 데이터를 과거 기록의 참조 대상으로 삼은 대가다.
+
+발급 시점에 목록을 복사하는 안(`member_coupon_target`)도 검토했다. 강제는 완전해지지만
+**이미 발급된 쿠폰에 조정이 반영되지 않아** 애초의 요구를 못 채운다. 대상을 빼는 목적이 그것이었다.
+
 ### 선착순은 별도 표를 두지 않는다
 
 `coupon.total_quantity` 가 `NULL` 이면 일반 쿠폰, 값이 있으면 선착순이다.
@@ -623,6 +631,10 @@ order_item.coupon_id 를 복제하고
 
 두 번째 외래 키가 참조할 행이 없으면 `INSERT` 가 거부된다. **대상이 아닌 옵션에는 쿠폰이 붙지 않는다.**
 
+정확히는 **"한 번도 대상이었던 적이 없는 옵션"** 까지다. 대상에서 뺄 때 행을 지우지 않고
+`is_active` 를 내리므로(5장), 내려간 대상은 외래 키를 여전히 통과한다. 거기부터는 앱이 `is_active` 를 본다.
+막으려던 사고가 관리자의 옵션 번호 오타라서 이 정도로 충분하다고 봤다. 오타는 한 번도 대상이 아니었던 옵션을 가리킨다.
+
 전제는 **`ITEM` 쿠폰이 대상 옵션을 반드시 하나 이상 갖는 것**이다.
 원래는 "행이 없으면 대상 제한 없음" 이었는데 그 규칙을 버렸다.
 **부재를 의미로 쓰면 사고가 조용하다.** 관리자가 대상을 실수로 전부 지우면 전 상품 할인이 되고,
@@ -637,7 +649,7 @@ order_item.coupon_id 를 복제하고
 
 ### 행의 부재는 DB 가 못 막는다
 
-`ITEM` 쿠폰이 대상 옵션을 하나 이상 갖는다는 전제를 위에서 세웠는데, **그것을 강제하는 제약이 없다.**
+`ITEM` 쿠폰이 **활성** 대상 옵션을 하나 이상 갖는다는 전제를 위에서 세웠는데, **그것을 강제하는 제약이 없다.**
 
 ```
 coupon INSERT (scope='ITEM')   통과. 대상 행이 없어도 된다
@@ -678,7 +690,7 @@ is_active BOOLEAN NOT NULL DEFAULT FALSE   -- 이전에는 TRUE 였다
 SELECT c.coupon_id, c.name
   FROM coupon c
  WHERE c.scope = 'ITEM' AND c.is_active
-   AND NOT EXISTS (SELECT 1 FROM coupon_product_option o WHERE o.coupon_id = c.coupon_id);
+   AND NOT EXISTS (SELECT 1 FROM coupon_product_option o WHERE o.coupon_id = c.coupon_id AND o.is_active);
 
 -- 기본 등급이 정확히 1개인가
 SELECT COUNT(*) FROM member_grade WHERE is_default;
