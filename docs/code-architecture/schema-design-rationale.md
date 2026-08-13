@@ -623,9 +623,30 @@ CHECK (qty_after = qty_before + quantity)
 그 위에 세운 소진율로 "소비기한 임박 + 판매율 저조" 상품을 고르면 어느 옵션이 임박했는지가 사라지고,
 캠페인 대상이 상품이면 1kg 만 임박했는데 200g 에도 쿠폰이 먹어 임박 재고가 안 빠진다.
 
-`daily_sales` 는 원장이 아니라 스냅샷과 집계다.
-`closing = opening + inbound + restocked - sold - disposed - expired` 가 기본이지만,
-마감 시점에 예약만 되고 결제되지 않은 수량만큼 어긋난다. 재고의 진실은 `stock_lot.available_qty` 이고 근거는 `stock_movement` 다.
+### 기말 재고 컬럼을 걷어냈다
+
+`daily_sales` 에는 `closing_stock` 이 있었다. 그런데 **다른 컬럼 어느 조합으로도 그 값을 설명할 수 없었다.**
+
+```
+closing = opening + inbound + restocked - sold - disposed - expired   <- 성립하지 않는다
+```
+
+두 군데가 빈다. `available_qty` 를 실제로 빼는 것은 `RESERVE` 인데 `sold_qty` 는 **결제 완료 기준**이라
+마감 시점에 예약만 되고 결제되지 않은 수량만큼 어긋난다. 그리고 `ADJUST`(수동 조정)에 대응하는 컬럼이 아예 없다.
+
+게다가 **`closing_stock` 은 어느 지표에도 쓰이지 않았다.** 소진율 공식에 없고,
+다음 날 행의 `opening_stock` 이 이미 같은 값이라 두 곳이 같은 사실을 들고 있었다.
+
+항등식이 성립하도록 `reserved_qty`, `released_qty`, `adjusted_qty` 를 채우는 안도 있었다.
+**그러면 이 표가 원장이 하나 더 생긴 꼴이 된다.** `stock_movement` 가 이미 원장인데 요약을 다시 들면
+같은 사실을 두 곳이 적게 되고, 카운터가 늘고 정합성 검사가 따라붙는다.
+`stock_disposal` 을 `stock_movement` 로 흡수한 것이 정확히 그 이유였다.
+
+그래서 **컬럼을 뺐다.** 이 표는 소진율과 폐기율의 재료라는 한 가지 일만 한다.
+재고 대조는 `stock_movement` 의 `qty_before` 와 `qty_after` 로 하고, 그 원장에는 항등식 제약이 걸려 있다.
+
+전제가 하나 붙는다. **배치는 움직임이 없는 옵션에도 행을 만든다.** 날짜가 끊기면
+다음 날 `opening_stock` 으로 전날 기말을 읽는 경로가 끊어진다.
 
 ---
 

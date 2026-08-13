@@ -472,21 +472,22 @@ CREATE TABLE daily_sales (
     daily_sales_id  BIGINT       NOT NULL AUTO_INCREMENT, -- daily_sales PK
     product_option_id BIGINT     NOT NULL, -- 집계 대상 옵션 FK. 재고(stock_lot)와 소비기한이 옵션 단위라 집계도 같은 단위여야 한다. 상품 단위 수치는 옵션을 합산해 얻는다(반대 방향은 불가능하다)
     stat_date       DATE         NOT NULL, -- 집계 일자
-    opening_stock   INT          NOT NULL DEFAULT 0, -- 기초 재고(그날 시작 시점 가용재고 스냅샷). 소진율 분모
+    opening_stock   INT          NOT NULL DEFAULT 0, -- 기초 재고(그날 시작 시점 가용재고 스냅샷). 소진율 분모이고 다음 날 행의 이 값이 곧 이 날의 기말이다
     inbound_qty     INT          NOT NULL DEFAULT 0, -- 당일 신규 입고 수량. 소진율 분모
     restocked_qty   INT          NOT NULL DEFAULT 0, -- 당일 반품 재입고 수량. 소진율 분모에는 넣지 않는다. 새로 들여온 물량이 아니라 팔았다가 돌아온 것이라 분모에 넣으면 소진율이 낮아 보인다
     sold_qty        INT          NOT NULL DEFAULT 0, -- 당일 판매 수량(결제 완료 기준). 소진율 분자
     sold_amount     BIGINT       NOT NULL DEFAULT 0, -- 당일 판매 금액(결제 완료 기준)
     disposed_qty    INT          NOT NULL DEFAULT 0, -- 당일 폐기 수량. 로트로 돌아가지 않은 회수품 폐기는 available_qty 를 바꾸지 않으므로 여기 안 들어간다
     expired_qty     INT          NOT NULL DEFAULT 0, -- 당일 만료 전환 수량. 소비기한이 지나 판매 불가로 바뀐 것이며 폐기와 별개다
-    closing_stock   INT          NOT NULL DEFAULT 0, -- 기말 재고(그날 마감 시점 가용재고 스냅샷)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (daily_sales_id),
     UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
     CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
-    CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND restocked_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND expired_qty >= 0 AND closing_stock >= 0)
-); -- 판매 집계(일 1회 배치가 옵션별/일자별로 집계). 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합)
+    CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND restocked_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND expired_qty >= 0)
+); /* 판매 집계(일 1회 배치가 옵션별/일자별로 집계). 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합).
+      재고 대조는 이 표가 아니라 stock_movement 의 qty_before/qty_after 로 한다.
+      배치는 움직임이 없는 옵션에도 행을 만든다. 다음 날 opening_stock 이 전날 기말이 되려면 날짜가 끊기면 안 된다 */
 
 CREATE TABLE order_status_history (
     order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
