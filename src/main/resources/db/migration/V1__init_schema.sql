@@ -454,7 +454,16 @@ CREATE TABLE stock_movement (
     CONSTRAINT chk_movement_qty CHECK (quantity > 0 AND qty_before >= 0 AND qty_after >= 0),
     CONSTRAINT chk_movement_disposal CHECK ( -- 폐기는 사유와 처리자를 반드시 갖는다. 다른 유형에는 폐기 사유가 없다
         (movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND admin_id IS NOT NULL)
-     OR (movement_type <> 'DISPOSE' AND disposal_reason IS NULL))
+     OR (movement_type <> 'DISPOSE' AND disposal_reason IS NULL)),
+    CONSTRAINT chk_movement_delta CHECK ( /* 원장의 항등식. 세 수치가 서로 맞고, 유형이 정한 방향과도 맞아야 한다.
+                                             ADJUST 만 양방향이고 나머지는 방향이 하나로 고정된다.
+                                             CONFIRM 과 회수품 폐기는 available_qty 를 바꾸지 않으므로 앞뒤가 같다 */
+        (movement_type IN ('INBOUND','RESTOCK','RELEASE') AND qty_after = qty_before + quantity)
+     OR (movement_type IN ('RESERVE','EXPIRE')            AND qty_after = qty_before - quantity)
+     OR (movement_type =  'CONFIRM'                       AND qty_after = qty_before)
+     OR (movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND disposal_reason =  'RETURNED' AND qty_after = qty_before)
+     OR (movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND disposal_reason <> 'RETURNED' AND qty_after = qty_before - quantity)
+     OR (movement_type =  'ADJUST'  AND (qty_after = qty_before + quantity OR qty_after = qty_before - quantity)))
 ); -- 재고 변동 이력(로트 단위 시간순). 재고에 관한 모든 사건의 단일 창구다. available_qty 를 바꾸는 연산과 같은 트랜잭션에서 함께 INSERT 하고, 재입고하지 않은 회수품 폐기처럼 값을 안 바꾸는 것은 qty_before = qty_after 로 남긴다
 
 CREATE TABLE daily_sales (

@@ -540,6 +540,44 @@ CHECK ((movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND admin_id 
 그러면 폐기 외 일곱 가지 변동의 기록이 사라지고, `available_qty` 가 왜 그 값인지 설명할 수 없게 되며,
 `daily_sales` 의 집계 원천도 없어진다.
 
+### 원장은 자기 자신을 검증한다
+
+`stock_movement` 는 `available_qty` 가 왜 그 값인지를 설명하는 유일한 근거다.
+그런데 오랫동안 **세 수치가 서로 아무 관계도 요구받지 않았다.**
+
+```sql
+CHECK (quantity > 0 AND qty_before >= 0 AND qty_after >= 0)   -- 범위만 봤다
+```
+
+`qty_before=100, quantity=5, qty_after=3` 인 `RESERVE` 행이 그냥 들어갔다. 원장이 원장 노릇을 못 한다.
+
+**다른 표를 볼 필요가 없는 한 행 안의 항등식**이라 CHECK 로 정확히 표현된다.
+`orders.chk_order_total` 이 금액에 대해 하는 일과 같다.
+
+```sql
+CONSTRAINT chk_movement_delta CHECK (
+    (movement_type IN ('INBOUND','RESTOCK','RELEASE') AND qty_after = qty_before + quantity)
+ OR (movement_type IN ('RESERVE','EXPIRE')            AND qty_after = qty_before - quantity)
+ OR (movement_type =  'CONFIRM'                       AND qty_after = qty_before)
+ OR (movement_type =  'DISPOSE' AND disposal_reason =  'RETURNED' AND qty_after = qty_before)
+ OR (movement_type =  'DISPOSE' AND disposal_reason <> 'RETURNED' AND qty_after = qty_before - quantity)
+ OR (movement_type =  'ADJUST'  AND (qty_after = qty_before + quantity OR qty_after = qty_before - quantity)))
+```
+
+**항등식만이 아니라 유형이 정한 방향까지 본다.** `RESERVE` 가 재고를 늘리는 행도 거부된다.
+`ADJUST` 만 양방향이고 나머지는 방향이 하나로 고정된다.
+회수품 폐기가 `available_qty` 를 안 바꾼다는 규칙도 여기서 처음 강제된다. 전에는 주석에만 있었다.
+
+`quantity` 를 부호 있는 증감으로 바꿔 CHECK 를 한 줄로 줄이는 안도 있었다.
+
+```sql
+quantity INT NOT NULL,  -- + 는 늘고 - 는 준다
+CHECK (qty_after = qty_before + quantity)
+```
+
+짧지만 **유형별 방향이 DDL 밖으로 나간다.** `RESERVE` 에 `+5` 가 들어가도 통과한다.
+`CONFIRM` 은 증감이 0 이라 몇 개를 확정했는지도 사라진다. 원장이 자기만으로 완결되지 않게 되어 접었다.
+
 ### 반품은 원래 로트로 되돌린다
 
 소비기한이 로트에 달려 있어 다른 로트에 넣으면 기한을 잃는다.
