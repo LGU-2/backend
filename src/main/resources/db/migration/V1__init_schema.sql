@@ -210,7 +210,7 @@ CREATE TABLE coupon (
     valid_from          DATE         NOT NULL, -- 사용 유효 시작일
     valid_to            DATE         NOT NULL, -- 사용 유효 종료일
     target_grade_id     BIGINT       NULL, -- 대상 등급(NULL=전체)
-    is_active           BOOLEAN      NOT NULL DEFAULT TRUE, -- 발급 중단 스위치. 소진 여부는 issued_quantity 로 유도되므로 상태 컬럼을 따로 두지 않고, 사람이 끄는 경우만 이 값으로 표현한다
+    is_active           BOOLEAN      NOT NULL DEFAULT FALSE, -- 발급 스위치. 초안(FALSE)으로 태어나 사람이 켠다. ITEM 쿠폰은 대상이 하나 이상 있어야 켤 수 있고 그 검사는 앱이 한다. 소진 여부는 issued_quantity 로 유도한다
     created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
@@ -416,7 +416,7 @@ CREATE TABLE stock_allocation (
     CONSTRAINT fk_alloc_lot FOREIGN KEY (stock_lot_id) REFERENCES stock_lot (stock_lot_id),
     CONSTRAINT chk_alloc_qty CHECK (qty > 0),
     CONSTRAINT chk_alloc_status CHECK (status IN ('RESERVED','CONFIRMED','RELEASED'))
-); -- 주문상품-로트 할당(현재 상태. 어느 로트를 얼마나 잡고 있나. 이력은 stock_movement 에 있다)
+); -- 주문상품-로트 할당(주문상품이 어느 로트를 얼마나 잡고 있나 추적 이력은 stock_movement 에 있다): 반품 시 원래 로트를 찾는 경로(claim_item -> order_item -> stock_allocation)를 위한 테이블
 
 
 CREATE TABLE stock_movement (
