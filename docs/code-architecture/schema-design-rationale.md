@@ -81,8 +81,8 @@ UNIQUE KEY uk_... (<이름>_key)
 | `address` | `is_default_key` | 회원별 기본 배송지 1개 |
 | `product_image` | `is_main_key` | 상품별 대표 이미지 1개 |
 | `member` | `active_provider_key` | 활성 회원만 카카오 계정 유일 |
-| `orders` | `active_coupon_key` | 취소되지 않은 주문만 쿠폰당 1건 |
-| `order_item` | `active_coupon_key` | 살아 있는 라인만 쿠폰당 1건 |
+| `orders` | `active_coupon_key` | 살아 있는 주문만 쿠폰당 1건(취소, 전체 반품 제외) |
+| `order_item` | `active_coupon_key` | 살아 있는 라인만 쿠폰당 1건(취소, 반품 제외) |
 
 ### 걷어낸 둘
 
@@ -428,7 +428,7 @@ ITEM 쿠폰을 주문에     orders.coupon_scope 를 복제하고
 
 ```sql
 active_coupon_key BIGINT GENERATED ALWAYS AS
-    (CASE WHEN status <> 'CANCELED' THEN member_coupon_id ELSE NULL END),
+    (CASE WHEN status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END),
 UNIQUE KEY uk_order_active_coupon (active_coupon_key)
 ```
 
@@ -438,11 +438,41 @@ status            = 'CANCELED' 상태
 active_coupon_key = NULL       파생. 유일성 검사에서 빠진다
 ```
 
-**`NULL` 이 되는 것은 계산 컬럼이지 외래 키가 아니다.** 취소하면서 `status` 만 바꾸면 그 쿠폰이 자동으로 풀려
-다른 주문에서 다시 쓸 수 있다. `member_coupon.status` 를 `ISSUED` 로 되돌리는 것은 앱이 한다.
+### 해제 조건은 주문과 라인이 같다
 
-`order_item` 은 `item_status NOT IN ('CANCELED','RETURNED')` 를 조건으로 쓴다.
-교환은 상품이 유지되므로 쿠폰도 유지한다.
+둘 다 `CANCELED` 와 `RETURNED` 에서 쿠폰을 풀고 교환에서는 유지한다. 상품이 유지되면 쿠폰도 유지한다는 규칙이다.
+
+`orders` 쪽이 처음에는 `status <> 'CANCELED'` 였다. **전액 환불받고 쿠폰만 못 돌려받는 자리**였다.
+라인은 `RETURNED` 에서 풀리는데 주문은 안 풀렸다.
+
+고치기 전에 확인해야 했던 것이 있다. **부분 반품에서도 헤더가 `RETURNED` 가 된다면 이 수정은 위험하다.**
+
+```
+라인 3개 중 1개만 반품 -> 헤더가 RETURNED -> 쿠폰 해제
+남은 라인 2개는 여전히 그 쿠폰 할인을 받은 상태인데 같은 쿠폰을 새 주문에 또 쓴다
+```
+
+정책이 이 전제를 만족한다.
+
+```
+취소       라인 단위로 일어나지 않는다. 주문을 취소하면 라인 전부가 CANCELED 가 된다
+부분 반품   헤더를 바꾸지 않고 라인만 바꾼다. 헤더의 RETURNED 는 전체 반품만 뜻한다
+```
+
+**이 전제는 DB 가 강제하지 못한다.** "헤더가 `RETURNED` 면 모든 라인이 `RETURNED` 인가" 는 다른 행을 봐야 해서
+CHECK 범위 밖이다(9장 행의 부재와 같은 부류). 그래서 `orders.status` 주석에 명시하고 정합성 검사를 하나 뒀다.
+
+```sql
+SELECT o.order_id FROM orders o
+ WHERE o.status IN ('CANCELED','RETURNED')
+   AND EXISTS (SELECT 1 FROM order_item i
+                WHERE i.order_id = o.order_id AND i.item_status NOT IN ('CANCELED','RETURNED'));
+```
+
+**이 검사가 계산 컬럼의 안전판이다.** 전제가 깨지면 여기서 드러난다.
+
+**`NULL` 이 되는 것은 계산 컬럼이지 외래 키가 아니다.** 취소나 전체 반품에서 `status` 만 바꾸면 그 쿠폰이 자동으로 풀려
+다른 주문에서 다시 쓸 수 있다. `member_coupon.status` 를 `ISSUED` 로 되돌리는 것은 앱이 한다.
 
 **두 계산 컬럼이 서로 다른 컬럼을 본다.** `orders` 는 `status` 를, `order_item` 은 `item_status` 를 본다.
 계산 컬럼은 같은 행의 값만 참조할 수 있어서 라인이 주문 상태를 볼 방법이 없다.
@@ -901,6 +931,7 @@ DB 로 옮길 수 있는 것은 옮겼고, 남은 것이 이만큼이다. **전�
 | 환불 | `payment.refunded_amount` 를 조건부 `UPDATE` 로 올린다 | 4장 |
 | 주문 취소 | `member_coupon.status` 를 `ISSUED` 로 되돌린다 | 5장 |
 | 주문 취소 | `order_item.item_status` 도 함께 `CANCELED` 로 바꾼다 | 5장. 라인 계산 컬럼이 `orders.status` 를 보지 않는다 |
+| 주문 상태 | `CANCELED` 와 `RETURNED` 는 전체에만 쓴다. 부분 반품은 라인만 바꾼다 | 5장. 두 계산 컬럼이 이 전제 위에 선다 |
 | 재고 변동 | `available_qty` 를 바꾸는 연산과 `stock_movement` INSERT 를 한 트랜잭션에 | 6장 |
 | 클레임 | `order_item.item_status` 조건부 `UPDATE` 로 중복을 막는다 | 9장 |
 | 부모와 자식 | `orders` 와 `claim` 은 라인 없이 저장하는 경로를 만들지 않는다 | 9장 행의 부재 |
@@ -935,7 +966,13 @@ SELECT p.payment_id, p.refunded_amount, COALESCE(SUM(r.amount), 0) AS actual
   FROM payment p LEFT JOIN refund r ON r.order_id = p.order_id
  GROUP BY p.payment_id, p.refunded_amount HAVING p.refunded_amount <> COALESCE(SUM(r.amount), 0);
 
--- 6. 자식이 하나도 없는 부모가 있는가
+-- 6. 헤더가 종료 상태인데 살아 있는 라인이 있는가 (계산 컬럼의 전제가 깨졌다)
+SELECT o.order_id FROM orders o
+ WHERE o.status IN ('CANCELED','RETURNED')
+   AND EXISTS (SELECT 1 FROM order_item i
+                WHERE i.order_id = o.order_id AND i.item_status NOT IN ('CANCELED','RETURNED'));
+
+-- 7. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL

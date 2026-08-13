@@ -343,13 +343,15 @@ CREATE TABLE orders (
     order_id        BIGINT       NOT NULL AUTO_INCREMENT, -- orders PK
     order_no        VARCHAR(30)  NOT NULL, -- 주문번호
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
-    status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED). order_item.item_status 와 함께 바꾼다. DB가 강제하지 않는다
+    status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', /* 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED).
+                                                                        CANCELED 와 RETURNED 는 주문 전체에만 쓴다. 취소는 라인 단위로 일어나지 않고, 부분 반품은 헤더를 바꾸지 않고 라인만 바꾼다.
+                                                                        아래 계산 컬럼이 이 전제 위에 서 있으며 DB 는 강제하지 못한다. order_item.item_status 와 함께 바꾼다 */
     product_amount  INT          NOT NULL, -- 총상품금액. SUM(order_item.unit_price * qty) 와 같아야 한다(DI-3-06)
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소해도 비우지 않는다. 어느 쿠폰을 썼는지가 이력이고, 재사용은 계산 컬럼이 연다
     coupon_scope    VARCHAR(20)  NULL, -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ITEM 쿠폰을 이 자리에 넣지 못하게 한다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
-    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN status <> 'CANCELED' THEN member_coupon_id ELSE NULL END), -- 취소되지 않은 주문 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼
+    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END), -- 살아 있는 주문 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼. order_item 과 같은 조건이다. 교환은 상품이 유지되므로 쿠폰도 유지한다
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
     total_amount    INT          NOT NULL, -- 최종결제금액. 할인이 상품금액과 배송비를 다 덮으면 0이 될 수 있고, 그 주문은 payment 행 없이 바로 PAID 가 된다
     ship_recipient  VARCHAR(50)  NOT NULL, -- 배송지 스냅샷
@@ -365,7 +367,7 @@ CREATE TABLE orders (
     UNIQUE KEY uk_order_no (order_no),
     UNIQUE KEY uk_order_id_member (order_id, member_id), -- order_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_order_id_total (order_id, total_amount), -- payment 가 복합 외래 키로 참조한다. order_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
-    UNIQUE KEY uk_order_active_coupon (active_coupon_key), -- 취소되지 않은 주문 한정 쿠폰당 1건. 취소하면 계산 컬럼이 NULL 이 되어 그 쿠폰을 다시 쓸 수 있다
+    UNIQUE KEY uk_order_active_coupon (active_coupon_key), -- 살아 있는 주문 한정 쿠폰당 1건. 취소나 전체 반품이면 계산 컬럼이 NULL 이 되어 그 쿠폰을 다시 쓸 수 있다
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
     CONSTRAINT fk_order_coupon_scope FOREIGN KEY (member_coupon_id, coupon_scope) REFERENCES member_coupon (member_coupon_id, scope), -- scope 를 함께 요구해 ITEM 쿠폰을 붙일 수 없다
