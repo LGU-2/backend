@@ -100,7 +100,7 @@ CREATE TABLE admin (
 CREATE TABLE category (
     category_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 카테고리 PK
     parent_id       BIGINT       NULL, -- 상위 카테고리(확장용)
-    name            VARCHAR(50)  NOT NULL, -- 해산물/육류/채소/과일
+    name            VARCHAR(50)  NOT NULL, -- 수산물/육류/채소/과일/유제품
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (category_id),
@@ -126,7 +126,7 @@ CREATE TABLE product (
     supplier_id         BIGINT       NOT NULL, -- 공급처 FK
     sale_status         VARCHAR(30)  NOT NULL DEFAULT 'ON_SALE', -- 판매 상태(ON_SALE/SOLD_OUT/OFF_SALE)
     storage_type        VARCHAR(30)  NOT NULL, -- 보관 온도(ROOM 실온/COLD 냉장/FROZEN 냉동)
-    min_shelf_life_days INT          NOT NULL DEFAULT 0, -- 판매 최소 잔여 소비기한 N
+    sale_available_days_from_expiry INT NOT NULL DEFAULT 0, -- 판매 가능 최소 잔여일수. 소비기한까지 이 일수 이상 남아야 판매하고, 못 미치면 반품 재입고 대신 폐기한다
     description         TEXT         NULL, -- 상품 설명
     deleted_at          DATETIME(6)  NULL, -- 소프트딜리트
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -137,7 +137,7 @@ CREATE TABLE product (
     UNIQUE KEY uk_product_code (product_code), -- 상품코드 유일. 삭제한 코드를 다시 쓰지 않는다
     CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES category (category_id),
     CONSTRAINT fk_product_supplier FOREIGN KEY (supplier_id) REFERENCES supplier (supplier_id),
-    CONSTRAINT chk_product_shelf CHECK (min_shelf_life_days >= 0),
+    CONSTRAINT chk_product_shelf CHECK (sale_available_days_from_expiry >= 0),
     CONSTRAINT chk_product_deleted CHECK (deleted_at IS NULL OR sale_status = 'OFF_SALE') -- 삭제한 상품이 판매중으로 남지 않는다. 되살릴 때는 사람이 다시 켠다
 ); -- 상품
 

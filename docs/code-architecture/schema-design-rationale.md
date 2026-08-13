@@ -612,7 +612,7 @@ CHECK (qty_after = qty_before + quantity)
 
 소비기한이 로트에 달려 있어 다른 로트에 넣으면 기한을 잃는다.
 어느 로트였는지는 `claim_item -> order_item -> stock_allocation` 으로 찾는다.
-잔여 소비기한이 `product.min_shelf_life_days` 에 못 미치면 되돌리지 않고 폐기한다(`disposal_reason='RETURNED'`).
+잔여 소비기한이 `product.sale_available_days_from_expiry` 에 못 미치면 되돌리지 않고 폐기한다(`disposal_reason='RETURNED'`).
 그 경우 로트로 돌아간 적이 없으므로 `available_qty` 를 줄이지 않고 `stock_movement` 행도 남지 않는다.
 
 ### 집계는 옵션 단위다
