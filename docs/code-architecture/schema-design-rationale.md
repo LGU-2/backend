@@ -294,6 +294,33 @@ max_discount_amount  min_order_amount  valid_from  valid_to
 그 해석은 관리자가 대상을 실수로 지웠을 때 전 상품 할인으로 바뀌고, 그 사고가 조용하다.
 대상이 필수라야 `order_item` 이 복합 외래 키로 대상 여부를 강제할 수 있기도 하다.
 
+**복사 값 중 `scope` 만 성격이 다르다.** 나머지 일곱은 관리자가 `coupon` 을 고쳐도 옛 발급분이 옛 값을 유지하는
+진짜 스냅샷인데, `scope` 는 복합 외래 키로 `coupon.scope` 와 같기를 강제한다.
+
+```sql
+FOREIGN KEY (coupon_id, scope) REFERENCES coupon (coupon_id, scope)
+```
+
+이 한 칸이 비어 있을 때 사슬이 끊겨 있었다.
+
+```
+coupon.scope  --FK-->  coupon_product_option.scope    이어짐
+coupon.scope    끊김   member_coupon.scope            <- 여기
+member_coupon.scope --FK--> orders.coupon_scope       이어짐
+```
+
+**발급할 때 앱이 `ITEM` 쿠폰의 `scope` 에 `'ORDER'` 를 잘못 쓰면 그 쿠폰이 장바구니 쿠폰 행세를 하며 주문에 붙었다.**
+`orders` 의 외래 키 둘과 CHECK 가 전부 통과한다. `orders` 는 `member_coupon.scope` 를 믿는데 그 값이 검증되지 않았기 때문이다.
+`chk_mc_scope` 는 값이 `ORDER` 냐 `ITEM` 이냐만 볼 뿐 어느 쿠폰에서 나왔는지는 못 본다.
+
+`coupon` 에 `uk_coupon_id_scope` 가 이미 있어서 참조 대상을 새로 만들 필요는 없었다.
+부수 효과로 **발급분이 있는 쿠폰은 `scope` 를 바꿀 수 없게 된다.** 이미 나간 쿠폰의 성격을 바꾸는 것은
+정상 동작이 아니라 막히는 편이 맞고, 대상 옵션이 있는 `ITEM` 쿠폰은 `fk_cpo_coupon` 때문에 지금도 못 바꾼다.
+
+`member_coupon.scope` 를 지우고 유도하는 길도 봤다. 그러면 `orders` 가 범위를 확인할 방법이 없어진다.
+`orders` 는 `coupon_id` 를 안 갖고 `member_coupon_id` 만 갖기 때문에, 확인하려면 `orders` 에 `coupon_id` 를 복제하고
+외래 키를 둘로 늘려야 한다. **컬럼 수는 그대로인데 사슬만 길어져서** 지금 자리에 두는 쪽을 택했다.
+
 `coupon_product_option` 은 참조 그대로 두고 사용 시점의 현재 목록을 본다.
 **금액과 조건은 발급 시점에 고정되어야 하지만, "어디에 쓸 수 있나" 는 운영이 조정하는 것**이라 성질이 다르다.
 임박 재고가 팔리면 대상에서 빼는 식으로 조정할 수 있어야 한다.
@@ -832,6 +859,7 @@ CHECK 는 **자기 행만** 볼 수 있다. 다른 행이나 다른 표를 봐�
 | `order_item` | `member_id`, `coupon_id` | 남의 쿠폰을 붙이는 것, 대상이 아닌 옵션에 쓰는 것 |
 | `review` | `product_option_id`, `member_id` | 다른 상품에 리뷰를 쓰거나 남의 구매로 쓰는 것 |
 | `coupon_product_option` | `scope` | 장바구니 쿠폰에 대상 옵션을 다는 것 |
+| `member_coupon` | `scope` | 발급분의 범위가 쿠폰과 어긋나는 것 |
 | `orders` | `coupon_scope` | 상품 쿠폰을 장바구니 쿠폰 자리에 넣는 것 |
 | `payment` | `total_amount` | 결제 금액이 주문 최종금액과 다른 것 |
 | `refund` | `order_id` | 다른 주문의 결제에 환불을 다는 것, 결제 없는 주문에 환불을 만드는 것 |

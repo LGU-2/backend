@@ -227,7 +227,7 @@ CREATE TABLE coupon (
     created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_id),
-    UNIQUE KEY uk_coupon_id_scope (coupon_id, scope), -- coupon_product_option 이 복합 외래 키로 참조한다. coupon_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
+    UNIQUE KEY uk_coupon_id_scope (coupon_id, scope), -- coupon_product_option 과 member_coupon 이 복합 외래 키로 참조한다. coupon_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
     CONSTRAINT fk_coupon_grade FOREIGN KEY (target_grade_id) REFERENCES member_grade (member_grade_id),
     CONSTRAINT chk_coupon_scope CHECK (scope IN ('ORDER','ITEM')),
     CONSTRAINT chk_coupon_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
@@ -263,7 +263,7 @@ CREATE TABLE member_coupon (
     coupon_id           BIGINT       NOT NULL, -- 발급 틀 FK. 대상 옵션을 찾을 때와 어느 틀에서 나왔는지 추적할 때만 쓴다. 아래 조건 값들은 이 참조를 따라가지 않는다
     member_id           BIGINT       NOT NULL, -- 보유 회원 FK
     coupon_name         VARCHAR(100) NOT NULL, -- 발급 시점 쿠폰명
-    scope               VARCHAR(20)  NOT NULL, -- 발급 시점 적용 범위(ORDER/ITEM)
+    scope               VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER/ITEM). 조상 키 복제라 복합 외래 키가 coupon.scope 와 같기를 요구한다. 아래 복사 값들과 달리 갈라질 수 없다
     discount_type       VARCHAR(30)  NOT NULL, -- 발급 시점 할인 유형(AMOUNT/RATE)
     discount_value      INT          NOT NULL, -- 발급 시점 할인 값
     max_discount_amount INT          NULL, -- 발급 시점 정률 할인 상한
@@ -283,7 +283,7 @@ CREATE TABLE member_coupon (
     UNIQUE KEY uk_mc_id_coupon (member_coupon_id, coupon_id), -- order_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_mc_id_scope (member_coupon_id, scope), -- orders 가 복합 외래 키로 참조한다
     UNIQUE KEY uk_mc_coupon_seq (coupon_id, issue_seq), -- 한 쿠폰에서 같은 순번을 두 번 쓸 수 없다. MySQL UNIQUE 는 NULL 을 중복으로 보지 않아 무제한 쿠폰은 걸리지 않는다
-    CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
+    CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id, scope) REFERENCES coupon (coupon_id, scope), -- scope 를 함께 요구해 발급분의 범위가 쿠폰과 어긋날 수 없다
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
     CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
