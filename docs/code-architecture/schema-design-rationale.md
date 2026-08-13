@@ -73,11 +73,11 @@ UNIQUE KEY uk_... (<이름>_key)
 
 조건 밖 행은 `NULL` 이 되고, UNIQUE 가 `NULL` 을 여러 개 허용하므로 검사에서 빠진다.
 
-### 남긴 넷
+### 남긴 여섯
 
 | 표 | 컬럼 | 막는 것 |
 |---|---|---|
-| `member_grade` | `is_default_key` | 기본 등급은 전체에서 1개 |
+| `member_grade` | `is_default_key` | 기본 등급은 전체에서 최대 1개. 기본값은 `FALSE` 다. `TRUE` 였을 때는 등급을 둘째부터 못 넣었다 |
 | `address` | `is_default_key` | 회원별 기본 배송지 1개 |
 | `product_image` | `is_main_key` | 상품별 대표 이미지 1개 |
 | `member` | `active_provider_key` | 활성 회원만 카카오 계정 유일 |
@@ -679,15 +679,21 @@ SELECT c.coupon_id, c.name
   FROM coupon c
  WHERE c.scope = 'ITEM' AND c.is_active
    AND NOT EXISTS (SELECT 1 FROM coupon_product_option o WHERE o.coupon_id = c.coupon_id);
+
+-- 기본 등급이 정확히 1개인가
+SELECT COUNT(*) FROM member_grade WHERE is_default;
 ```
 
-같은 형태가 셋 더 있고 **아직 손대지 않았다.**
+같은 형태가 넷 더 있다.
 
 | 자리 | 지금 상태 | 풀 방법 |
 |---|---|---|
+| `member_grade` | 기본 등급이 하나도 없어도 된다. UNIQUE 는 **최대** 1개만 막는다 | 정합성 검사. 등급은 사람이 드물게 건드리는 표라 이걸로 충분하다 |
 | `product` | 옵션 없이 `sale_status='ON_SALE'` 로 태어난다 | 같은 수법. 기본값을 `OFF_SALE` 로 |
 | `orders` | 라인이 하나도 없어도 들어간다 | 초안 상태가 성립하지 않는다. 라인 없이 주문만 저장하는 코드를 못 쓰게 하는 쪽 |
 | `claim` | 항목이 하나도 없어도 들어간다 | 같음 |
+
+`member_grade` 외 셋은 **아직 손대지 않았다.**
 
 ### CHECK 는 결과가 `NULL` 이면 통과한다
 

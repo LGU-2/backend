@@ -20,8 +20,8 @@ CREATE TABLE member_grade (
     member_grade_id BIGINT       NOT NULL AUTO_INCREMENT, -- 등급 PK
     name            VARCHAR(50)  NOT NULL, -- 등급명(브론즈/실버/골드)
     promotion_rule  VARCHAR(255) NULL, -- 승급 기준
-    is_default      BOOLEAN      NOT NULL DEFAULT TRUE, -- 회원가입 시 부여할 기본 등급 여부(정확히 1개여야 함)
-    is_default_key  TINYINT GENERATED ALWAYS AS (CASE WHEN is_default THEN 1 ELSE NULL END), -- is_default=TRUE가 항상 1개임을 DB가 강제하기 위한 계산 컬럼
+    is_default      BOOLEAN      NOT NULL DEFAULT FALSE, -- 회원가입 시 부여할 기본 등급 여부. UNIQUE 가 최대 1개를 막고, 최소 1개는 DB 가 못 막아 정합성 검사가 본다
+    is_default_key  TINYINT GENERATED ALWAYS AS (CASE WHEN is_default THEN 1 ELSE NULL END), -- is_default=TRUE가 최대 1개임을 DB가 강제하기 위한 계산 컬럼
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_grade_id),
