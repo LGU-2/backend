@@ -432,7 +432,6 @@ CREATE TABLE stock_allocation (
     CONSTRAINT chk_alloc_status CHECK (status IN ('RESERVED','CONFIRMED','RELEASED'))
 ); -- 주문상품-로트 할당(주문상품이 어느 로트를 얼마나 잡고 있나 추적 이력은 stock_movement 에 있다): 반품 시 원래 로트를 찾는 경로(claim_item -> order_item -> stock_allocation)를 위한 테이블
 
-
 CREATE TABLE stock_movement (
     stock_movement_id BIGINT       NOT NULL AUTO_INCREMENT, -- stock_movement PK
     stock_lot_id      BIGINT       NOT NULL, -- 변동이 일어난 로트 FK
@@ -649,7 +648,6 @@ CREATE TABLE shipment_photo (
     CONSTRAINT chk_shipment_photo_status CHECK (upload_status IN ('PENDING','CONFIRMED')),
     CONSTRAINT fk_shipment_photo_shipment FOREIGN KEY (shipment_id) REFERENCES shipment (shipment_id)
 ); -- 문앞 배송 완료 사진. 비공개다
-
 
 -- =====================================================================
 -- 7. 리뷰 / Q&A
