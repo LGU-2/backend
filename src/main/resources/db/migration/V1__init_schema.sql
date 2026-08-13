@@ -560,8 +560,10 @@ CREATE TABLE claim (
     CONSTRAINT chk_claim_collect_type CHECK ( -- 회수는 반품/교환에만 있다. 취소는 물건이 나간 적이 없다
         type <> 'CANCEL'
      OR (collect_carrier IS NULL AND collect_tracking_no IS NULL AND collect_shipped_at IS NULL AND collect_delivered_at IS NULL)),
-    CONSTRAINT chk_claim_reship_type CHECK ( -- 재배송은 교환에만 있다. 취소와 반품은 새 상품을 보내지 않는다
-        type =  'EXCHANGE'
+    CONSTRAINT chk_claim_reship_type CHECK ( /* 재배송은 승인된 교환에만 있다. 취소와 반품은 새 상품을 보내지 않고,
+                                                거부되거나 아직 접수 상태인 교환도 새 상품을 보내지 않는다.
+                                                회수(collect)는 승인 전에 물건이 먼저 도착할 수 있어 상태를 걸지 않는다 */
+        (type = 'EXCHANGE' AND status IN ('APPROVED','COMPLETED'))
      OR (reship_carrier IS NULL AND reship_tracking_no IS NULL AND reship_shipped_at IS NULL AND reship_delivered_at IS NULL)),
     CONSTRAINT chk_claim_reship_at CHECK (reship_delivered_at IS NULL OR reship_shipped_at IS NULL OR reship_delivered_at >= reship_shipped_at),
     CONSTRAINT chk_claim_processed_at CHECK ( -- 처리된 클레임은 처리 시각을 갖는다. processed_by 는 시스템 자동 처리가 있어 NULL 을 허용하므로 시각만 본다

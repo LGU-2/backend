@@ -708,6 +708,29 @@ CONSTRAINT chk_payment_paid_at CHECK (
 `member` 의 탈퇴도 같은 형태다. `status='WITHDRAWN'` 과 `deleted_at` 이 어긋나면
 `active_provider_key` 가 잘못 계산되어 탈퇴자가 재가입을 못 하거나 활성 회원이 중복 가입된다.
 
+### 재배송은 승인된 교환에만 있다
+
+`claim` 은 `type` 에 따라 `collect_*` 와 `reship_*` 를 채운다. 여기에 상태 조건을 하나 더 걸었다.
+
+```sql
+CONSTRAINT chk_claim_reship_type CHECK (
+    (type = 'EXCHANGE' AND status IN ('APPROVED','COMPLETED'))
+ OR (reship_* 전부 NULL))
+```
+
+**거부됐거나 아직 접수 상태인 교환에 재배송 송장이 붙는 것**을 막는다. 새 상품을 보내놓고 거부한 셈이 되기 때문이다.
+
+**회수(`collect_*`)에는 같은 조건을 걸지 않았다.** 이 흐름이 정상이기 때문이다.
+
+```
+반품 신청 -> 고객이 회수 발송 -> 창고 도착 -> 확인해보니 사유 불충족 -> REJECTED
+```
+
+거부된 클레임에 `collect_delivered_at` 이 있는 것은 사실에 맞다. 물건은 실제로 왔다.
+승인 전에 물건이 먼저 도착하는 것도 운영에 따라 정상이라 상태를 걸면 정상 흐름을 막는다.
+
+**두 배송이 대칭으로 생겼다고 제약도 대칭이어야 하는 것은 아니다.** 회수는 고객이 시작하고 재배송은 우리가 시작한다.
+
 ---
 
 ## 9. DB 가 못 막아서 앱이 지켜야 하는 것
@@ -993,7 +1016,26 @@ SELECT o.order_id FROM orders o
    AND EXISTS (SELECT 1 FROM order_item i
                 WHERE i.order_id = o.order_id AND i.item_status NOT IN ('CANCELED','RETURNED'));
 
--- 7. 자식이 하나도 없는 부모가 있는가
+-- 7. 할당과 원장이 맞는가 (stock_movement 에 order_item_id 가 없어 주문+로트 단위까지만 대조된다)
+SELECT i.order_id, a.stock_lot_id, SUM(a.qty) AS alloc, COALESCE(m.net, 0) AS ledger
+  FROM stock_allocation a
+  JOIN order_item i ON i.order_item_id = a.order_item_id
+  LEFT JOIN (SELECT order_id, stock_lot_id,
+                    SUM(CASE WHEN movement_type = 'RESERVE' THEN quantity
+                             WHEN movement_type = 'RELEASE' THEN -quantity ELSE 0 END) AS net
+               FROM stock_movement GROUP BY order_id, stock_lot_id) m
+    ON m.order_id = i.order_id AND m.stock_lot_id = a.stock_lot_id
+ WHERE a.status IN ('RESERVED','CONFIRMED')
+ GROUP BY i.order_id, a.stock_lot_id, m.net
+HAVING SUM(a.qty) <> COALESCE(m.net, 0);
+
+-- 8. 발급 수가 한도를 넘었는가 (issue_seq 가 막는 불변식을 직접 확인한다)
+SELECT coupon_id, COUNT(*) AS issued, MAX(issue_limit) AS cap
+  FROM member_coupon
+ GROUP BY coupon_id
+HAVING MAX(issue_limit) IS NOT NULL AND COUNT(*) > MAX(issue_limit);
+
+-- 9. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL
@@ -1004,6 +1046,10 @@ SELECT 'product', p.product_id FROM product p
  WHERE p.sale_status = 'ON_SALE'
    AND NOT EXISTS (SELECT 1 FROM product_option o WHERE o.product_id = p.product_id);
 ```
+
+**발급 시점 스냅샷은 검사 대상이 아니다.** `member_coupon.issue_limit` 이 `coupon.total_quantity` 와
+같은지 보려다 접었다. 관리자가 한정 수량을 늘리면 옛 발급분이 다른 값을 갖는 것이 정상이라 매번 오탐이 난다.
+`coupon_name` 이나 `discount_value` 를 안 보는 것과 같은 이유이고, 대신 8 번이 **불변식 자체**를 본다.
 
 **4 와 5 는 카운터가 생기면 따라붙는 짝이다.** 카운터를 두는 대가가 이 검사이고,
 `stock_lot.available_qty` 도 같은 성질이라 `stock_movement` 의 `qty_before` / `qty_after` 로 되짚을 수 있다.
