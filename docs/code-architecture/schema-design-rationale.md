@@ -396,6 +396,26 @@ EXPIRE    -qty
 재고를 옮기지 않고 예약이 확정으로 넘어간 사실만 남긴다. `movement_type` 별로 `qty_after` 를 검사하려면
 이전 행을 봐야 해서 CHECK 로는 막을 수 없다.
 
+### 할당은 현재 상태이고 이력이 아니다
+
+`stock_allocation` 은 **지금 이 주문 상품이 어느 로트를 얼마나 잡고 있나**를 담는다.
+언제 잡았고 언제 풀었는지는 `stock_movement` 가 `RESERVE`, `CONFIRM`, `RELEASE` 로 이미 갖고 있다.
+
+처음에는 이 표의 주석이 "예약/차감 이력" 이었고, 그래서 유일성을 걸 수 없었다.
+**두 표가 같은 것을 이력으로 담으려 한 것이 원인이었다.**
+
+```sql
+UNIQUE KEY uk_alloc_orderitem_lot (order_item_id, stock_lot_id)
+```
+
+이게 없으면 재시도로 같은 예약이 두 번 들어가 `available_qty` 가 이중 차감된다.
+로트 재고가 4개 빠졌는데 주문은 2개인 상태가 조용히 만들어진다.
+
+**재예약에 새 행이 필요 없다.** 같은 행의 `status` 를 `RELEASED` 에서 `RESERVED` 로 되돌리면 되고,
+그 전이는 `stock_movement` 에 남는다. 조합당 행이 하나뿐이라 조건부 유일성도 필요 없다.
+
+`stock_lot.available_qty` 와 `stock_movement` 의 관계와 같은 구조다. 잔액은 현재 상태, 원장은 이력.
+
 ### 원장은 같은 트랜잭션에서 함께 쓴다
 
 `stock_movement` 는 `available_qty` 를 바꾸는 **모든** 연산과 같은 트랜잭션 안에서 함께 `INSERT` 한다.

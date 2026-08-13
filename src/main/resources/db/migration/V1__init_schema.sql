@@ -407,15 +407,16 @@ CREATE TABLE stock_allocation (
     order_item_id   BIGINT       NOT NULL, -- 주문 상품 FK
     stock_lot_id          BIGINT       NOT NULL, -- 차감 대상 로트 FK
     qty             INT          NOT NULL, -- FEFO 예약/차감 수량
-    status          VARCHAR(30)  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(available_qty 를 뺀다) / CONFIRMED=차감 확정(available_qty 무변동) / RELEASED=해제(되돌린다)
+    status          VARCHAR(30)  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(available_qty 를 뺀다) / CONFIRMED=차감 확정(available_qty 무변동) / RELEASED=해제(되돌린다). 재예약은 새 행이 아니라 이 값을 RESERVED 로 되돌린다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_allocation_id),
+    UNIQUE KEY uk_alloc_orderitem_lot (order_item_id, stock_lot_id), -- 한 주문 상품이 한 로트를 잡는 행은 하나. 재시도로 예약이 두 번 들어가 available_qty 가 이중 차감되는 것을 막는다
     CONSTRAINT fk_alloc_orderitem FOREIGN KEY (order_item_id) REFERENCES order_item (order_item_id),
     CONSTRAINT fk_alloc_lot FOREIGN KEY (stock_lot_id) REFERENCES stock_lot (stock_lot_id),
     CONSTRAINT chk_alloc_qty CHECK (qty > 0),
     CONSTRAINT chk_alloc_status CHECK (status IN ('RESERVED','CONFIRMED','RELEASED'))
-); -- 주문상품-로트 할당(예약/차감 이력. status로 예약->확정->해제 추적)
+); -- 주문상품-로트 할당(현재 상태. 어느 로트를 얼마나 잡고 있나. 이력은 stock_movement 에 있다)
 
 CREATE TABLE stock_disposal (
     stock_disposal_id     BIGINT       NOT NULL AUTO_INCREMENT, -- stock_disposal PK
