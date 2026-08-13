@@ -710,6 +710,33 @@ CONSTRAINT chk_payment_paid_at CHECK (
 `member` 의 탈퇴도 같은 형태다. `status='WITHDRAWN'` 과 `deleted_at` 이 어긋나면
 `active_provider_key` 가 잘못 계산되어 탈퇴자가 재가입을 못 하거나 활성 회원이 중복 가입된다.
 
+`admin` 의 삭제는 한 걸음 더 간다. **삭제된 관리자는 리프레시 토큰도 비어 있어야 한다.**
+
+```sql
+CONSTRAINT chk_admin_deleted CHECK (
+    (status =  'DELETED' AND deleted_at IS NOT NULL AND refresh_token_hash IS NULL)
+ OR (status <> 'DELETED' AND deleted_at IS NULL))
+```
+
+토큰이 남아 있으면 **삭제해도 세션이 그대로 살아 있다.** 액세스 토큰이 stateless 라
+재발급을 끊는 것 말고는 막을 방법이 없고, 관리자 세션은 회원보다 위험한 쪽이다.
+`member` 에는 이 조건이 없다. 탈퇴는 본인이 하는 것이라 세션을 끊는 주체와 대상이 같지만,
+관리자 삭제는 남이 하는 것이라 대상이 로그인한 채로 남을 수 있다.
+
+`admin` 은 애초에 **하드 삭제가 불가능한 표**다. 이력 다섯이 `admin_id` 를 참조한다.
+
+```
+audit_log.admin_id                     감사 로그
+stock_movement.admin_id                수동 조정과 폐기 처리자
+claim.processed_by                     클레임 처리자
+qna.answered_by                        답변자
+member_coupon_status_history.changed_by 쿠폰 상태를 바꾼 사람
+```
+
+`login_id` 는 삭제해도 다시 쓰지 않는다. 감사 로그가 `admin_id` 를 가리키므로 이력 자체는 안전하지만,
+**같은 아이디가 다른 사람이 되면 로그를 읽는 사람이 헷갈린다.** `product_code` 와 같은 판단이다.
+`member` 가 계산 컬럼으로 재가입을 여는 것과는 반대인데, 카카오 계정 재가입은 실제 요구이고 관리자 아이디 재사용은 요구가 아니다.
+
 ### 재배송은 승인된 교환에만 있다
 
 `claim` 은 `type` 에 따라 `collect_*` 와 `reship_*` 를 채운다. 여기에 상태 조건을 하나 더 걸었다.

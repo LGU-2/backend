@@ -81,16 +81,23 @@ CREATE TABLE admin (
     password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
     name            VARCHAR(50)  NOT NULL, -- 관리자 이름
     role            VARCHAR(30)  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
+    status          VARCHAR(30)  NOT NULL DEFAULT 'ACTIVE', -- 관리자 상태(ACTIVE 활성/DELETED 삭제). 이력 표 다섯이 admin_id 를 참조해 하드 삭제가 불가능하다
     refresh_token_hash CHAR(64)  NULL, -- 리프레시 토큰의 SHA-256 hex. 평문은 저장하지 않는다. NULL 은 로그아웃 상태다
     refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
+    deleted_at      DATETIME(6)  NULL, -- 소프트딜리트(삭제 시각)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (admin_id),
     CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
+    CONSTRAINT chk_admin_status CHECK (status IN ('ACTIVE','DELETED')),
+    CONSTRAINT chk_admin_deleted CHECK ( /* 삭제가 status 와 deleted_at 두 곳에 표현되어 어긋날 수 있다. 둘을 묶는다.
+                                            삭제된 관리자는 리프레시 토큰도 비어 있어야 한다. 남아 있으면 세션이 그대로 살아 있다 */
+        (status =  'DELETED' AND deleted_at IS NOT NULL AND refresh_token_hash IS NULL)
+     OR (status <> 'DELETED' AND deleted_at IS NULL)),
     CONSTRAINT chk_admin_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
         (refresh_token_hash IS NULL     AND refresh_token_expires_at IS NULL)
      OR (refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL)),
-    UNIQUE KEY uk_admin_login_id (login_id)
+    UNIQUE KEY uk_admin_login_id (login_id) -- 삭제해도 이 값은 다시 쓰지 않는다. 감사 로그가 admin_id 를 가리키므로 이력은 안전하지만, 같은 아이디가 다른 사람이 되면 사람이 헷갈린다
 ); -- 관리자
 
 -- =====================================================================
