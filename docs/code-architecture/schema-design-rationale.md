@@ -850,6 +850,68 @@ HAVING o.product_amount  <> SUM(i.unit_price * i.qty)
 
 없다. 넷은 계산 컬럼으로, 둘은 재사용을 포기해 평범한 UNIQUE 로 처리했다.
 
+### 앱이 지켜야 할 것 한눈에
+
+DB 로 옮길 수 있는 것은 옮겼고, 남은 것이 이만큼이다. **전부 코드가 아직 없다.**
+
+| 자리 | 규칙 | 근거 |
+|---|---|---|
+| 쿠폰 활성화 | `scope='ITEM'` 인데 활성 대상이 0 개면 거부 | 9장 행의 부재 |
+| 쿠폰 적용 | `coupon_product_option.is_active` 인 대상만 허용 | 5장 |
+| 대상 조정 | `DELETE` 가 아니라 `is_active` 를 내린다 | 5장 |
+| 선착순 발급 | 조건부 `UPDATE` 로 올린 `issued_quantity` 를 `issue_seq` 에 넣는다 | 5장 |
+| 환불 | `payment.refunded_amount` 를 조건부 `UPDATE` 로 올린다 | 4장 |
+| 주문 취소 | `member_coupon.status` 를 `ISSUED` 로 되돌린다 | 5장 |
+| 주문 취소 | `order_item.item_status` 도 함께 `CANCELED` 로 바꾼다 | 5장. 라인 계산 컬럼이 `orders.status` 를 보지 않는다 |
+| 재고 변동 | `available_qty` 를 바꾸는 연산과 `stock_movement` INSERT 를 한 트랜잭션에 | 6장 |
+| 클레임 | `order_item.item_status` 조건부 `UPDATE` 로 중복을 막는다 | 9장 |
+| 부모와 자식 | `orders` 와 `claim` 은 라인 없이 저장하는 경로를 만들지 않는다 | 9장 행의 부재 |
+| 상태 전이 | 주문, 결제, 배송, 클레임의 전이 규칙 전반 | 8장 |
+| 이미지 | 조회는 `CONFIRMED` 만, 확정은 HeadObject 로 | 7장 |
+
+### 정합성 검사 한눈에 (`DI-7-01`)
+
+막지는 못하고 어긋난 것을 찾는다. 배치가 주기적으로 돌린다.
+
+```sql
+-- 1. 주문 합계가 라인 합과 맞는가
+SELECT o.order_id FROM orders o JOIN order_item i ON i.order_id = o.order_id
+ GROUP BY o.order_id, o.product_amount, o.discount_amount
+HAVING o.product_amount <> SUM(i.unit_price * i.qty) OR o.discount_amount <> SUM(i.discount_amount);
+
+-- 2. 켜진 ITEM 쿠폰인데 활성 대상이 없는가
+SELECT c.coupon_id FROM coupon c
+ WHERE c.scope = 'ITEM' AND c.is_active
+   AND NOT EXISTS (SELECT 1 FROM coupon_product_option o WHERE o.coupon_id = c.coupon_id AND o.is_active);
+
+-- 3. 기본 등급이 정확히 1개인가
+SELECT COUNT(*) FROM member_grade WHERE is_default;
+
+-- 4. 발급 카운터가 실제 발급 수와 맞는가 (초과 발급은 순번이 막지만 카운터 자체는 어긋날 수 있다)
+SELECT c.coupon_id, c.issued_quantity, COUNT(m.member_coupon_id) AS actual
+  FROM coupon c LEFT JOIN member_coupon m ON m.coupon_id = c.coupon_id
+ GROUP BY c.coupon_id, c.issued_quantity HAVING c.issued_quantity <> COUNT(m.member_coupon_id);
+
+-- 5. 환불 카운터가 환불 합과 맞는가
+SELECT p.payment_id, p.refunded_amount, COALESCE(SUM(r.amount), 0) AS actual
+  FROM payment p LEFT JOIN refund r ON r.order_id = p.order_id
+ GROUP BY p.payment_id, p.refunded_amount HAVING p.refunded_amount <> COALESCE(SUM(r.amount), 0);
+
+-- 6. 자식이 하나도 없는 부모가 있는가
+SELECT 'order' AS kind, o.order_id AS id FROM orders o
+ WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
+UNION ALL
+SELECT 'claim', c.claim_id FROM claim c
+ WHERE NOT EXISTS (SELECT 1 FROM claim_item i WHERE i.claim_id = c.claim_id)
+UNION ALL
+SELECT 'product', p.product_id FROM product p
+ WHERE p.sale_status = 'ON_SALE'
+   AND NOT EXISTS (SELECT 1 FROM product_option o WHERE o.product_id = p.product_id);
+```
+
+**4 와 5 는 카운터가 생기면 따라붙는 짝이다.** 카운터를 두는 대가가 이 검사이고,
+`stock_lot.available_qty` 도 같은 성질이라 `stock_movement` 의 `qty_before` / `qty_after` 로 되짚을 수 있다.
+
 ---
 
 ## 10. 삽입 후 바뀌면 안 되는 컬럼
@@ -885,7 +947,13 @@ claim_item              claim_id, order_item_id, order_id
 review                  order_item_id, product_option_id, product_id, member_id
 coupon_product_option   coupon_id, scope
 orders                  coupon_scope
+refund                  claim_id, order_id
+payment                 order_id, amount
 ```
+
+`payment.amount` 는 조상 키가 아니라 조상의 **값**을 복제한 것인데 성질이 같다.
+`orders.total_amount` 와 복합 외래 키로 묶여 있어 바꾸면 참조가 깨진다.
+결제가 붙은 뒤 주문 금액을 고칠 수 없게 만드는 것이 이 복제의 목적이기도 하다.
 
 `claim_item.order_id` 를 바꾸면 두 복합 외래 키가 새 값으로 다시 검사되고,
 그 값을 만족하는 다른 클레임과 다른 주문 상품 조합이 있으면 통과한다. **클레임이 통째로 다른 주문으로 옮겨간다.**
@@ -918,15 +986,33 @@ orders.ship_recipient, ship_phone, ship_zipcode, ship_address, ship_message
 **지금 형태로는 아직 실행된 적이 없다.** 정적 검사만 거쳤다.
 
 MySQL 8.4 컨테이너에 올려 표를 만들고 제약이 실제로 동작하는지 확인한 적은 있으나,
-그것은 표가 35개이고 쿠폰이 캠페인 구조이던 시점이다. 그 이후 이만큼이 바뀌었다.
+그것은 표가 35 개이고 쿠폰이 캠페인 구조이던 시점이다. 그 이후 이만큼이 바뀌었다.
 
 ```
 쿠폰 재설계             캠페인 표 제거, member_coupon 이 조건을 복사
 포인트와 등급 할인 제거
-DATETIME(6) 전환        시각 컬럼 77개
-복합 외래 키 11건        조상 키 복제 여섯
-계산 컬럼 6개
+폐기 표 흡수            stock_disposal 이 stock_movement 로 들어감
+DATETIME(6) 전환        시각 컬럼 78 개
+복합 외래 키 13 건
+계산 컬럼 6 개
 ```
+
+현재 규모는 **표 32, 제약 133, 인덱스 50** 이다.
+
+정적으로 확인한 것은 이렇다. 매번 스크립트로 다시 돌린다.
+
+```
+제약과 인덱스 이름 중복 0        PK 누락, 트레일링 콤마 0
+정의 순서 역전 0                 끊긴 참조 0
+복합 외래 키 대상 UNIQUE 누락 0
+의도 밖 NULL 통과 CHECK 0
+연속 빈 줄 0                     금지 문자 0
+```
+
+마지막 검증 라운드에서 여덟 건을 찾아 모두 닫았다.
+기본 등급 삽입 실패, 쿠폰 대상 조정 차단, 결제액 무검증, 환불 총액 초과,
+0 원 주문 환불, 기본 등급 부재, 리뷰 보조 인덱스 부재, 연속 빈 줄이다.
+성격이 하나로 모였는데 **적어 둔 의도와 실제 DDL 이 어긋난 자리**였다.
 
 **복합 외래 키와 계산 컬럼은 실행해야 확실해진다.** 참조 대상 UNIQUE 가 전부 맞는지,
 계산 컬럼이 참조하는 컬럼 순서가 MySQL 요구를 만족하는지는 정적으로 확인했지만
