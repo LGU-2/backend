@@ -13,14 +13,14 @@ DDL 주석이 **무엇을** 하는지를 적는다면 이 문서는 **왜 그렇
 
 ## 1. 전체 구조
 
-활성 33개 표를 8장으로 나눈다. 장 순서는 **참조가 앞에서 뒤로만 흐르도록** 정했다.
+활성 32개 표를 8장으로 나눈다. 장 순서는 **참조가 앞에서 뒤로만 흐르도록** 정했다.
 
 ```
 1. 회원 / 권한   member_grade, member, address, admin
 2. 상품 / 재고   category, supplier, product, product_option, product_image, stock_lot
 3. 쿠폰         coupon, coupon_product_option, member_coupon, member_coupon_status_history
 4. 장바구니      cart, cart_item
-5. 주문 / 결제   orders, order_item, stock_allocation, stock_disposal, stock_movement,
+5. 주문 / 결제   orders, order_item, stock_allocation, stock_movement,
                 daily_sales, order_status_history, payment
 6. 클레임        claim, claim_attachment, claim_item, refund, shipment, shipment_photo
 7. 리뷰 / Q&A   review, qna
@@ -420,13 +420,31 @@ UNIQUE KEY uk_alloc_orderitem_lot (order_item_id, stock_lot_id)
 
 `stock_movement` 는 `available_qty` 를 바꾸는 **모든** 연산과 같은 트랜잭션 안에서 함께 `INSERT` 한다.
 따로 쓰면 재고와 이력이 어긋나고, 어긋난 뒤에는 어느 쪽이 맞는지 판단할 근거가 사라진다.
-`stock_allocation` 은 예약 상태를, `stock_disposal` 은 폐기 상세를 맡고, 이 표는 변동 자체를 시간순으로 모으는 통합 창구다.
+`stock_allocation` 은 예약 상태를 맡고, 이 표는 재고에 관한 모든 사건을 시간순으로 모으는 단일 창구다.
+
+폐기는 처음에 `stock_disposal` 이라는 별도 표에 있었는데 흡수했다.
+**폐기하면 `available_qty` 가 줄어 `DISPOSE` 행이 반드시 생기므로, 같은 폐기가 두 표에 기록되고 있었다.**
+두 수량이 어긋나도 아무도 보지 않는 자리였다.
+
+```sql
+disposal_reason VARCHAR(30) NULL,   -- DISPOSE 일 때만
+
+CHECK ((movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND admin_id IS NOT NULL)
+    OR (movement_type <> 'DISPOSE' AND disposal_reason IS NULL))
+```
+
+컬럼 하나와 CHECK 하나가 별도 표가 하던 일(사유 enum 강제, 처리자 필수)을 그대로 한다.
+`claim` 이 `type` 에 따라 `collect_*` 와 `reship_*` 를 채우는 것과 같은 패턴이다.
+
+**`stock_movement` 을 없애고 `stock_disposal` 만 남기는 방향은 검토했다가 버렸다.**
+그러면 폐기 외 일곱 가지 변동의 기록이 사라지고, `available_qty` 가 왜 그 값인지 설명할 수 없게 되며,
+`daily_sales` 의 집계 원천도 없어진다.
 
 ### 반품은 원래 로트로 되돌린다
 
 소비기한이 로트에 달려 있어 다른 로트에 넣으면 기한을 잃는다.
 어느 로트였는지는 `claim_item -> order_item -> stock_allocation` 으로 찾는다.
-잔여 소비기한이 `product.min_shelf_life_days` 에 못 미치면 되돌리지 않고 폐기한다(`stock_disposal.reason='RETURNED'`).
+잔여 소비기한이 `product.min_shelf_life_days` 에 못 미치면 되돌리지 않고 폐기한다(`disposal_reason='RETURNED'`).
 그 경우 로트로 돌아간 적이 없으므로 `available_qty` 를 줄이지 않고 `stock_movement` 행도 남지 않는다.
 
 ### 집계는 옵션 단위다
@@ -521,7 +539,7 @@ CHECK 는 **자기 행만** 볼 수 있다. 다른 행이나 다른 표를 봐�
 | 없앤 컬럼 | 어디서 유도되나 |
 |---|---|
 | `refund.payment_id` | `claim.order_id -> payment`. `uk_payment_order` 가 주문당 결제 1건을 보장한다 |
-| `stock_disposal.product_id` | `stock_lot -> product_option -> product`. `stock_lot_id` 를 `NOT NULL` 로 바꿔 유도가 항상 성립한다 |
+| `stock_disposal.product_id` | `stock_lot -> product_option -> product`. `stock_lot_id` 를 `NOT NULL` 로 바꿔 유도가 항상 성립했다. 그 뒤 표 자체가 `stock_movement` 로 흡수됐다 |
 
 나머지는 복합 외래 키 열로 막는다.
 

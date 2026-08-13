@@ -418,30 +418,18 @@ CREATE TABLE stock_allocation (
     CONSTRAINT chk_alloc_status CHECK (status IN ('RESERVED','CONFIRMED','RELEASED'))
 ); -- 주문상품-로트 할당(현재 상태. 어느 로트를 얼마나 잡고 있나. 이력은 stock_movement 에 있다)
 
-CREATE TABLE stock_disposal (
-    stock_disposal_id     BIGINT       NOT NULL AUTO_INCREMENT, -- stock_disposal PK
-    stock_lot_id    BIGINT       NOT NULL, -- 폐기 대상 로트 FK. 상품은 로트에서 유도되므로 저장하지 않는다
-    admin_id        BIGINT       NOT NULL, -- 폐기 처리 관리자 FK
-    qty             INT          NOT NULL, -- 폐기수량
-    reason          VARCHAR(30)  NOT NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 재입고하지 않은 회수품). RETURNED 는 available_qty 를 줄이지 않는다
-    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    PRIMARY KEY (stock_disposal_id),
-    CONSTRAINT chk_disposal_reason CHECK (reason IN ('EXPIRED','DAMAGED','RETURNED')),
-    CONSTRAINT fk_disposal_lot FOREIGN KEY (stock_lot_id) REFERENCES stock_lot (stock_lot_id),
-    CONSTRAINT fk_disposal_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id),
-    CONSTRAINT chk_disposal_qty CHECK (qty > 0)
-); -- 폐기 이력(로트 단위. 상품은 로트에서 유도한다)
 
 CREATE TABLE stock_movement (
     stock_movement_id BIGINT       NOT NULL AUTO_INCREMENT, -- stock_movement PK
     stock_lot_id      BIGINT       NOT NULL, -- 변동이 일어난 로트 FK
-    movement_type     VARCHAR(30)  NOT NULL, -- 변동 유형(INBOUND 신규 입고/RESTOCK 반품 재입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정). RESTOCK 은 원래 로트로 되돌린다
+    movement_type     VARCHAR(30)  NOT NULL, -- 변동 유형(INBOUND 신규 입고/RESTOCK 반품 재입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정). RESTOCK 은 원래 로트로 되돌리고, 잔여 소비기한이 모자라면 되돌리지 않고 DISPOSE 로 폐기한다
     quantity          INT          NOT NULL, -- 변동 수량(절대값, 증감 방향은 movement_type으로 판단)
     qty_before        INT          NOT NULL, -- 변동 전 로트 available_qty
     qty_after         INT          NOT NULL, -- 변동 후 로트 available_qty. CONFIRM 은 두 값이 같다
     order_id          BIGINT       NULL, -- 관련 주문 FK(주문 기인 변동만, 그 외 NULL)
     admin_id          BIGINT       NULL, -- 처리 관리자 FK(수동조정/폐기 등, 시스템 자동은 NULL)
-    reason            VARCHAR(200) NULL, -- 사유 상세(폐기/만료/조정 등)
+    disposal_reason   VARCHAR(30)  NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 재입고하지 않은 회수품). DISPOSE 일 때만 채운다
+    reason            VARCHAR(200) NULL, -- 사유 상세(만료/조정 등 자유 서술)
     created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_movement_id),
     KEY idx_movement_lot_time (stock_lot_id, created_at), -- 로트별 시간순 조회(정합성 추적)
@@ -450,8 +438,11 @@ CREATE TABLE stock_movement (
     CONSTRAINT fk_movement_order FOREIGN KEY (order_id) REFERENCES orders (order_id),
     CONSTRAINT fk_movement_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id),
     CONSTRAINT chk_movement_type CHECK (movement_type IN ('INBOUND','RESTOCK','RESERVE','CONFIRM','RELEASE','DISPOSE','EXPIRE','ADJUST')),
-    CONSTRAINT chk_movement_qty CHECK (quantity > 0 AND qty_before >= 0 AND qty_after >= 0)
-); -- 재고 변동 이력(로트 단위 시간순). available_qty 를 바꾸는 모든 연산과 같은 트랜잭션에서 함께 INSERT 한다
+    CONSTRAINT chk_movement_qty CHECK (quantity > 0 AND qty_before >= 0 AND qty_after >= 0),
+    CONSTRAINT chk_movement_disposal CHECK ( -- 폐기는 사유와 처리자를 반드시 갖는다. 다른 유형에는 폐기 사유가 없다
+        (movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND admin_id IS NOT NULL)
+     OR (movement_type <> 'DISPOSE' AND disposal_reason IS NULL))
+); -- 재고 변동 이력(로트 단위 시간순). 재고에 관한 모든 사건의 단일 창구다. available_qty 를 바꾸는 연산과 같은 트랜잭션에서 함께 INSERT 하고, 재입고하지 않은 회수품 폐기처럼 값을 안 바꾸는 것은 qty_before = qty_after 로 남긴다
 
 CREATE TABLE daily_sales (
     daily_sales_id  BIGINT       NOT NULL AUTO_INCREMENT, -- daily_sales PK
