@@ -259,7 +259,51 @@ max_discount_amount  min_order_amount  valid_from  valid_to
 셋의 정합을 아무도 검증하지 않았으며, 발급 카운터가 둘로 나뉘어 합이 맞는지도 볼 수 없었다.
 
 `is_active` 만 두고 `SCHEDULED/OPEN/CLOSED` 상태는 뺐다.
-**소진 여부는 `issued_quantity` 로 유도되므로** 저장하면 어긋날 자리만 생긴다. 사람이 끄는 경우만 컬럼으로 표현한다.
+**소진 여부는 `issued_quantity` 로 유도되므로** 저장하면 어긋날 자리만 생긴다.
+사람이 켜고 끄는 것만 이 컬럼으로 표현하고, 기본값은 `FALSE` 라 쿠폰은 초안으로 태어난다(9장).
+
+### 한정 수량은 순번으로 강제한다
+
+`coupon.issued_quantity` 는 카운터고 실제 발급 수는 `member_coupon` 행 수다. **둘은 어긋날 수 있다.**
+카운터가 실제보다 작으면 한정 수량을 넘겨 발급된다. 부모 카운터 대 자식 행 수라 `DI-3-06` 형태이고,
+CHECK 는 자기 행만 보므로 "행 수를 세어 비교하라" 를 제약으로 쓸 수 없다.
+
+**세는 대신 번호를 매겼다.** 발급분이 몇 번째인지를 자기 행에 들고 있으면 자기 행만 보고도 한도를 알 수 있다.
+
+```sql
+issue_limit INT NULL,   -- 발급 시점 coupon.total_quantity 복사
+issue_seq   INT NULL,   -- 발급 순번. 무제한 쿠폰은 NULL
+
+UNIQUE KEY uk_mc_coupon_seq (coupon_id, issue_seq),
+CHECK ((issue_limit IS NULL     AND issue_seq IS NULL)
+    OR (issue_limit IS NOT NULL AND issue_seq IS NOT NULL AND issue_seq >= 1 AND issue_seq <= issue_limit))
+```
+
+순번은 카운터를 올린 값을 그대로 쓴다. 조건부 UPDATE 가 잡은 행 잠금이 커밋까지 유지되므로 같은 번호가 둘에게 가지 않는다.
+
+```sql
+UPDATE coupon SET issued_quantity = issued_quantity + 1
+ WHERE coupon_id = ? AND is_active
+   AND (total_quantity IS NULL OR issued_quantity < total_quantity);
+-- affected rows 0 이면 소진이거나 꺼진 쿠폰이다
+-- 갱신된 issued_quantity 가 그 발급분의 issue_seq 가 된다
+```
+
+**카운터가 어긋나도 초과 발급이 안 된다.**
+
+| 어긋난 방향 | 무슨 일이 나나 | 무엇이 막나 |
+|---|---|---|
+| 카운터가 작다 | 이미 쓴 번호를 다시 발급한다 | `uk_mc_coupon_seq` |
+| 카운터가 크다 | 번호가 한도를 넘는다 | `chk_mc_issue_seq` |
+
+서로 다른 번호가 `1..issue_limit` 안에만 존재하므로 **행 수는 한도를 넘을 수 없다.**
+카운터의 정확성은 여전히 앱 몫이지만, 그 오차가 한정 수량을 깨뜨리지는 못한다.
+
+`issue_limit` 을 복사하는 것은 다른 조건들과 같은 이유다. 관리자가 수량을 100 에서 200 으로 늘리면
+이후 발급분만 새 한도로 판정되고 이미 나간 것은 그대로다. 줄이면 그 시점부터 발급이 멈춘다.
+
+무제한 쿠폰은 둘 다 `NULL` 이다. MySQL UNIQUE 가 `NULL` 을 중복으로 보지 않아 **번호를 다투지 않는다.**
+`NULL` 을 비워 두는 것으로 제약을 끄는 방식은 3장의 조건부 유일성과 같은 수법이다.
 
 ### 쿠폰을 한 표로 모으지 않는다
 
@@ -644,6 +688,34 @@ SELECT c.coupon_id, c.name
 | `product` | 옵션 없이 `sale_status='ON_SALE'` 로 태어난다 | 같은 수법. 기본값을 `OFF_SALE` 로 |
 | `orders` | 라인이 하나도 없어도 들어간다 | 초안 상태가 성립하지 않는다. 라인 없이 주문만 저장하는 코드를 못 쓰게 하는 쪽 |
 | `claim` | 항목이 하나도 없어도 들어간다 | 같음 |
+
+### CHECK 는 결과가 `NULL` 이면 통과한다
+
+제약이 걸린 줄 알았는데 안 걸리는 자리가 있었다. CHECK 는 **`FALSE` 일 때만 거부하고 `NULL` 은 통과시킨다.**
+
+```sql
+-- 고치기 전
+(member_coupon_id IS NOT NULL AND coupon_scope = 'ORDER')
+OR (member_coupon_id IS NULL  AND coupon_scope IS NULL)
+```
+
+`member_coupon_id` 만 채우고 `coupon_scope` 를 비우면 첫 가지가 `NULL`, 둘째 가지가 `FALSE` 라
+전체가 `NULL` 이 되어 **통과한다.** 복합 외래 키도 컬럼에 `NULL` 이 끼면 검사하지 않으므로
+`ITEM` 쿠폰을 장바구니 쿠폰 자리에 넣는 것이 그대로 뚫려 있었다. 앞에서 막았다고 적어 둔 바로 그 경로다.
+
+가지 안에 `IS NOT NULL` 을 명시해서 닫았다.
+
+```sql
+(member_coupon_id IS NOT NULL AND coupon_scope IS NOT NULL AND coupon_scope = 'ORDER')
+OR (member_coupon_id IS NULL  AND coupon_scope IS NULL)
+```
+
+**규칙은 이렇다.** 가지가 여럿인 CHECK 에서 `NULL` 가능 컬럼을 비교 연산에 쓰면,
+그 가지 안에 그 컬럼의 `IS NOT NULL` 이 함께 있어야 한다.
+`chk_mc_issue_seq` 를 쓸 때 `issue_seq IS NOT NULL` 을 넣은 이유도 같다.
+
+`x IS NULL OR y IS NULL OR y >= x` 처럼 `NULL` 을 **명시적으로 통과시키려는** CHECK 는 이 규칙과 무관하다.
+문제는 통과시킬 의도가 없었는데 통과하는 경우다.
 
 ### 자식 행 합계 (`DI-3-06`)
 

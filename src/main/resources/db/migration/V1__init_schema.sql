@@ -204,7 +204,7 @@ CREATE TABLE coupon (
     max_discount_amount INT          NULL, -- 정률 쿠폰의 할인 상한. 없으면 고액 주문에서 할인이 무제한이 된다. 정액 쿠폰에서는 NULL 이다
     min_order_amount    INT          NOT NULL DEFAULT 0, -- 사용 조건(이 금액 이상일 때만 쓸 수 있다)
     total_quantity      INT          NULL, -- 발급 한정 수량. NULL 이면 일반 쿠폰, 값이 있으면 선착순이다
-    issued_quantity     INT          NOT NULL DEFAULT 0, -- 발급된 수. 선착순이면 total_quantity 와 조건부 UPDATE 로 다툰다
+    issued_quantity     INT          NOT NULL DEFAULT 0, -- 발급된 수 겸 순번 발급기. 조건부 UPDATE 로 올린 값을 member_coupon.issue_seq 에 넣는다
     issue_start_at      DATETIME(6)  NULL, -- 발급 시작 시각(선착순 오픈 시각). NULL 이면 제한 없음
     issue_end_at        DATETIME(6)  NULL, -- 발급 마감 시각. NULL 이면 소진까지
     valid_from          DATE         NOT NULL, -- 사용 유효 시작일
@@ -253,6 +253,8 @@ CREATE TABLE member_coupon (
     min_order_amount    INT          NOT NULL DEFAULT 0, -- 발급 시점 사용 조건
     valid_from          DATE         NOT NULL, -- 발급 시점 사용 유효 시작일
     valid_to            DATE         NOT NULL, -- 발급 시점 사용 유효 종료일
+    issue_limit         INT          NULL, -- 발급 시점 한정 수량(coupon.total_quantity 복사). NULL 이면 무제한 쿠폰이다
+    issue_seq           INT          NULL, -- 선착순 발급 순번(1 부터). 무제한 쿠폰은 NULL 이다
     status              VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
     issued_at           DATETIME(6)  NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
     used_at             DATETIME(6)  NULL, -- 사용 시각(서버 애플리케이션이 기록)
@@ -263,6 +265,7 @@ CREATE TABLE member_coupon (
     UNIQUE KEY uk_mc_id_member (member_coupon_id, member_id), -- orders 와 order_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_mc_id_coupon (member_coupon_id, coupon_id), -- order_item 이 복합 외래 키로 참조한다
     UNIQUE KEY uk_mc_id_scope (member_coupon_id, scope), -- orders 가 복합 외래 키로 참조한다
+    UNIQUE KEY uk_mc_coupon_seq (coupon_id, issue_seq), -- 한 쿠폰에서 같은 순번을 두 번 쓸 수 없다. MySQL UNIQUE 는 NULL 을 중복으로 보지 않아 무제한 쿠폰은 걸리지 않는다
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id),
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
@@ -276,7 +279,11 @@ CREATE TABLE member_coupon (
         (discount_type = 'RATE'   AND discount_value <= 100)
      OR (discount_type = 'AMOUNT' AND max_discount_amount IS NULL)),
     CONSTRAINT chk_mc_max_discount CHECK (max_discount_amount IS NULL OR max_discount_amount > 0),
-    CONSTRAINT chk_mc_valid_period CHECK (valid_from <= valid_to)
+    CONSTRAINT chk_mc_valid_period CHECK (valid_from <= valid_to),
+    CONSTRAINT chk_mc_issue_seq CHECK ( /* 순번은 한정 수량 안에서만 매겨진다. 위 UNIQUE 와 짝이 되어 coupon.issued_quantity 가 어긋나도 초과 발급을 막는다.
+                                           IS NOT NULL 을 명시하는 이유는 CHECK 가 결과 NULL 을 통과시키기 때문이다 */
+        (issue_limit IS NULL     AND issue_seq IS NULL)
+     OR (issue_limit IS NOT NULL AND issue_seq IS NOT NULL AND issue_seq >= 1 AND issue_seq <= issue_limit))
 ); -- 발급 쿠폰(쿠폰함). 발급 시점에 coupon 의 조건을 복사해 온다
 
 CREATE TABLE member_coupon_status_history (
@@ -362,8 +369,10 @@ CREATE TABLE orders (
     CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
     CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount), -- 할인은 상품금액을 넘지 못한다. 배송비를 깎는 쿠폰이 없으므로 배송비는 할인 대상이 아니다
     CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0), -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
-    CONSTRAINT chk_order_coupon_scope CHECK ( -- 쿠폰을 썼으면 장바구니 쿠폰이어야 하고, 안 썼으면 비어 있다
-        (member_coupon_id IS NOT NULL AND coupon_scope = 'ORDER')
+    CONSTRAINT chk_order_coupon_scope CHECK ( /* 쿠폰을 썼으면 장바구니 쿠폰이어야 하고, 안 썼으면 비어 있다.
+                                                 coupon_scope 만 비워 두는 우회를 막으려고 IS NOT NULL 을 명시한다.
+                                                 CHECK 는 결과가 NULL 이면 통과시키고, 복합 외래 키도 컬럼에 NULL 이 끼면 검사하지 않는다 */
+        (member_coupon_id IS NOT NULL AND coupon_scope IS NOT NULL AND coupon_scope = 'ORDER')
      OR (member_coupon_id IS NULL     AND coupon_scope IS NULL))
 ); -- 주문(헤더)
 
