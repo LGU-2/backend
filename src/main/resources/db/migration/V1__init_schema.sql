@@ -294,7 +294,7 @@ CREATE TABLE member_coupon (
                                            IS NOT NULL 을 명시하는 이유는 CHECK 가 결과 NULL 을 통과시키기 때문이다 */
         (issue_limit IS NULL     AND issue_seq IS NULL)
      OR (issue_limit IS NOT NULL AND issue_seq IS NOT NULL AND issue_seq >= 1 AND issue_seq <= issue_limit))
-); -- 발급 쿠폰(쿠폰함). 발급 시점에 coupon 의 조건을 복사해 온다
+); -- 발급 쿠폰(쿠폰함). coupon 은 관리자가 고칠 수 있어 발급 시점 조건을 복사해 둔다(대상 옵션은 제외)
 
 CREATE TABLE member_coupon_status_history (
     member_coupon_status_history_id BIGINT NOT NULL AUTO_INCREMENT, -- member_coupon_status_history PK
