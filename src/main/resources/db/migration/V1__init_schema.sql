@@ -332,7 +332,7 @@ CREATE TABLE orders (
     order_id        BIGINT       NOT NULL AUTO_INCREMENT, -- orders PK
     order_no        VARCHAR(30)  NOT NULL, -- 주문번호
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
-    status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED)
+    status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', -- 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED). order_item.item_status 와 함께 바꾼다. DB가 강제하지 않는다
     product_amount  INT          NOT NULL, -- 총상품금액. SUM(order_item.unit_price * qty) 와 같아야 한다(DI-3-06)
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소해도 비우지 않는다. 어느 쿠폰을 썼는지가 이력이고, 재사용은 계산 컬럼이 연다
@@ -381,7 +381,7 @@ CREATE TABLE order_item (
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
     discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액. 부분 반품 환불액의 근거다. 배분 규칙은 schema-design-rationale.md 4장
     item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED). 클레임 중복을 조건부 UPDATE 로 이 컬럼이 막는다
-    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN item_status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END), -- 살아 있는 라인 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼. 교환은 상품이 유지되므로 쿠폰도 유지한다
+    active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN item_status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END), -- 살아 있는 라인 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼. 교환은 상품이 유지되므로 쿠폰도 유지한다. orders.status 를 보지 않으므로 주문을 취소할 때 라인도 함께 CANCELED 로 바꿔야 상품 쿠폰이 풀린다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_item_id),

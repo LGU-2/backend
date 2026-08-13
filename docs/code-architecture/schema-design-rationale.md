@@ -344,6 +344,31 @@ active_coupon_key = NULL       파생. 유일성 검사에서 빠진다
 `order_item` 은 `item_status NOT IN ('CANCELED','RETURNED')` 를 조건으로 쓴다.
 교환은 상품이 유지되므로 쿠폰도 유지한다.
 
+**두 계산 컬럼이 서로 다른 컬럼을 본다.** `orders` 는 `status` 를, `order_item` 은 `item_status` 를 본다.
+계산 컬럼은 같은 행의 값만 참조할 수 있어서 라인이 주문 상태를 볼 방법이 없다.
+
+```
+UPDATE orders SET status = 'CANCELED'
+  -> 장바구니 쿠폰은 풀린다
+  -> order_item.item_status 는 그대로다. 상품 쿠폰은 계속 잠긴다
+```
+
+**주문을 취소할 때 라인도 함께 `CANCELED` 로 바꿔야 한다.**
+
+```sql
+UPDATE orders     SET status = 'CANCELED' WHERE order_id = ?;
+UPDATE order_item SET item_status = 'CANCELED' WHERE order_id = ? AND item_status = 'ORDERED';
+```
+
+이건 쿠폰 때문이 아니라 **어차피 해야 하는 일**이다. 주문이 취소됐는데 라인이 `ORDERED` 로 남으면
+재고 해제, 클레임 가능 여부, 통계가 전부 틀린 값을 본다. 쿠폰 잠금은 그 누락이 드러나는 자리 하나일 뿐이다.
+
+`orders.status` 를 라인에 복제하고 `ON UPDATE CASCADE` 로 따라가게 만들면 앱이 잊을 자리가 없어지지만,
+**상태가 12단계를 지나는 동안 전이마다 라인 수만큼 쓰기가 발생한다.** 라인 20개짜리 주문이면 전이 하나에 20행이다.
+그 비용을 치르기보다 앱이 두 UPDATE 를 함께 하는 쪽을 택했다.
+
+실패해도 조용하지 않다는 점도 고려했다. 쿠폰이 잠기면 사용자가 알아채고, 돈이 새는 방향이 아니다.
+
 이 방식만 **앱이 무언가를 잊어도 막힌다.** `UNIQUE` 를 떼고 `member_coupon.status` 조건부 UPDATE 에 맡기거나
 잠금 표를 두는 방법은, 앱이 그 UPDATE 나 INSERT 를 빼먹으면 아무 오류 없이 쿠폰이 두 번 먹힌다.
 
