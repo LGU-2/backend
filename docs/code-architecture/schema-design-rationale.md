@@ -413,43 +413,43 @@ UPDATE coupon SET issued_quantity = issued_quantity + 1
 
 ### 취소를 상태로 남긴다
 
-발급분 상태에 `CANCELLED` 를 두어 넷이 됐다.
+발급분 상태에 `CANCELED` 를 두어 넷이 됐다.
 
 ```
 ISSUED     발급됨
 USED       사용됨
 EXPIRED    만료됨
-CANCELLED  주문 취소로 사용이 철회됨
+CANCELED  주문 취소로 사용이 철회됨
 ```
 
-**철자가 이 스키마의 다른 곳과 다르다.** `orders.status`, `order_item.item_status`, `payment.status` 는
-모두 미국식 `CANCELED`(L 하나)를 쓰는데 여기만 `CANCELLED`(L 둘)다.
+**철자는 `CANCELED`(L 하나)로 통일했다.** `orders.status`, `order_item.item_status`, `payment.status` 가
+모두 미국식을 쓰고 있어 여기만 `CANCELED`(L 둘)로 두면 한 스키마에 두 철자가 공존한다.
 상태 컬럼이 대소문자를 구분하는 콜레이션이라 둘은 완전히 다른 값이고, 자바 enum 이름도 갈린다.
-바꾸려면 CHECK 세 곳만 고치면 된다.
+**상태 값은 클라이언트와 코드가 문자열로 분기하는 계약이라 표기가 흔들리면 그 자체가 버그가 된다.**
 
 `used_at` 은 함께 비운다. `chk_mc_used_at` 이 `status <> 'USED'` 에 `used_at IS NULL` 을 요구하므로
-`CANCELLED` 로 바꾸면서 시각을 남겨 두면 제약에 걸린다. **사용이 철회됐으니 사용 시각도 남지 않는 것이 맞다.**
+`CANCELED` 로 바꾸면서 시각을 남겨 두면 제약에 걸린다. **사용이 철회됐으니 사용 시각도 남지 않는 것이 맞다.**
 언제 썼었는지는 `member_coupon_status_history` 의 `USED` 전이 행이 갖는다.
 
-### `CANCELLED` 는 조회 시점에 해소한다
+### `CANCELED` 는 조회 시점에 해소한다
 
-`CANCELLED` 는 **머무는 상태가 아니라 거쳐 가는 상태**다. 쿠폰함을 조회할 때 앱이 정리한다.
+`CANCELED` 는 **머무는 상태가 아니라 거쳐 가는 상태**다. 쿠폰함을 조회할 때 앱이 정리한다.
 
 ```
-CANCELLED 이고 유효기간이 지났으면   ->  EXPIRED
-CANCELLED 이고 아직 유효하면        ->  ISSUED
+CANCELED 이고 유효기간이 지났으면   ->  EXPIRED
+CANCELED 이고 아직 유효하면        ->  ISSUED
 ```
 
 취소 시점이 아니라 조회 시점에 판정하는 이유는 **유효기간 만료 여부가 시간이 지나면 바뀌기 때문이다.**
 취소할 때 `ISSUED` 로 되돌려 놓아도 그 뒤에 기간이 지나면 다시 `EXPIRED` 로 바꿔야 하고, 그건 만료 배치가 한다.
-`CANCELLED` 로 두면 **다음에 사용자가 볼 때 그 시점 기준으로 한 번에 판정된다.**
+`CANCELED` 로 두면 **다음에 사용자가 볼 때 그 시점 기준으로 한 번에 판정된다.**
 
 대가가 둘 있다.
 
-**읽기가 쓰기를 한다.** 쿠폰함 목록 조회가 `CANCELLED` 행마다 `UPDATE` 를 낸다.
+**읽기가 쓰기를 한다.** 쿠폰함 목록 조회가 `CANCELED` 행마다 `UPDATE` 를 낸다.
 동시 조회가 같은 행을 건드리므로 조건부 `UPDATE` 로 처리하고 `affected rows` 가 0이면 남이 이미 했다고 본다.
 
-**조회 전에는 상태가 옛 값이다.** 쿠폰함을 안 열고 바로 주문서로 가면 그 쿠폰은 아직 `CANCELLED` 다.
+**조회 전에는 상태가 옛 값이다.** 쿠폰함을 안 열고 바로 주문서로 가면 그 쿠폰은 아직 `CANCELED` 다.
 주문서의 쿠폰 목록 조회도 같은 해소 경로를 타야 한다. **조회 지점이 여럿이면 전부 같은 규칙을 적용해야 한다.**
 
 `orders` 쪽 재사용 차단과는 별개다. 주문이 취소되면 `active_coupon_key` 가 `NULL` 이 되어
@@ -1301,8 +1301,8 @@ DB 로 옮길 수 있는 것은 옮겼고, 남은 것이 이만큼이다. **전�
 | 대상 조정 | `DELETE` 가 아니라 `is_active` 를 내린다 | 5장 |
 | 선착순 발급 | 조건부 `UPDATE` 로 올린 `issued_quantity` 를 `issue_seq` 에 넣는다 | 5장 |
 | 환불 | `payment.refunded_amount` 를 조건부 `UPDATE` 로 올린다 | 4장 |
-| 주문 취소 | `member_coupon.status` 를 `CANCELLED` 로 바꾸고 `used_at` 을 비운다 | 5장 |
-| 쿠폰함 조회 | `CANCELLED` 를 만료 여부에 따라 `EXPIRED` 나 `ISSUED` 로 해소한다. 조회 지점 전부에 적용 | 5장 |
+| 주문 취소 | `member_coupon.status` 를 `CANCELED` 로 바꾸고 `used_at` 을 비운다 | 5장 |
+| 쿠폰함 조회 | `CANCELED` 를 만료 여부에 따라 `EXPIRED` 나 `ISSUED` 로 해소한다. 조회 지점 전부에 적용 | 5장 |
 | 주문 취소 | `order_item.item_status` 도 함께 `CANCELED` 로 바꾼다 | 5장. 라인 계산 컬럼이 `orders.status` 를 보지 않는다 |
 | 주문 상태 | `CANCELED` 와 `RETURNED` 는 전체에만 쓴다. 부분 반품은 라인만 바꾼다 | 5장. 두 계산 컬럼이 이 전제 위에 선다 |
 | 소프트딜리트 | 삭제된 부모에 새 자식을 만들지 않는다(탈퇴 회원의 주문, 삭제된 상품의 옵션과 이미지) | 9장. 외래 키는 행이 남아 있어 통과시킨다 |
