@@ -263,7 +263,7 @@ CREATE TABLE member_coupon (
     coupon_id           BIGINT       NOT NULL, -- 발급 틀 FK. 대상 옵션을 찾을 때와 어느 틀에서 나왔는지 추적할 때만 쓴다. 아래 조건 값들은 이 참조를 따라가지 않는다
     member_id           BIGINT       NOT NULL, -- 보유 회원 FK
     coupon_name         VARCHAR(100) NOT NULL, -- 발급 시점 쿠폰명
-    scope               VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER/ITEM). 조상 키 복제라 복합 외래 키가 coupon.scope 와 같기를 요구한다. 아래 복사 값들과 달리 갈라질 수 없다
+    scope               VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER/ITEM). 조상 키 복제라 복합 외래 키가 coupon.scope 와 같기를 요구한다. 값 검사도 그 외래 키가 대신하므로 여기에 CHECK 를 두지 않는다
     discount_type       VARCHAR(30)  NOT NULL, -- 발급 시점 할인 유형(AMOUNT/RATE)
     discount_value      INT          NOT NULL, -- 발급 시점 할인 값
     max_discount_amount INT          NULL, -- 발급 시점 정률 할인 상한
@@ -289,7 +289,6 @@ CREATE TABLE member_coupon (
     CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
         (status =  'USED' AND used_at IS NOT NULL)
      OR (status <> 'USED' AND used_at IS NULL)),
-    CONSTRAINT chk_mc_scope CHECK (scope IN ('ORDER','ITEM')),
     CONSTRAINT chk_mc_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
     CONSTRAINT chk_mc_values CHECK (discount_value > 0 AND min_order_amount >= 0),
     CONSTRAINT chk_mc_rate CHECK ( -- 정률은 100%를 넘을 수 없고 상한은 정률에만 붙는다
