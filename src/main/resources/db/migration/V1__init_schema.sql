@@ -208,16 +208,16 @@ CREATE TABLE stock_lot (
     expiry_date     DATE         NOT NULL, -- 소비기한
     initial_qty     INT          NOT NULL, -- 입고수량
     available_qty   INT          NOT NULL, -- 판매 가능 수량. 예약(RESERVE)에서 빼고 해제(RELEASE)에서 되돌린다. 확정(CONFIRM)은 바꾸지 않는다
-    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE/SOLD_OUT/DISPOSED)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE 판매 가능/SOLD_OUT 소진/DISPOSED 폐기/EXPIRED 소비기한 경과). stock_movement 의 DISPOSE 와 EXPIRE 에 각각 대응한다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_lot_id),
-    CONSTRAINT chk_lot_status CHECK (status IN ('AVAILABLE','SOLD_OUT','DISPOSED')),
+    CONSTRAINT chk_lot_status CHECK (status IN ('AVAILABLE','SOLD_OUT','DISPOSED','EXPIRED')),
     KEY idx_lot_fefo (product_option_id, status, expiry_date), -- FEFO 조회 최적화: 옵션+상태별 소비기한 임박순
     CONSTRAINT fk_lot_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT chk_lot_qty CHECK (available_qty >= 0 AND available_qty <= initial_qty),
     CONSTRAINT chk_lot_expiry_date CHECK (expiry_date >= received_date),
-    CONSTRAINT chk_lot_status_qty CHECK (status = 'AVAILABLE' OR available_qty = 0) -- 소진/폐기된 로트에 가용재고가 남아 있으면 FEFO 조회가 없는 재고를 집는다
+    CONSTRAINT chk_lot_status_qty CHECK (status = 'AVAILABLE' OR available_qty = 0) -- 소진/폐기/만료된 로트에 가용재고가 남아 있으면 FEFO 조회가 없는 재고를 집는다
 ); -- 입고 로트(실재고 단위, 공급처는 product.supplier_id 기준)
 
 -- =====================================================================

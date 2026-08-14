@@ -635,6 +635,63 @@ CHECK (qty_after = qty_before + quantity)
 짧지만 **유형별 방향이 DDL 밖으로 나간다.** `RESERVE` 에 `+5` 가 들어가도 통과한다.
 `CONFIRM` 은 증감이 0 이라 몇 개를 확정했는지도 사라진다. 원장이 자기만으로 완결되지 않게 되어 접었다.
 
+### 만료는 폐기와 다른 상태다
+
+`stock_movement` 와 `daily_sales` 는 처음부터 둘을 나눠 놓았다.
+
+```
+movement_type   DISPOSE 폐기 / EXPIRE 만료전환
+daily_sales     disposed_qty / expired_qty
+```
+
+**그런데 `stock_lot.status` 에는 만료가 없었다.** `AVAILABLE / SOLD_OUT / DISPOSED` 셋뿐이라
+`EXPIRE` 전환이 로트를 어떤 상태로 만드는지 답이 없었다. 셋 중 무엇을 골라도 어긋난다.
+
+| | 왜 안 맞나 |
+|---|---|
+| `DISPOSED` | 별개라고 해놓고 같은 상태에 넣는다. 로트만 봐서는 버린 건지 기한이 지난 건지 모른다 |
+| `SOLD_OUT` | 팔린 것이 아니다 |
+| `AVAILABLE` 유지 | 만료됐다는 사실이 어디에도 안 남는다 |
+
+값 하나를 더해 셋을 맞췄다.
+
+```sql
+CONSTRAINT chk_lot_status CHECK (status IN ('AVAILABLE','SOLD_OUT','DISPOSED','EXPIRED'))
+```
+
+**추가 제약은 필요 없다.** `chk_lot_status_qty` 가 `status = 'AVAILABLE' OR available_qty = 0` 이라
+`EXPIRED` 도 자동으로 가용재고 0 을 요구한다.
+
+`EXPIRED` 라는 값이 다른 두 곳에 이미 있어 헷갈리기 쉽다.
+
+```
+member_coupon.status            ISSUED / USED / EXPIRED       쿠폰 만료
+stock_movement.disposal_reason  EXPIRED / DAMAGED / RETURNED  폐기 사유
+```
+
+`disposal_reason='EXPIRED'` 는 **"기한이 지나서 버렸다" 는 폐기 사유**이고,
+`movement_type='EXPIRE'` 는 **"기한이 지나 판매 불가로 바뀌었다" 는 사건**이다.
+전자는 `DISPOSE` 와 함께 오고 후자는 혼자 온다. 로트 상태 `EXPIRED` 는 후자에 대응한다.
+
+### 판매 차단은 상태가 아니라 조회 조건이 한다
+
+만료 재고가 팔리는 것을 막는 것은 이 상태가 아니다. **배치는 주기가 있어서 항상 늦는다.**
+자정에 만료되는 로트를 정확히 그 시각에 전환할 수 없고, 그 사이에 들어온 주문은 상태만 믿으면 그대로 팔린다.
+
+```sql
+WHERE l.status = 'AVAILABLE'
+  AND l.expiry_date >= DATE_ADD(CURDATE(), INTERVAL p.sale_available_days_from_expiry DAY)
+```
+
+**조회 조건에는 그 틈이 없다.** `idx_lot_fefo (product_option_id, status, expiry_date)` 가
+날짜를 마지막에 둬서 범위 조건에도 인덱스가 그대로 먹는다.
+
+그래서 상태 전환은 **판매 차단용이 아니라 재고 정리용**이다. `available_qty` 를 0 으로 만들어
+품절 판정과 집계가 없는 재고를 세지 않게 하고, 실물 정리 대상을 `status = 'EXPIRED'` 한 줄로 뽑게 한다.
+
+CHECK 로는 이 규칙을 표현할 수 없다. **MySQL 은 CHECK 에 `CURDATE()` 같은 비결정 함수를 금지한다.**
+`expiry_date >= received_date` 는 걸 수 있어도 `expiry_date >= 오늘` 은 못 건다.
+
 ### 반품은 원래 로트로 되돌린다
 
 소비기한이 로트에 달려 있어 다른 로트에 넣으면 기한을 잃는다.
@@ -1321,7 +1378,16 @@ SELECT grp, COUNT(*) AS checks, COUNT(DISTINCT vals) AS lists
  GROUP BY grp
 HAVING COUNT(DISTINCT vals) > 1;
 
--- 12. 자식이 하나도 없는 부모가 있는가
+-- 12. 소비기한이 지났거나 판매 기준에 못 미치는데 아직 팔리는 로트가 있는가
+--     EXPIRE 배치가 멈추면 여기서 드러난다. 판매 차단 자체는 FEFO 조회 조건이 한다
+SELECT l.stock_lot_id, l.expiry_date, p.sale_available_days_from_expiry
+  FROM stock_lot l
+  JOIN product_option o ON o.product_option_id = l.product_option_id
+  JOIN product p ON p.product_id = o.product_id
+ WHERE l.status = 'AVAILABLE'
+   AND l.expiry_date < DATE_ADD(CURDATE(), INTERVAL p.sale_available_days_from_expiry DAY);
+
+-- 13. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL
