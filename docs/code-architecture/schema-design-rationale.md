@@ -419,13 +419,8 @@ UPDATE coupon SET issued_quantity = issued_quantity + 1
 ISSUED     발급됨
 USED       사용됨
 EXPIRED    만료됨
-CANCELED  주문 취소로 사용이 철회됨
+CANCELED   주문 취소로 사용이 철회됨
 ```
-
-**철자는 `CANCELED`(L 하나)로 통일했다.** `orders.status`, `order_item.item_status`, `payment.status` 가
-모두 미국식을 쓰고 있어 여기만 `CANCELED`(L 둘)로 두면 한 스키마에 두 철자가 공존한다.
-상태 컬럼이 대소문자를 구분하는 콜레이션이라 둘은 완전히 다른 값이고, 자바 enum 이름도 갈린다.
-**상태 값은 클라이언트와 코드가 문자열로 분기하는 계약이라 표기가 흔들리면 그 자체가 버그가 된다.**
 
 `used_at` 은 함께 비운다. `chk_mc_used_at` 이 `status <> 'USED'` 에 `used_at IS NULL` 을 요구하므로
 `CANCELED` 로 바꾸면서 시각을 남겨 두면 제약에 걸린다. **사용이 철회됐으니 사용 시각도 남지 않는 것이 맞다.**
