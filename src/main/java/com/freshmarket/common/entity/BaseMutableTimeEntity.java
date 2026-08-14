@@ -12,8 +12,7 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-/* 일반 도메인 엔티티와 코드 테이블의 베이스다.
-   BaseImmutableTimeEntity 를 상속하지 않는다. 가변이 불변의 하위 타입이라는 말이 되기 때문이다. */
+// 수정되는 일반 공통 엔티티를 나타내는 공통 엔티티
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
 @Getter

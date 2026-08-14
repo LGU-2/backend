@@ -11,8 +11,7 @@ import lombok.Getter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-/* 수정되지 않는 테이블(이력, 로그)의 베이스다.
-   updated_at 을 두지 않는 이유는 영원히 created_at 과 같은 값으로 남기 때문이다 (BE-1-02). */
+// 수정되지 않는 테이블(이력, 로그)을 나타내는 공통 엔티티
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
 @Getter
