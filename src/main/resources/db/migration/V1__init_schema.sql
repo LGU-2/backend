@@ -103,8 +103,11 @@ CREATE TABLE admin (
     PRIMARY KEY (admin_id),
     CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
     CONSTRAINT chk_admin_status CHECK (status IN ('ACTIVE','DELETED')),
-    CONSTRAINT chk_admin_deleted CHECK ( /* 삭제가 status 와 deleted_at 두 곳에 표현되어 어긋날 수 있다. 둘을 묶는다.
-                                            삭제된 관리자는 리프레시 토큰도 비어 있어야 한다. 남아 있으면 세션이 그대로 살아 있다 */
+    /*
+     * 삭제가 status 와 deleted_at 두 곳에 표현되어 어긋날 수 있다. 둘을 묶는다.
+     * 삭제된 관리자는 리프레시 토큰도 비어 있어야 한다. 남아 있으면 세션이 그대로 살아 있다
+     */
+    CONSTRAINT chk_admin_deleted CHECK (
         (status =  'DELETED' AND deleted_at IS NOT NULL AND refresh_token_hash IS NULL)
      OR (status <> 'DELETED' AND deleted_at IS NULL)),
     CONSTRAINT chk_admin_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
@@ -259,9 +262,12 @@ CREATE TABLE coupon_product_option (
     coupon_id         BIGINT      NOT NULL, -- 쿠폰 FK
     scope             VARCHAR(20) COLLATE utf8mb4_0900_as_cs NOT NULL DEFAULT 'ITEM', -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ORDER 쿠폰의 행을 막는다
     product_option_id BIGINT      NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
-    is_active         BOOLEAN     NOT NULL DEFAULT TRUE, /* 현재 대상인지 여부. 대상에서 뺄 때 행을 지우지 않고 이 값을 내린다.
-                                                            order_item 이 이 표를 복합 외래 키로 참조하므로 지우면 이미 팔린 조합에서 삭제가 막힌다.
-                                                            쿠폰을 적용할 때 현재 대상인지는 앱이 이 값으로 본다 */
+    /*
+     * 현재 대상인지 여부. 대상에서 뺄 때 행을 지우지 않고 이 값을 내린다.
+     * order_item 이 이 표를 복합 외래 키로 참조하므로 지우면 이미 팔린 조합에서 삭제가 막힌다.
+     * 쿠폰을 적용할 때 현재 대상인지는 앱이 이 값으로 본다
+     */
+    is_active         BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at        DATETIME(6) NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at        DATETIME(6) NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (coupon_product_option_id),
@@ -309,8 +315,11 @@ CREATE TABLE member_coupon (
      OR (discount_type = 'AMOUNT' AND max_discount_amount IS NULL)),
     CONSTRAINT chk_mc_max_discount CHECK (max_discount_amount IS NULL OR max_discount_amount > 0),
     CONSTRAINT chk_mc_valid_period CHECK (valid_from <= valid_to),
-    CONSTRAINT chk_mc_issue_seq CHECK ( /* 순번은 한정 수량 안에서만 매겨진다. 위 UNIQUE 와 짝이 되어 coupon.issued_quantity 가 어긋나도 초과 발급을 막는다.
-                                           IS NOT NULL 을 명시하는 이유는 CHECK 가 결과 NULL 을 통과시키기 때문이다 */
+    /*
+     * 순번은 한정 수량 안에서만 매겨진다. 위 UNIQUE 와 짝이 되어 coupon.issued_quantity 가 어긋나도 초과 발급을 막는다.
+     * IS NOT NULL 을 명시하는 이유는 CHECK 가 결과 NULL 을 통과시키기 때문이다
+     */
+    CONSTRAINT chk_mc_issue_seq CHECK (
         (issue_limit IS NULL     AND issue_seq IS NULL)
      OR (issue_limit IS NOT NULL AND issue_seq IS NOT NULL AND issue_seq >= 1 AND issue_seq <= issue_limit))
 ); -- 발급 쿠폰(쿠폰함). coupon 은 관리자가 고칠 수 있어 발급 시점 조건을 복사해 둔다(대상 옵션은 제외)
@@ -368,9 +377,12 @@ CREATE TABLE orders (
     order_id        BIGINT       NOT NULL AUTO_INCREMENT, -- orders PK
     order_no        VARCHAR(30)  NOT NULL, -- 주문번호
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
-    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PAYMENT_PENDING', /* 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED).
-                                                                        CANCELED 와 RETURNED 는 주문 전체에만 쓴다. 취소는 라인 단위로 일어나지 않고, 부분 반품은 헤더를 바꾸지 않고 라인만 바꾼다.
-                                                                        아래 계산 컬럼이 이 전제 위에 서 있으며 DB 는 강제하지 못한다. order_item.item_status 와 함께 바꾼다 */
+    /*
+     * 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED).
+     * CANCELED 와 RETURNED 는 주문 전체에만 쓴다. 취소는 라인 단위로 일어나지 않고, 부분 반품은 헤더를 바꾸지 않고 라인만 바꾼다.
+     * 아래 계산 컬럼이 이 전제 위에 서 있으며 DB 는 강제하지 못한다. order_item.item_status 와 함께 바꾼다
+     */
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PAYMENT_PENDING',
     product_amount  INT          NOT NULL, -- 총상품금액. SUM(order_item.unit_price * qty) 와 같아야 한다(DI-3-06)
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소해도 비우지 않는다. 어느 쿠폰을 썼는지가 이력이고, 재사용은 계산 컬럼이 연다
@@ -396,17 +408,22 @@ CREATE TABLE orders (
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
     CONSTRAINT fk_order_coupon_scope FOREIGN KEY (member_coupon_id, coupon_scope) REFERENCES member_coupon (member_coupon_id, scope), -- scope 를 함께 요구해 ITEM 쿠폰을 붙일 수 없다
-    /* 아래 total_amount >= 0 은 chk_order_total 과 chk_order_discount_cap 에서 유도된다.
-       그런데 그 유도가 "배송비 할인 쿠폰이 없다" 는 정책에 기대고 있어 지우지 않고 겹쳐 둔다.
-       할인이 배송비까지 덮게 되면 유도가 깨지고 이 조건만 남는다 */
+    /*
+     * 아래 total_amount >= 0 은 chk_order_total 과 chk_order_discount_cap 에서 유도된다.
+     * 그런데 그 유도가 "배송비 할인 쿠폰이 없다" 는 정책에 기대고 있어 지우지 않고 겹쳐 둔다.
+     * 할인이 배송비까지 덮게 되면 유도가 깨지고 이 조건만 남는다
+     */
     CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND coupon_discount >= 0),
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee), -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
     CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
     CONSTRAINT chk_order_discount_cap CHECK (discount_amount <= product_amount), -- 할인은 상품금액을 넘지 못한다. 배송비를 깎는 쿠폰이 없으므로 배송비는 할인 대상이 아니다
     CONSTRAINT chk_order_coupon_amount CHECK (member_coupon_id IS NOT NULL OR coupon_discount = 0), -- 쿠폰 없이 쿠폰 할인액만 있을 수 없다
-    CONSTRAINT chk_order_coupon_scope CHECK ( /* 쿠폰을 썼으면 장바구니 쿠폰이어야 하고, 안 썼으면 비어 있다.
-                                                 coupon_scope 만 비워 두는 우회를 막으려고 IS NOT NULL 을 명시한다.
-                                                 CHECK 는 결과가 NULL 이면 통과시키고, 복합 외래 키도 컬럼에 NULL 이 끼면 검사하지 않는다 */
+    /*
+     * 쿠폰을 썼으면 장바구니 쿠폰이어야 하고, 안 썼으면 비어 있다.
+     * coupon_scope 만 비워 두는 우회를 막으려고 IS NOT NULL 을 명시한다.
+     * CHECK 는 결과가 NULL 이면 통과시키고, 복합 외래 키도 컬럼에 NULL 이 끼면 검사하지 않는다
+     */
+    CONSTRAINT chk_order_coupon_scope CHECK (
         (member_coupon_id IS NOT NULL AND coupon_scope IS NOT NULL AND coupon_scope = 'ORDER')
      OR (member_coupon_id IS NULL     AND coupon_scope IS NULL))
 ); -- 주문(헤더)
@@ -485,9 +502,12 @@ CREATE TABLE stock_movement (
     CONSTRAINT chk_movement_disposal CHECK ( -- 폐기는 사유와 처리자를 반드시 갖는다. 다른 유형에는 폐기 사유가 없다
         (movement_type =  'DISPOSE' AND disposal_reason IS NOT NULL AND admin_id IS NOT NULL)
      OR (movement_type <> 'DISPOSE' AND disposal_reason IS NULL)),
-    CONSTRAINT chk_movement_delta CHECK ( /* 원장의 항등식. 세 수치가 서로 맞고, 유형이 정한 방향과도 맞아야 한다.
-                                             ADJUST 만 양방향이고 나머지는 방향이 하나로 고정된다.
-                                             CONFIRM 과 회수품 폐기는 available_qty 를 바꾸지 않으므로 앞뒤가 같다 */
+    /*
+     * 원장의 항등식. 세 수치가 서로 맞고, 유형이 정한 방향과도 맞아야 한다.
+     * ADJUST 만 양방향이고 나머지는 방향이 하나로 고정된다.
+     * CONFIRM 과 회수품 폐기는 available_qty 를 바꾸지 않으므로 앞뒤가 같다
+     */
+    CONSTRAINT chk_movement_delta CHECK (
         (movement_type IN ('INBOUND','RESTOCK','RELEASE') AND qty_after = qty_before + quantity)
      OR (movement_type IN ('RESERVE','EXPIRE')            AND qty_after = qty_before - quantity)
      OR (movement_type =  'CONFIRM'                       AND qty_after = qty_before)
@@ -496,6 +516,11 @@ CREATE TABLE stock_movement (
      OR (movement_type =  'ADJUST'  AND (qty_after = qty_before + quantity OR qty_after = qty_before - quantity)))
 ); -- 재고 변동 이력(로트 단위 시간순). 재고에 관한 모든 사건의 단일 창구다. available_qty 를 바꾸는 연산과 같은 트랜잭션에서 함께 INSERT 하고, 재입고하지 않은 회수품 폐기처럼 값을 안 바꾸는 것은 qty_before = qty_after 로 남긴다
 
+/*
+ * 판매 집계(일 1회 배치가 옵션별/일자별로 집계). 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합).
+ * 재고 대조는 이 표가 아니라 stock_movement 의 qty_before/qty_after 로 한다.
+ * 배치는 움직임이 없는 옵션에도 행을 만든다. 다음 날 opening_stock 이 전날 기말이 되려면 날짜가 끊기면 안 된다
+ */
 CREATE TABLE daily_sales (
     daily_sales_id  BIGINT       NOT NULL AUTO_INCREMENT, -- daily_sales PK
     product_option_id BIGINT     NOT NULL, -- 집계 대상 옵션 FK. 재고(stock_lot)와 소비기한이 옵션 단위라 집계도 같은 단위여야 한다. 상품 단위 수치는 옵션을 합산해 얻는다(반대 방향은 불가능하다)
@@ -513,9 +538,7 @@ CREATE TABLE daily_sales (
     UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
     CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
     CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND restocked_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND expired_qty >= 0)
-); /* 판매 집계(일 1회 배치가 옵션별/일자별로 집계). 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합).
-      재고 대조는 이 표가 아니라 stock_movement 의 qty_before/qty_after 로 한다.
-      배치는 움직임이 없는 옵션에도 행을 만든다. 다음 날 opening_stock 이 전날 기말이 되려면 날짜가 끊기면 안 된다 */
+);
 
 CREATE TABLE order_status_history (
     order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
@@ -545,8 +568,11 @@ CREATE TABLE payment (
     CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
     UNIQUE KEY uk_payment_order (order_id),
     UNIQUE KEY uk_payment_pg_tid (pg_tid),
-    CONSTRAINT fk_payment_order FOREIGN KEY (order_id, amount) REFERENCES orders (order_id, total_amount), /* 결제 금액이 주문 최종금액과 다를 수 없다.
-                                                                                                              결제 행이 있는 동안 orders.total_amount 수정도 막힌다 */
+    /*
+     * 결제 금액이 주문 최종금액과 다를 수 없다.
+     * 결제 행이 있는 동안 orders.total_amount 수정도 막힌다
+     */
+    CONSTRAINT fk_payment_order FOREIGN KEY (order_id, amount) REFERENCES orders (order_id, total_amount),
     CONSTRAINT chk_payment_amount CHECK (amount > 0), -- 0원 주문은 이 행을 만들지 않으므로 0을 허용하지 않는다
     CONSTRAINT chk_payment_refunded CHECK (refunded_amount >= 0 AND refunded_amount <= amount), -- 환불 총액이 결제액을 넘을 수 없다
     CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 모든 결제 수단이 PG를 타므로 예외가 없다
@@ -588,9 +614,12 @@ CREATE TABLE claim (
     CONSTRAINT chk_claim_collect_type CHECK ( -- 회수는 반품/교환에만 있다. 취소는 물건이 나간 적이 없다
         type <> 'CANCEL'
      OR (collect_carrier IS NULL AND collect_tracking_no IS NULL AND collect_shipped_at IS NULL AND collect_delivered_at IS NULL)),
-    CONSTRAINT chk_claim_reship_type CHECK ( /* 재배송은 승인된 교환에만 있다. 취소와 반품은 새 상품을 보내지 않고,
-                                                거부되거나 아직 접수 상태인 교환도 새 상품을 보내지 않는다.
-                                                회수(collect)는 승인 전에 물건이 먼저 도착할 수 있어 상태를 걸지 않는다 */
+    /*
+     * 재배송은 승인된 교환에만 있다. 취소와 반품은 새 상품을 보내지 않고,
+     * 거부되거나 아직 접수 상태인 교환도 새 상품을 보내지 않는다.
+     * 회수(collect)는 승인 전에 물건이 먼저 도착할 수 있어 상태를 걸지 않는다
+     */
+    CONSTRAINT chk_claim_reship_type CHECK (
         (type = 'EXCHANGE' AND status IN ('APPROVED','COMPLETED'))
      OR (reship_carrier IS NULL AND reship_tracking_no IS NULL AND reship_shipped_at IS NULL AND reship_delivered_at IS NULL)),
     CONSTRAINT chk_claim_reship_at CHECK (reship_delivered_at IS NULL OR reship_shipped_at IS NULL OR reship_delivered_at >= reship_shipped_at),
@@ -633,9 +662,12 @@ CREATE TABLE claim_item (
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK
     claim_id            BIGINT   NOT NULL, -- 클레임 FK
-    order_id            BIGINT   NOT NULL, /* 조상 키 복제. 아래 외래 키 둘이 이 값을 함께 요구한다.
-                                              하나는 클레임의 주문임을 고정하고, 다른 하나는 그 주문에 결제가 있기를 요구한다.
-                                              0원 주문은 payment 행이 없으므로 환불 행도 만들 수 없다 */
+    /*
+     * 조상 키 복제. 아래 외래 키 둘이 이 값을 함께 요구한다.
+     * 하나는 클레임의 주문임을 고정하고, 다른 하나는 그 주문에 결제가 있기를 요구한다.
+     * 0원 주문은 payment 행이 없으므로 환불 행도 만들 수 없다
+     */
+    order_id            BIGINT   NOT NULL,
     amount              INT      NOT NULL, -- 환불액. 배송비 차감 후 실지급액이다. payment.refunded_amount 가 이 값을 더해 상한을 재므로 차감 전 금액을 넣으면 정상 환불이 거부된다
     shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감. amount 에서 이미 빠진 금액이며 얼마를 뺐는지 남기는 용도다. orders.shipping_fee 를 넘지 않아야 하고 그 검사는 배치가 한다
     status              VARCHAR(30) COLLATE utf8mb4_0900_as_cs NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
