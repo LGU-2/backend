@@ -764,6 +764,42 @@ member_coupon_status_history.changed_by 쿠폰 상태를 바꾼 사람
 **같은 아이디가 다른 사람이 되면 로그를 읽는 사람이 헷갈린다.** `product_code` 와 같은 판단이다.
 `member` 가 계산 컬럼으로 재가입을 여는 것과는 반대인데, 카카오 계정 재가입은 실제 요구이고 관리자 아이디 재사용은 요구가 아니다.
 
+### 상태 컬럼은 대소문자를 구분한다
+
+서버 기본 콜레이션이 `utf8mb4_0900_ai_ci` 라 **대소문자를 구분하지 않는다.**
+그래서 `'canceled'` 가 `CHECK (status IN ('CANCELED', ...))` 를 통과했다.
+
+```sql
+'order' = 'ORDER'             -> 1
+'order' IN ('ORDER','ITEM')   -> 1
+```
+
+**DB 안에서는 깨지지 않는다.** 계산 컬럼도 같은 콜레이션으로 비교하므로 소문자 `'canceled'` 를 취소로 인식했고,
+`active_coupon_key` 는 정상적으로 `NULL` 이 됐다. 외래 키도 소문자를 부모와 같은 값으로 봤다.
+
+문제는 밖이다. 애플리케이션이 `Enum.valueOf("canceled")` 를 부르면 예외가 난다.
+**DB 는 받아 주는데 자바가 터진다.** 조용히 틀리는 것보다는 낫지만, 막을 수 있는 자리에서 안 막은 것이다.
+
+값 집합이 정해진 문자열 컬럼 **34개에만** 대소문자를 구분하는 콜레이션을 붙였다.
+
+```sql
+status VARCHAR(30) COLLATE utf8mb4_0900_as_cs NOT NULL
+```
+
+**이름과 주소 같은 자유 문자열은 기본값을 그대로 둔다.** 상품명 검색이 대소문자를 구분하면 안 되기 때문이다.
+표 전체나 서버 기본값을 바꾸면 그 검색까지 함께 바뀐다.
+
+복합 외래 키로 묶인 `scope` 넷(`coupon`, `coupon_product_option`, `member_coupon`, `orders.coupon_scope`)은
+**콜레이션이 서로 달라지면 외래 키 생성 자체가 실패한다.** 한 벌로 함께 바꿔야 하는 이유다.
+
+| 값 | 전 | 후 |
+|---|---|---|
+| `member.status = 'active'` | 통과 | `chk_member_status` 거부 |
+| `coupon.scope = 'order'` | 통과 | `chk_coupon_scope` 거부 |
+| `member_coupon.scope = 'order'` | 통과 | `fk_mc_coupon` 거부 |
+| `orders.status = 'canceled'` | 통과 | `chk_order_status` 거부 |
+| `member_grade.name = '브론즈'` 검색 | 맞음 | 맞음 (기본값 유지) |
+
 ### 재배송은 승인된 교환에만 있다
 
 `claim` 은 `type` 에 따라 `collect_*` 와 `reship_*` 를 채운다. 여기에 상태 조건을 하나 더 걸었다.

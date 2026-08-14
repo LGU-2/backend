@@ -7,6 +7,11 @@
 -- Flyway 마이그레이션은 전진 전용이며, 되돌리는 문장이 섞이면 재실행이나 baseline 설정이
 -- 어긋났을 때 운영 데이터를 지운다. 로컬 초기화는 compose down -v 로 한다.
 --
+-- 상태와 유형처럼 값 집합이 정해진 문자열 컬럼에는 COLLATE utf8mb4_0900_as_cs 를 붙인다.
+-- 서버 기본값 utf8mb4_0900_ai_ci 는 대소문자를 구분하지 않아 'canceled' 가 CHECK 를 통과한다.
+-- DB 안에서는 비교가 일관되어 문제가 없지만, 애플리케이션이 Enum.valueOf 로 읽을 때 터진다.
+-- 이름과 주소 같은 자유 문자열은 검색이 대소문자를 구분하면 안 되므로 기본값을 그대로 쓴다.
+--
 -- 외부 노출 식별자(public_id)는 이 스키마에 넣지 않는다. 추후 고려한다.
 -- 지금은 API 가 설계되지 않아 어느 테이블이 단독 지목 대상인지 답할 수 없다.
 -- 설계와 판단 기준은 docs/code-architecture/identifier-strategy-guideline.md 에 있다.
@@ -39,7 +44,7 @@ CREATE TABLE member (
     phone            VARCHAR(20)  NULL, -- 휴대전화(폼 입력, 원문-암호화 대상). PENDING_PROFILE에서는 NULL
     member_grade_id  BIGINT       NOT NULL, -- 회원 등급 FK
     is_marketing_agreed BOOLEAN NOT NULL DEFAULT FALSE, -- 마케팅 수신 동의
-    status           VARCHAR(30)  NOT NULL DEFAULT 'PENDING_PROFILE', -- 회원 상태(PENDING_PROFILE 카카오 최초 로그인 후 추가정보 미입력/ACTIVE 활성/BLOCKED 차단/WITHDRAWN 탈퇴)
+    status           VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING_PROFILE', -- 회원 상태(PENDING_PROFILE 카카오 최초 로그인 후 추가정보 미입력/ACTIVE 활성/BLOCKED 차단/WITHDRAWN 탈퇴)
     refresh_token_hash CHAR(64)   NULL, -- 리프레시 토큰의 SHA-256 hex. 평문은 저장하지 않는다. NULL 은 로그아웃 상태다
     refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
     deleted_at       DATETIME(6)  NULL, -- 소프트딜리트(탈퇴 시, 주문 이력은 법정 기간 보존)
@@ -80,8 +85,8 @@ CREATE TABLE admin (
     login_id        VARCHAR(50)  NOT NULL, -- 관리자 로그인 아이디
     password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
     name            VARCHAR(50)  NOT NULL, -- 관리자 이름
-    role            VARCHAR(30)  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
-    status          VARCHAR(30)  NOT NULL DEFAULT 'ACTIVE', -- 관리자 상태(ACTIVE 활성/DELETED 삭제). 이력 표 다섯이 admin_id 를 참조해 하드 삭제가 불가능하다
+    role            VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ACTIVE', -- 관리자 상태(ACTIVE 활성/DELETED 삭제). 이력 표 다섯이 admin_id 를 참조해 하드 삭제가 불가능하다
     refresh_token_hash CHAR(64)  NULL, -- 리프레시 토큰의 SHA-256 hex. 평문은 저장하지 않는다. NULL 은 로그아웃 상태다
     refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
     deleted_at      DATETIME(6)  NULL, -- 소프트딜리트(삭제 시각)
@@ -131,8 +136,8 @@ CREATE TABLE product (
     name                VARCHAR(255) NOT NULL, -- 상품명
     category_id         BIGINT       NOT NULL, -- 카테고리 FK
     supplier_id         BIGINT       NOT NULL, -- 공급처 FK
-    sale_status         VARCHAR(30)  NOT NULL DEFAULT 'ON_SALE', -- 판매 상태(ON_SALE/SOLD_OUT/OFF_SALE)
-    storage_type        VARCHAR(30)  NOT NULL, -- 보관 온도(ROOM 실온/COLD 냉장/FROZEN 냉동)
+    sale_status         VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ON_SALE', -- 판매 상태(ON_SALE/SOLD_OUT/OFF_SALE)
+    storage_type        VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 보관 온도(ROOM 실온/COLD 냉장/FROZEN 냉동)
     sale_available_days_from_expiry INT NOT NULL DEFAULT 0, -- 판매 가능 최소 잔여일수. 소비기한까지 이 일수 이상 남아야 판매하고, 못 미치면 반품 재입고 대신 폐기한다
     description         TEXT         NULL, -- 상품 설명
     deleted_at          DATETIME(6)  NULL, -- 소프트딜리트
@@ -153,7 +158,7 @@ CREATE TABLE product_option (
     product_id        BIGINT       NOT NULL, -- 상품 FK
     name              VARCHAR(100) NOT NULL, -- 옵션명(예: 200g, 500g, 1kg)
     price             INT          NOT NULL, -- 옵션 판매가(0 이상)
-    sale_status       VARCHAR(30)  NOT NULL DEFAULT 'ON_SALE', -- 옵션 판매 상태(ON_SALE/SOLD_OUT/OFF_SALE)
+    sale_status       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ON_SALE', -- 옵션 판매 상태(ON_SALE/SOLD_OUT/OFF_SALE)
     created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at        DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (product_option_id),
@@ -169,7 +174,7 @@ CREATE TABLE product_image (
     product_id       BIGINT       NOT NULL, -- 상품 FK
     upload_id        BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). 완료 통지에서 이 값으로 행을 찾는다(INF-11-04). 리소스 식별자가 아니다
     object_key       VARCHAR(255) NOT NULL, -- S3 객체 key (예: products/ab/3f9c1d2e.jpg). URL 을 통째로 저장하지 않는다 (INF-11-05). 도메인은 환경마다 달라 설정에서 붙인다
-    upload_status    VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 확인함(INF-11-10). 조회는 CONFIRMED 만(INF-11-09)
+    upload_status    VARCHAR(20) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 확인함(INF-11-10). 조회는 CONFIRMED 만(INF-11-09)
     sort_order       INT          NOT NULL DEFAULT 0, -- 상품 안에서의 표시 순서(작을수록 앞). 서버가 MAX+1로 정한다. 유일성은 일부러 걸지 않는다
     is_main          BOOLEAN      NOT NULL DEFAULT FALSE, -- 대표 이미지 여부
     is_main_key      BIGINT GENERATED ALWAYS AS (CASE WHEN is_main THEN product_id ELSE NULL END), -- 상품별로 is_main=TRUE가 최대 1개임을 DB가 강제하기 위한 계산 컬럼
@@ -192,7 +197,7 @@ CREATE TABLE stock_lot (
     expiry_date     DATE         NOT NULL, -- 소비기한
     initial_qty     INT          NOT NULL, -- 입고수량
     available_qty   INT          NOT NULL, -- 판매 가능 수량. 예약(RESERVE)에서 빼고 해제(RELEASE)에서 되돌린다. 확정(CONFIRM)은 바꾸지 않는다
-    status          VARCHAR(30)  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE/SOLD_OUT/DISPOSED)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE/SOLD_OUT/DISPOSED)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_lot_id),
@@ -211,8 +216,8 @@ CREATE TABLE stock_lot (
 CREATE TABLE coupon (
     coupon_id           BIGINT       NOT NULL AUTO_INCREMENT, -- coupon PK
     name                VARCHAR(100) NOT NULL, -- 쿠폰명
-    scope               VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER 장바구니 쿠폰, 주문 전체에 1장/ITEM 상품 쿠폰, 라인 하나에 1장)
-    discount_type       VARCHAR(30)  NOT NULL, -- 할인 유형(AMOUNT 정액 원/RATE 정률 %)
+    scope               VARCHAR(20) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 적용 범위(ORDER 장바구니 쿠폰, 주문 전체에 1장/ITEM 상품 쿠폰, 라인 하나에 1장)
+    discount_type       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 할인 유형(AMOUNT 정액 원/RATE 정률 %)
     discount_value      INT          NOT NULL, -- 할인 값
     max_discount_amount INT          NULL, -- 정률 쿠폰의 할인 상한. 없으면 고액 주문에서 할인이 무제한이 된다. 정액 쿠폰에서는 NULL 이다
     min_order_amount    INT          NOT NULL DEFAULT 0, -- 사용 조건(이 금액 이상일 때만 쓸 수 있다)
@@ -244,7 +249,7 @@ CREATE TABLE coupon (
 CREATE TABLE coupon_product_option (
     coupon_product_option_id BIGINT NOT NULL AUTO_INCREMENT, -- coupon_product_option PK
     coupon_id         BIGINT      NOT NULL, -- 쿠폰 FK
-    scope             VARCHAR(20) NOT NULL DEFAULT 'ITEM', -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ORDER 쿠폰의 행을 막는다
+    scope             VARCHAR(20) COLLATE utf8mb4_0900_as_cs NOT NULL DEFAULT 'ITEM', -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ORDER 쿠폰의 행을 막는다
     product_option_id BIGINT      NOT NULL, -- 이 쿠폰을 쓸 수 있는 옵션 FK
     is_active         BOOLEAN     NOT NULL DEFAULT TRUE, /* 현재 대상인지 여부. 대상에서 뺄 때 행을 지우지 않고 이 값을 내린다.
                                                             order_item 이 이 표를 복합 외래 키로 참조하므로 지우면 이미 팔린 조합에서 삭제가 막힌다.
@@ -263,8 +268,8 @@ CREATE TABLE member_coupon (
     coupon_id           BIGINT       NOT NULL, -- 발급 틀 FK. 대상 옵션을 찾을 때와 어느 틀에서 나왔는지 추적할 때만 쓴다. 아래 조건 값들은 이 참조를 따라가지 않는다
     member_id           BIGINT       NOT NULL, -- 보유 회원 FK
     coupon_name         VARCHAR(100) NOT NULL, -- 발급 시점 쿠폰명
-    scope               VARCHAR(20)  NOT NULL, -- 적용 범위(ORDER/ITEM). 조상 키 복제라 복합 외래 키가 coupon.scope 와 같기를 요구한다. 값 검사도 그 외래 키가 대신하므로 여기에 CHECK 를 두지 않는다
-    discount_type       VARCHAR(30)  NOT NULL, -- 발급 시점 할인 유형(AMOUNT/RATE)
+    scope               VARCHAR(20) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 적용 범위(ORDER/ITEM). 조상 키 복제라 복합 외래 키가 coupon.scope 와 같기를 요구한다. 값 검사도 그 외래 키가 대신하므로 여기에 CHECK 를 두지 않는다
+    discount_type       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 발급 시점 할인 유형(AMOUNT/RATE)
     discount_value      INT          NOT NULL, -- 발급 시점 할인 값
     max_discount_amount INT          NULL, -- 발급 시점 정률 할인 상한
     min_order_amount    INT          NOT NULL DEFAULT 0, -- 발급 시점 사용 조건
@@ -272,7 +277,7 @@ CREATE TABLE member_coupon (
     valid_to            DATE         NOT NULL, -- 발급 시점 사용 유효 종료일
     issue_limit         INT          NULL, -- 발급 시점 한정 수량(coupon.total_quantity 복사). NULL 이면 무제한 쿠폰이다
     issue_seq           INT          NULL, -- 선착순 발급 순번(1 부터). 무제한 쿠폰은 NULL 이다
-    status              VARCHAR(30)  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
+    status              VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
     issued_at           DATETIME(6)  NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
     used_at             DATETIME(6)  NULL, -- 사용 시각(서버 애플리케이션이 기록)
     created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -305,8 +310,8 @@ CREATE TABLE member_coupon (
 CREATE TABLE member_coupon_status_history (
     member_coupon_status_history_id BIGINT NOT NULL AUTO_INCREMENT, -- member_coupon_status_history PK
     member_coupon_id BIGINT       NOT NULL, -- 발급 쿠폰 FK
-    from_status      VARCHAR(30)  NULL, -- 이전 상태(최초 발급은 NULL)
-    to_status        VARCHAR(30)  NOT NULL, -- 변경 상태(member_coupon.status 와 동일 집합)
+    from_status      VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NULL, -- 이전 상태(최초 발급은 NULL)
+    to_status        VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 변경 상태(member_coupon.status 와 동일 집합)
     reason           VARCHAR(255) NULL, -- 사유 상세. 만료가 유효기간 도래인지 어뷰징 발급 취소인지 구분하는 유일한 근거다. status 집합이 셋뿐이라 상태값만으로는 갈리지 않는다
     changed_by       BIGINT       NULL, -- 처리 관리자 FK. 배치나 사용자 동작으로 자동 전이한 것은 NULL 이다
     created_at       DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -355,13 +360,13 @@ CREATE TABLE orders (
     order_id        BIGINT       NOT NULL AUTO_INCREMENT, -- orders PK
     order_no        VARCHAR(30)  NOT NULL, -- 주문번호
     member_id       BIGINT       NOT NULL, -- 주문 회원 FK
-    status          VARCHAR(30)  NOT NULL DEFAULT 'PAYMENT_PENDING', /* 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED).
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PAYMENT_PENDING', /* 주문 상태(PAYMENT_PENDING/PAID/PRODUCT_PREPARING/SHIPMENT_PREPARING/SHIPPING/DELIVERED/CONFIRMED/RETURN_REQUESTED/RETURNED/EXCHANGE_REQUESTED/EXCHANGED/CANCELED).
                                                                         CANCELED 와 RETURNED 는 주문 전체에만 쓴다. 취소는 라인 단위로 일어나지 않고, 부분 반품은 헤더를 바꾸지 않고 라인만 바꾼다.
                                                                         아래 계산 컬럼이 이 전제 위에 서 있으며 DB 는 강제하지 못한다. order_item.item_status 와 함께 바꾼다 */
     product_amount  INT          NOT NULL, -- 총상품금액. SUM(order_item.unit_price * qty) 와 같아야 한다(DI-3-06)
     discount_amount INT          NOT NULL DEFAULT 0, -- 할인 총액(장바구니 쿠폰 + 상품 쿠폰). SUM(order_item.discount_amount) 와 같아야 한다(DI-3-06)
     member_coupon_id BIGINT      NULL, -- 주문 전체에 적용한 장바구니 쿠폰. 취소해도 비우지 않는다. 어느 쿠폰을 썼는지가 이력이고, 재사용은 계산 컬럼이 연다
-    coupon_scope    VARCHAR(20)  NULL, -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ITEM 쿠폰을 이 자리에 넣지 못하게 한다
+    coupon_scope    VARCHAR(20) COLLATE utf8mb4_0900_as_cs  NULL, -- 조상 키 복제. CHECK 와 복합 외래 키가 함께 ITEM 쿠폰을 이 자리에 넣지 못하게 한다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 장바구니 쿠폰이 깎은 금액. 쿠폰 정의는 나중에 바뀔 수 있어 주문 시점 금액을 남긴다
     active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END), -- 살아 있는 주문 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼. order_item 과 같은 조건이다. 교환은 상품이 유지되므로 쿠폰도 유지한다
     shipping_fee    INT          NOT NULL DEFAULT 0, -- 배송비
@@ -408,7 +413,7 @@ CREATE TABLE order_item (
     coupon_id       BIGINT       NULL, -- 조상 키 복제. 복합 외래 키가 이 라인의 옵션이 쿠폰 대상인지 강제한다
     coupon_discount INT          NOT NULL DEFAULT 0, -- 상품 쿠폰이 깎은 금액
     discount_amount INT          NOT NULL DEFAULT 0, -- 이 라인에 배분된 할인 총액. 부분 반품 환불액의 근거다. 배분 규칙은 schema-design-rationale.md 4장
-    item_status     VARCHAR(30)  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED). 클레임 중복을 조건부 UPDATE 로 이 컬럼이 막는다
+    item_status     VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ORDERED', -- 주문 상품 상태(ORDERED/CANCELED/RETURN_REQ/RETURNED/EXCHANGE_REQ/EXCHANGED). 클레임 중복을 조건부 UPDATE 로 이 컬럼이 막는다
     active_coupon_key BIGINT GENERATED ALWAYS AS (CASE WHEN item_status NOT IN ('CANCELED','RETURNED') THEN member_coupon_id ELSE NULL END), -- 살아 있는 라인 한정으로 쿠폰당 1건임을 DB가 강제하기 위한 계산 컬럼. 교환은 상품이 유지되므로 쿠폰도 유지한다. orders.status 를 보지 않으므로 주문을 취소할 때 라인도 함께 CANCELED 로 바꿔야 상품 쿠폰이 풀린다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
@@ -435,7 +440,7 @@ CREATE TABLE stock_allocation (
     order_item_id   BIGINT       NOT NULL, -- 주문 상품 FK
     stock_lot_id          BIGINT       NOT NULL, -- 차감 대상 로트 FK
     qty             INT          NOT NULL, -- FEFO 예약/차감 수량
-    status          VARCHAR(30)  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(available_qty 를 뺀다) / CONFIRMED=차감 확정(available_qty 무변동) / RELEASED=해제(되돌린다). 재예약은 새 행이 아니라 이 값을 RESERVED 로 되돌린다
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'RESERVED', -- RESERVED=예약(available_qty 를 뺀다) / CONFIRMED=차감 확정(available_qty 무변동) / RELEASED=해제(되돌린다). 재예약은 새 행이 아니라 이 값을 RESERVED 로 되돌린다
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_allocation_id),
@@ -449,13 +454,13 @@ CREATE TABLE stock_allocation (
 CREATE TABLE stock_movement (
     stock_movement_id BIGINT       NOT NULL AUTO_INCREMENT, -- stock_movement PK
     stock_lot_id      BIGINT       NOT NULL, -- 변동이 일어난 로트 FK
-    movement_type     VARCHAR(30)  NOT NULL, -- 변동 유형(INBOUND 신규 입고/RESTOCK 반품 재입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정). RESTOCK 은 원래 로트로 되돌리고, 잔여 소비기한이 모자라면 되돌리지 않고 DISPOSE 로 폐기한다
+    movement_type     VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 변동 유형(INBOUND 신규 입고/RESTOCK 반품 재입고/RESERVE 예약/CONFIRM 차감확정/RELEASE 예약해제/DISPOSE 폐기/EXPIRE 만료전환/ADJUST 수동조정). RESTOCK 은 원래 로트로 되돌리고, 잔여 소비기한이 모자라면 되돌리지 않고 DISPOSE 로 폐기한다
     quantity          INT          NOT NULL, -- 변동 수량(절대값, 증감 방향은 movement_type으로 판단)
     qty_before        INT          NOT NULL, -- 변동 전 로트 available_qty
     qty_after         INT          NOT NULL, -- 변동 후 로트 available_qty. CONFIRM 은 두 값이 같다
     order_id          BIGINT       NULL, -- 관련 주문 FK(주문 기인 변동만, 그 외 NULL)
     admin_id          BIGINT       NULL, -- 처리 관리자 FK(수동조정/폐기 등, 시스템 자동은 NULL)
-    disposal_reason   VARCHAR(30)  NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 재입고하지 않은 회수품). DISPOSE 일 때만 채운다
+    disposal_reason   VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NULL, -- 폐기 사유(EXPIRED 소비기한/DAMAGED 손상/RETURNED 재입고하지 않은 회수품). DISPOSE 일 때만 채운다
     reason            VARCHAR(200) NULL, -- 사유 상세(만료/조정 등 자유 서술)
     created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (stock_movement_id),
@@ -504,8 +509,8 @@ CREATE TABLE daily_sales (
 CREATE TABLE order_status_history (
     order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
     order_id        BIGINT       NOT NULL, -- 주문 FK
-    from_status     VARCHAR(30)  NULL, -- 이전 상태
-    to_status       VARCHAR(30)  NOT NULL, -- 변경 상태(orders.status와 동일 집합)
+    from_status     VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NULL, -- 이전 상태
+    to_status       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 변경 상태(orders.status와 동일 집합)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_status_history_id),
     CONSTRAINT chk_osh_to_status CHECK (to_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
@@ -516,9 +521,9 @@ CREATE TABLE order_status_history (
 CREATE TABLE payment (
     payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
     order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
-    method          VARCHAR(30)  NOT NULL, -- 결제수단(CARD 카드/EASY_PAY 간편결제). 무통장입금은 두지 않는다
+    method          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 결제수단(CARD 카드/EASY_PAY 간편결제). 무통장입금은 두지 않는다
     amount          INT          NOT NULL, -- 결제 금액. 아래 복합 외래 키가 orders.total_amount 와 같기를 요구한다
-    status          VARCHAR(30)  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
     refunded_amount INT          NOT NULL DEFAULT 0, -- 환불 누적액(PENDING 환불 포함). refund 행을 만들 때 조건부 UPDATE 로 올린다
     pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 NULL 이다. UNIQUE 는 한 거래가 두 주문에 붙는 것을 막는다
     paid_at         DATETIME(6)  NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
@@ -548,9 +553,9 @@ CREATE TABLE payment (
 CREATE TABLE claim (
     claim_id        BIGINT       NOT NULL AUTO_INCREMENT, -- claim PK
     order_id        BIGINT       NOT NULL, -- 주문 FK
-    type            VARCHAR(30)  NOT NULL, -- 클레임 유형(CANCEL/RETURN/EXCHANGE)
-    status          VARCHAR(30)  NOT NULL DEFAULT 'REQUESTED', -- 클레임 상태(REQUESTED/APPROVED/REJECTED/COMPLETED)
-    reason_type     VARCHAR(30)  NULL, -- 사유 유형(CHANGE_OF_MIND/DEFECT)
+    type            VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 클레임 유형(CANCEL/RETURN/EXCHANGE)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'REQUESTED', -- 클레임 상태(REQUESTED/APPROVED/REJECTED/COMPLETED)
+    reason_type     VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NULL, -- 사유 유형(CHANGE_OF_MIND/DEFECT)
     reason          VARCHAR(500) NULL, -- 사유 상세
     processed_by    BIGINT       NULL, -- admin (NULL=시스템 자동)
     processed_at    DATETIME(6)  NULL, -- 처리 시각
@@ -591,7 +596,7 @@ CREATE TABLE claim_attachment (
     claim_id            BIGINT       NOT NULL, -- 클레임 FK
     upload_id           BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). 완료 통지에서 이 값으로 행을 찾는다(INF-11-04). 리소스 식별자가 아니다
     object_key          VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
-    upload_status       VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 확인함(INF-11-10). 조회는 CONFIRMED 만(INF-11-09), PENDING 은 정리 대상
+    upload_status       VARCHAR(20) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 확인함(INF-11-10). 조회는 CONFIRMED 만(INF-11-09), PENDING 은 정리 대상
     created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at          DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (claim_attachment_id),
@@ -622,7 +627,7 @@ CREATE TABLE refund (
                                               0원 주문은 payment 행이 없으므로 환불 행도 만들 수 없다 */
     amount              INT      NOT NULL, -- 환불액. 배송비 차감 후 실지급액이다. payment.refunded_amount 가 이 값을 더해 상한을 재므로 차감 전 금액을 넣으면 정상 환불이 거부된다
     shipping_deduction  INT      NOT NULL DEFAULT 0, -- 단순변심 배송비 차감. amount 에서 이미 빠진 금액이며 얼마를 뺐는지 남기는 용도다. orders.shipping_fee 를 넘지 않아야 하고 그 검사는 배치가 한다
-    status              VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
+    status              VARCHAR(30) COLLATE utf8mb4_0900_as_cs NOT NULL DEFAULT 'PENDING', -- 환불 상태(PENDING/DONE)
     refunded_at         DATETIME(6) NULL, -- 환불 완료 시각
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
@@ -643,7 +648,7 @@ CREATE TABLE shipment (
     order_id      BIGINT       NOT NULL, -- 주문 FK(1:1). 분할 배송을 하지 않으므로 주문의 모든 라인이 이 배송에 실린다
     carrier       VARCHAR(50)  NULL, -- 택배사
     tracking_no   VARCHAR(50)  NULL, -- 송장번호
-    status        VARCHAR(30)  NOT NULL DEFAULT 'PREPARING', -- 배송 상태(PREPARING 준비/SHIPPING 배송중/DELIVERED 배송완료)
+    status        VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PREPARING', -- 배송 상태(PREPARING 준비/SHIPPING 배송중/DELIVERED 배송완료)
     shipped_at    DATETIME(6)  NULL, -- 발송 시각
     delivered_at  DATETIME(6)  NULL, -- 배송 완료 시각
     created_at    DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -664,7 +669,7 @@ CREATE TABLE shipment_photo (
     shipment_id       BIGINT       NOT NULL, -- 배송 FK
     upload_id         BINARY(16)   NOT NULL, -- 업로드 세션 식별자(UUID v7). claim_attachment 와 같은 용도다
     object_key        VARCHAR(255) NOT NULL, -- S3 객체 key. URL 을 통째로 저장하지 않는다(INF-11-05)
-    upload_status     VARCHAR(20)  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 확인함(INF-11-10). 조회는 CONFIRMED 만(INF-11-09), PENDING 은 정리 대상
+    upload_status     VARCHAR(20) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING', -- PENDING 발급만 됨 / CONFIRMED HeadObject 로 확인함(INF-11-10). 조회는 CONFIRMED 만(INF-11-09), PENDING 은 정리 대상
     created_at        DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at        DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (shipment_photo_id),
@@ -708,7 +713,7 @@ CREATE TABLE qna (
     answer          TEXT         NULL, -- 답변 본문
     answered_by     BIGINT       NULL, -- admin
     is_public       BOOLEAN      NOT NULL DEFAULT TRUE, -- 공개 여부
-    status          VARCHAR(30)  NOT NULL DEFAULT 'WAITING', -- 답변 상태(WAITING/ANSWERED)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'WAITING', -- 답변 상태(WAITING/ANSWERED)
     deleted_at      DATETIME(6)  NULL, -- 소프트딜리트
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)

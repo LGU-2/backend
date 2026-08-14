@@ -17,25 +17,74 @@
 
 ```
 com.example.backend
-├── common                      <- 모든 도메인이 의존 가능. 도메인을 모른다
-├── config                      <- 전역 설정
+├── common                                <- 모든 도메인이 의존 가능. 도메인을 모른다
+│   ├── entity                            <- BaseMutableTimeEntity, BaseImmutableTimeEntity
+│   ├── response                          <- ResponseEnvelope, PageResponse
+│   └── exception                         <- ErrorCode, CommonErrorCode, BusinessException, GlobalExceptionHandler
+├── config                                <- 모든 도메인이 의존 가능한 공통 설정
+│   └── SecurityConfig.java
 │
-├── product                     <- 다른 도메인이 호출하는 도메인
-│   ├── ProductApi.java         <- 공개 API 인터페이스
-│   ├── ProductInfo.java        <- 공개 DTO (record)
-│   ├── OutOfStockException.java  <- 공개 예외
-│   └── domain                  <- 내부 구현 (외부 도메인 접근 금지)
-│       ├── ProductApiImpl.java <- package-private
+├── product                               <- 다른 도메인이 호출하는 도메인
+│   ├── ProductApi.java                   <- 다른 도메인에 공개하는 API 인터페이스
+│   ├── ProductInfo.java                  <- API에서 사용하는 DTO (record)
+│   ├── StockChange.java                  <- API에서 사용하는 DTO (record)
+│   ├── OutOfStockException.java          <- 외부에도 노출 가능한 예외
+│   │
+│   └── domain                            <- 도메인 내부 구현 (외부 도메인 접근 금지)
+│       ├── ProductApiImpl.java           <- ProductApi 구현체 (package-private)
 │       ├── controller
+│       │   └── ProductController.java
 │       ├── service
+│       │   └── ProductService.java       <- 핵심 비즈니스 로직
+│       ├── repository
+│       │   └── ProductRepository.java
+│       ├── entity
+│       │   ├── Product.java              <- @Entity. 공통 베이스 엔티티 상속
+│       │   └── ProductStatus.java        <- 엔티티에 묶이는 enum
+│       ├── dto                           <- 내부 전용 DTO
+│       │   └── ProductSearchCondition.java
+│       └── exception                     <- 내부 전용 예외
+│           ├── ProductException.java
+│           └── ProductErrorCode.java
+│
+├── payment                               <- 외부 시스템을 연동하는 도메인
+│   ├── PaymentApi.java
+│   ├── PaymentResult.java
+│   └── domain
+│       ├── PaymentApiImpl.java
+│       ├── controller
+│       │   └── PgWebhookController.java  <- 가상계좌 입금 등 비동기 통보 수신
+│       ├── service
+│       │   └── PaymentService.java
 │       ├── repository
 │       ├── entity
-│       ├── dto                 <- 내부 전용
-│       ├── exception           <- 내부 전용
-│       └── client              <- 외부 시스템 호출 (있는 경우만)
+│       ├── exception
+│       │   ├── PaymentException.java
+│       │   └── PaymentErrorCode.java
+│       └── client                        <- 외부 시스템 호출 (PG, 외부 API)
+│           ├── PgClient.java             <- 인터페이스. payment가 소유한다
+│           ├── TossPgClient.java         <- 구현체
+│           └── dto
+│               ├── PgPayRequest.java     <- 외부 스펙 전용 DTO
+│               └── PgPayResponse.java
 │
-└── order                       <- 아무도 호출하지 않는 도메인 (API 없음)
+└── order                                 <- 아무도 호출하지 않는 도메인
+    │                                        (다른 도메인에 공개하는 API 인터페이스 없음)
     └── domain
+        ├── controller
+        │   └── OrderController.java
+        ├── service
+        │   └── OrderService.java         <- product를 호출하는 쪽
+        ├── repository
+        │   └── OrderRepository.java
+        ├── entity
+        │   ├── Order.java                <- @Entity
+        │   └── OrderStatus.java          <- 주문 상태. 엔티티와 함께 둔다
+        ├── dto
+        │   └── OrderPlaceRequest.java
+        └── exception
+            ├── OrderException.java
+            └── OrderErrorCode.java
 ```
 
 점검 항목
