@@ -77,12 +77,51 @@ UNIQUE KEY uk_... (<이름>_key)
 
 | 표 | 컬럼 | 막는 것 |
 |---|---|---|
+| `category` | `parent_key` | 최상위끼리도 이름 중복 방지. `NULL` 을 0 으로 모은다 |
 | `member_grade` | `is_default_key` | 기본 등급은 전체에서 최대 1개. 기본값은 `FALSE` 다. `TRUE` 였을 때는 등급을 둘째부터 못 넣었다 |
 | `address` | `is_default_key` | 회원별 기본 배송지 1개 |
 | `product_image` | `is_main_key` | 상품별 대표 이미지 1개 |
 | `member` | `active_provider_key` | 활성 회원만 카카오 계정 유일 |
 | `orders` | `active_coupon_key` | 살아 있는 주문만 쿠폰당 1건(취소, 전체 반품 제외) |
 | `order_item` | `active_coupon_key` | 살아 있는 라인만 쿠폰당 1건(취소, 반품 제외) |
+
+### `NULL` 이 반대로 작동한 자리
+
+계산 컬럼 다섯은 **`NULL` 이면 UNIQUE 에서 빠진다**는 성질을 일부러 쓴다.
+`category` 에서는 같은 성질이 사고로 작동했다.
+
+```sql
+parent_id BIGINT NULL,
+UNIQUE KEY uk_category_parent_name (parent_id, name)
+```
+
+의도는 "같은 부모 밑에 같은 이름이 둘 있으면 안 된다" 인데, **최상위는 `parent_id` 가 `NULL` 이라 제약이 안 걸린다.**
+하위 카테고리는 제대로 막히고 최상위만 뚫린다.
+
+```
+최상위 "수산물"       통과
+최상위 "수산물" 중복   통과      <- 막혀야 한다
+하위  "잎채소" 중복    거부
+```
+
+같은 도구를 반대로 써서 닫았다. `NULL` 을 실제 값으로 바꾸면 한 그룹으로 묶인다.
+
+```sql
+parent_key BIGINT GENERATED ALWAYS AS (COALESCE(parent_id, 0)),
+UNIQUE KEY uk_category_parent_name (parent_key, name)
+```
+
+`category_id` 가 `AUTO_INCREMENT` 라 0 인 행이 없으므로 실제 부모와 충돌하지 않는다.
+
+**다섯은 `NULL` 로 제약을 끄고, 하나는 `NULL` 을 없애 제약을 켠다.** 도구가 같고 방향만 다르다.
+
+### 순환 참조는 DB 가 못 막는다
+
+`category.parent_id` 가 자기 표를 참조하므로 **A 의 부모를 B 로, B 의 부모를 A 로 만들 수 있다.**
+트리를 도는 코드가 무한 루프에 빠진다.
+
+외래 키는 "그 행이 있는가" 만 보지 조상을 거슬러 올라가지 않는다. 재귀 검사라 CHECK 로도 표현할 수 없다.
+정합성 검사가 재귀 CTE 로 잡는다.
 
 ### 걷어낸 둘
 
@@ -1427,7 +1466,17 @@ SELECT l.stock_lot_id, l.expiry_date, p.sale_available_days_from_expiry
  WHERE l.status = 'AVAILABLE'
    AND l.expiry_date < DATE_ADD(CURDATE(), INTERVAL p.sale_available_days_from_expiry DAY);
 
--- 13. 자식이 하나도 없는 부모가 있는가
+-- 13. 카테고리가 순환하는가 (재귀 CTE 로 자기 자신에 도달하는 경로를 찾는다)
+WITH RECURSIVE walk (root_id, cur_id, depth) AS (
+    SELECT category_id, parent_id, 1 FROM category WHERE parent_id IS NOT NULL
+    UNION ALL
+    SELECT w.root_id, c.parent_id, w.depth + 1
+      FROM walk w JOIN category c ON c.category_id = w.cur_id
+     WHERE c.parent_id IS NOT NULL AND w.depth < 20
+)
+SELECT DISTINCT root_id FROM walk WHERE cur_id = root_id;
+
+-- 14. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL

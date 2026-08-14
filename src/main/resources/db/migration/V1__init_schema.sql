@@ -122,14 +122,15 @@ CREATE TABLE admin (
 
 CREATE TABLE category (
     category_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 카테고리 PK
-    parent_id       BIGINT       NULL, -- 상위 카테고리(확장용)
+    parent_id       BIGINT       NULL, -- 상위 카테고리(확장용). 최상위는 NULL 이다
+    parent_key      BIGINT GENERATED ALWAYS AS (COALESCE(parent_id, 0)), -- 최상위끼리도 이름 중복을 막기 위한 계산 컬럼. NULL 은 UNIQUE 에서 빠지므로 0 으로 모아 한 그룹으로 만든다
     name            VARCHAR(50)  NOT NULL, -- 수산물/육류/채소/과일/유제품
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
     PRIMARY KEY (category_id),
-    UNIQUE KEY uk_category_parent_name (parent_id, name),
+    UNIQUE KEY uk_category_parent_name (parent_key, name), -- 같은 부모 밑 이름 중복 방지. category_id 가 AUTO_INCREMENT 라 0 인 행이 없어 실제 부모와 충돌하지 않는다
     CONSTRAINT fk_category_parent FOREIGN KEY (parent_id) REFERENCES category (category_id)
-); -- 카테고리
+); -- 카테고리. 순환(A 의 부모가 B, B 의 부모가 A)은 재귀 검사라 DB 로 막을 수 없고 정합성 검사가 잡는다
 
 CREATE TABLE supplier (
     supplier_id     BIGINT       NOT NULL AUTO_INCREMENT, -- 공급처 PK
