@@ -16,11 +16,6 @@ public record PageResponse<T>(
         long totalElements
 ) {
 
-    // 넘겨받은 목록을 나중에 바꿔도 응답이 흔들리지 않도록 복사한다
-    public PageResponse {
-        items = List.copyOf(items);
-    }
-
     // 레포지토리가 돌려준 Page 를 그대로 옮긴다
     public static <T> PageResponse<T> from(Page<T> page) {
         return new PageResponse<>(
