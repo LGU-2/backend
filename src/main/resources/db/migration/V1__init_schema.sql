@@ -22,8 +22,8 @@
 --
 -- 외부 노출 식별자(public_id)는 이 스키마에 넣지 않는다. 추후 고려한다.
 -- 지금은 API 가 설계되지 않아 어느 테이블이 단독 지목 대상인지 답할 수 없다.
--- 설계와 판단 기준은 docs/code-architecture/identifier-strategy-guideline.md 에 있다.
 -- 도입할 때는 추가만 하는 마이그레이션(V2)으로 컬럼과 UNIQUE 를 얹는다. 이 파일을 고치지 않는다.
+-- 설계와 판단 기준은 docs/code-architecture/identifier-strategy-guideline.md 에 있다.
 
 -- =====================================================================
 -- 1. 회원 / 권한
@@ -291,7 +291,7 @@ CREATE TABLE member_coupon (
     valid_to            DATE         NOT NULL, -- 발급 시점 사용 유효 종료일
     issue_limit         INT          NULL, -- 발급 시점 한정 수량(coupon.total_quantity 복사). NULL 이면 무제한 쿠폰이다
     issue_seq           INT          NULL, -- 선착순 발급 순번(1 부터). 무제한 쿠폰은 NULL 이다
-    status              VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료)
+    status              VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ISSUED', -- 발급분 상태(ISSUED 발급/USED 사용/EXPIRED 만료/CANCELLED 주문 취소로 사용 철회). CANCELLED 는 조회 시 앱이 ISSUED 나 EXPIRED 로 해소한다
     issued_at           DATETIME(6)  NOT NULL, -- 발급 시각(서버 애플리케이션이 기록)
     used_at             DATETIME(6)  NULL, -- 사용 시각(서버 애플리케이션이 기록)
     created_at          DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
@@ -304,8 +304,13 @@ CREATE TABLE member_coupon (
     UNIQUE KEY uk_mc_coupon_seq (coupon_id, issue_seq), -- 한 쿠폰에서 같은 순번을 두 번 쓸 수 없다. MySQL UNIQUE 는 NULL 을 중복으로 보지 않아 무제한 쿠폰은 걸리지 않는다
     CONSTRAINT fk_mc_coupon FOREIGN KEY (coupon_id, scope) REFERENCES coupon (coupon_id, scope), -- scope 를 함께 요구해 발급분의 범위가 쿠폰과 어긋날 수 없다
     CONSTRAINT fk_mc_member FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED')),
-    CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
+    CONSTRAINT chk_mc_status CHECK (status IN ('ISSUED','USED','EXPIRED','CANCELLED')),
+    /*
+     * 사용 시각은 사용 상태에만 있다.
+     * CANCELLED 로 바꿀 때 used_at 을 함께 비워야 한다. 사용이 철회됐으므로 사용 시각도 남지 않는다.
+     * 언제 썼었는지는 member_coupon_status_history 의 USED 전이 행이 갖는다.
+     */
+    CONSTRAINT chk_mc_used_at CHECK (
         (status =  'USED' AND used_at IS NOT NULL)
      OR (status <> 'USED' AND used_at IS NULL)),
     CONSTRAINT chk_mc_discount_type CHECK (discount_type IN ('AMOUNT','RATE')), -- coupon.discount_type 과 같은 집합. 발급 시점 스냅샷이라 FK 로 묶여 있지 않아 자기 CHECK 가 유일한 방어다
@@ -334,8 +339,8 @@ CREATE TABLE member_coupon_status_history (
     created_at       DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_status_history_id),
     KEY idx_mcsh_coupon_time (member_coupon_id, member_coupon_status_history_id), -- 쿠폰별 전이 순서 조회
-    CONSTRAINT chk_mcsh_to_status CHECK (to_status IN ('ISSUED','USED','EXPIRED')), -- member_coupon.status 와 같은 집합. 한쪽만 고치면 전이가 막힌다
-    CONSTRAINT chk_mcsh_from_status CHECK (from_status IS NULL OR from_status IN ('ISSUED','USED','EXPIRED')), -- member_coupon.status 와 같은 집합
+    CONSTRAINT chk_mcsh_to_status CHECK (to_status IN ('ISSUED','USED','EXPIRED','CANCELLED')), -- member_coupon.status 와 같은 집합. 한쪽만 고치면 전이가 막힌다
+    CONSTRAINT chk_mcsh_from_status CHECK (from_status IS NULL OR from_status IN ('ISSUED','USED','EXPIRED','CANCELLED')), -- member_coupon.status 와 같은 집합
     CONSTRAINT chk_mcsh_transition CHECK (from_status IS NULL OR from_status <> to_status), -- 같은 상태로 바뀌는 전이는 기록할 것이 없다
     CONSTRAINT fk_mcsh_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
     CONSTRAINT fk_mcsh_admin FOREIGN KEY (changed_by) REFERENCES admin (admin_id)
