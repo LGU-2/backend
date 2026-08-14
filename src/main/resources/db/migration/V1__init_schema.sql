@@ -396,6 +396,9 @@ CREATE TABLE orders (
     CONSTRAINT fk_order_member FOREIGN KEY (member_id) REFERENCES member (member_id),
     CONSTRAINT fk_order_member_coupon FOREIGN KEY (member_coupon_id, member_id) REFERENCES member_coupon (member_coupon_id, member_id), -- member_id 를 함께 요구해 남의 쿠폰을 붙일 수 없다
     CONSTRAINT fk_order_coupon_scope FOREIGN KEY (member_coupon_id, coupon_scope) REFERENCES member_coupon (member_coupon_id, scope), -- scope 를 함께 요구해 ITEM 쿠폰을 붙일 수 없다
+    /* 아래 total_amount >= 0 은 chk_order_total 과 chk_order_discount_cap 에서 유도된다.
+       그런데 그 유도가 "배송비 할인 쿠폰이 없다" 는 정책에 기대고 있어 지우지 않고 겹쳐 둔다.
+       할인이 배송비까지 덮게 되면 유도가 깨지고 이 조건만 남는다 */
     CONSTRAINT chk_order_amounts CHECK (product_amount >= 0 AND discount_amount >= 0 AND shipping_fee >= 0 AND total_amount >= 0 AND coupon_discount >= 0),
     CONSTRAINT chk_order_total CHECK (total_amount = product_amount - discount_amount + shipping_fee), -- 합계가 항목과 맞는지 DB가 강제한다. 각 항목이 0 이상인 것만 봐서는 total_amount가 아무 값이나 될 수 있다
     CONSTRAINT chk_order_discount_parts CHECK (coupon_discount <= discount_amount), -- 장바구니 쿠폰분은 할인 총액의 일부이고 나머지는 상품 쿠폰분이다
