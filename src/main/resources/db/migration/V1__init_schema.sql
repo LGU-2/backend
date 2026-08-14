@@ -12,6 +12,14 @@
 -- DB 안에서는 비교가 일관되어 문제가 없지만, 애플리케이션이 Enum.valueOf 로 읽을 때 터진다.
 -- 이름과 주소 같은 자유 문자열은 검색이 대소문자를 구분하면 안 되므로 기본값을 그대로 쓴다.
 --
+-- 같은 값 목록을 여러 CHECK 가 나눠 갖는 자리가 있다. 하나를 고치면 나머지도 함께 고친다.
+--   orders.status         <-> order_status_history.from_status, to_status
+--   member_coupon.status  <-> member_coupon_status_history.from_status, to_status
+--   product.sale_status   <-> product_option.sale_status
+--   coupon.discount_type  <-> member_coupon.discount_type
+--   upload_status          product_image, claim_attachment, shipment_photo
+-- 빠뜨리면 원본 표는 새 값을 받는데 이력 표가 거부해서 상태 전이가 통째로 롤백된다.
+--
 -- 외부 노출 식별자(public_id)는 이 스키마에 넣지 않는다. 추후 고려한다.
 -- 지금은 API 가 설계되지 않아 어느 테이블이 단독 지목 대상인지 답할 수 없다.
 -- 설계와 판단 기준은 docs/code-architecture/identifier-strategy-guideline.md 에 있다.
@@ -166,7 +174,7 @@ CREATE TABLE product_option (
     UNIQUE KEY uk_option_id_product (product_option_id, product_id), -- review 가 복합 외래 키로 참조한다. product_option_id 만으로도 유일하지만 FK 대상이 되려면 이 조합에 인덱스가 있어야 한다
     CONSTRAINT fk_option_product FOREIGN KEY (product_id) REFERENCES product (product_id),
     CONSTRAINT chk_option_price CHECK (price >= 0),
-    CONSTRAINT chk_option_sale_status CHECK (sale_status IN ('ON_SALE','SOLD_OUT','OFF_SALE'))
+    CONSTRAINT chk_option_sale_status CHECK (sale_status IN ('ON_SALE','SOLD_OUT','OFF_SALE')) -- product.sale_status 와 같은 집합
 ); -- 상품 옵션(판매 단위 SKU: 가격, 재고 기준)
 
 CREATE TABLE product_image (
@@ -294,7 +302,7 @@ CREATE TABLE member_coupon (
     CONSTRAINT chk_mc_used_at CHECK ( -- 사용 시각은 사용 상태에만 있다
         (status =  'USED' AND used_at IS NOT NULL)
      OR (status <> 'USED' AND used_at IS NULL)),
-    CONSTRAINT chk_mc_discount_type CHECK (discount_type IN ('AMOUNT','RATE')),
+    CONSTRAINT chk_mc_discount_type CHECK (discount_type IN ('AMOUNT','RATE')), -- coupon.discount_type 과 같은 집합. 발급 시점 스냅샷이라 FK 로 묶여 있지 않아 자기 CHECK 가 유일한 방어다
     CONSTRAINT chk_mc_values CHECK (discount_value > 0 AND min_order_amount >= 0),
     CONSTRAINT chk_mc_rate CHECK ( -- 정률은 100%를 넘을 수 없고 상한은 정률에만 붙는다
         (discount_type = 'RATE'   AND discount_value <= 100)
@@ -317,8 +325,8 @@ CREATE TABLE member_coupon_status_history (
     created_at       DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (member_coupon_status_history_id),
     KEY idx_mcsh_coupon_time (member_coupon_id, member_coupon_status_history_id), -- 쿠폰별 전이 순서 조회
-    CONSTRAINT chk_mcsh_to_status CHECK (to_status IN ('ISSUED','USED','EXPIRED')),
-    CONSTRAINT chk_mcsh_from_status CHECK (from_status IS NULL OR from_status IN ('ISSUED','USED','EXPIRED')),
+    CONSTRAINT chk_mcsh_to_status CHECK (to_status IN ('ISSUED','USED','EXPIRED')), -- member_coupon.status 와 같은 집합. 한쪽만 고치면 전이가 막힌다
+    CONSTRAINT chk_mcsh_from_status CHECK (from_status IS NULL OR from_status IN ('ISSUED','USED','EXPIRED')), -- member_coupon.status 와 같은 집합
     CONSTRAINT chk_mcsh_transition CHECK (from_status IS NULL OR from_status <> to_status), -- 같은 상태로 바뀌는 전이는 기록할 것이 없다
     CONSTRAINT fk_mcsh_member_coupon FOREIGN KEY (member_coupon_id) REFERENCES member_coupon (member_coupon_id),
     CONSTRAINT fk_mcsh_admin FOREIGN KEY (changed_by) REFERENCES admin (admin_id)
@@ -513,8 +521,8 @@ CREATE TABLE order_status_history (
     to_status       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 변경 상태(orders.status와 동일 집합)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     PRIMARY KEY (order_status_history_id),
-    CONSTRAINT chk_osh_to_status CHECK (to_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
-    CONSTRAINT chk_osh_from_status CHECK (from_status IS NULL OR from_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')),
+    CONSTRAINT chk_osh_to_status CHECK (to_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')), -- orders.status 와 같은 집합. 한쪽만 고치면 전이가 막힌다
+    CONSTRAINT chk_osh_from_status CHECK (from_status IS NULL OR from_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')), -- orders.status 와 같은 집합
     CONSTRAINT fk_history_order FOREIGN KEY (order_id) REFERENCES orders (order_id)
 ); -- 주문 상태 이력
 

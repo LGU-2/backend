@@ -764,6 +764,64 @@ member_coupon_status_history.changed_by 쿠폰 상태를 바꾼 사람
 **같은 아이디가 다른 사람이 되면 로그를 읽는 사람이 헷갈린다.** `product_code` 와 같은 판단이다.
 `member` 가 계산 컬럼으로 재가입을 여는 것과는 반대인데, 카카오 계정 재가입은 실제 요구이고 관리자 아이디 재사용은 요구가 아니다.
 
+### 같은 값 목록이 여러 CHECK 에 나뉘어 있다
+
+enum 멤버십 CHECK 가 28건인데 그중 **15건이 다른 곳과 같은 값 목록**이다.
+
+```
+3벌  (PENDING, CONFIRMED)          product_image, claim_attachment, shipment_photo
+3벌  (ISSUED, USED, EXPIRED)       member_coupon.status + 이력 표의 from/to
+3벌  주문 상태 12개                 orders.status + 이력 표의 from/to
+2벌  (ON_SALE, SOLD_OUT, OFF_SALE) product, product_option
+2벌  (AMOUNT, RATE)                coupon, member_coupon
+```
+
+**가장 위험한 자리는 주문 상태다.** 값을 하나 추가할 때 `order_status_history` 를 빠뜨리면
+헤더는 새 상태로 바뀌는데 이력 INSERT 가 거부되어 **상태 전이 트랜잭션이 통째로 롤백된다.**
+오류는 나지만 원인이 이력 표라는 것을 알아채는 데 시간이 걸린다.
+
+줄이는 방법 셋을 봤고 전부 대가가 있어 **그대로 두기로 했다.**
+
+| | 방법 | 대가 |
+|---|---|---|
+| **a** | 규칙으로 관리 | 사람이 지킨다 |
+| b | MySQL `ENUM` 타입 | 표 간 중복은 그대로다. 값 추가에 `ALTER` 가 필요한 것도 같다. 이식성만 잃는다 |
+| c | 상태 코드 참조 표 + 외래 키 | 표가 늘고 상태 하나 읽자고 조인이 생긴다. "상태는 컬럼" 이라는 전제와 어긋난다 |
+
+**b 는 중복을 줄이지 못한다.** `ENUM('PENDING','CONFIRMED')` 을 세 표에 각각 쓰는 것은 CHECK 를 세 번 쓰는 것과 같다.
+목록이 컬럼 정의로 자리만 옮길 뿐이다.
+
+그래서 a 로 가되, 규칙을 사람 기억에 두지 않고 **세 곳에 박았다.**
+
+```
+DDL 헤더        같은 목록을 쓰는 짝을 전부 나열
+이력 표 CHECK   "orders.status 와 같은 집합" 이라는 주석
+정합성 검사     목록이 실제로 갈라졌는지 검사
+```
+
+검사는 데이터가 아니라 **제약 정의 자체를 비교한다.** 데이터를 보면 그 값이 실제로 쓰인 뒤에야 잡히는데,
+정의를 보면 목록이 갈라지는 순간 잡힌다.
+
+```sql
+SELECT grp, COUNT(DISTINCT vals) AS lists
+  FROM (SELECT REGEXP_REPLACE(
+                 REPLACE(REGEXP_REPLACE(check_clause, '`[^`]*`', ''), '_latin1', ''),
+                 '[^A-Z_,]', '') AS vals, ... AS grp
+          FROM information_schema.check_constraints WHERE constraint_schema = DATABASE()) t
+ GROUP BY grp HAVING COUNT(DISTINCT vals) > 1;
+```
+
+정규화가 필요하다. `check_clause` 에는 컬럼명(`` `from_status` ``)과 문자열 도입자(`_latin1`)가 섞여 있어
+그대로 비교하면 값 목록이 같아도 다르게 나온다. 백틱 식별자와 `_latin1` 을 지우고 **대문자와 밑줄, 쉼표만 남기면**
+값 목록만 남는다.
+
+MySQL 8.4 에 올려 확인했다. 다섯 묶음이 전부 `같음` 으로 나오고,
+`orders.status` 에만 값을 하나 더해 보면 그 묶음이 `갈라짐` 으로 바뀐다.
+
+`(ORDER, ITEM)` 은 원래 `coupon` 과 `member_coupon` 두 벌이었는데
+`chk_mc_scope` 를 지우면서 한 벌이 됐다. **복합 외래 키가 값 검사까지 대신하면 중복이 자연히 사라진다.**
+다른 자리에도 같은 길이 있는지는 외래 키로 묶이는 값인지에 달려 있고, 스냅샷 복사본은 그럴 수 없다.
+
 ### 상태 컬럼은 대소문자를 구분한다
 
 서버 기본 콜레이션이 `utf8mb4_0900_ai_ci` 라 **대소문자를 구분하지 않는다.**
@@ -1243,7 +1301,27 @@ SELECT 'product_image', i.product_image_id FROM product_image i
   JOIN product p ON p.product_id = i.product_id
  WHERE p.deleted_at IS NOT NULL AND i.created_at > p.deleted_at;
 
--- 11. 자식이 하나도 없는 부모가 있는가
+-- 11. 같은 값 목록을 쓰는 CHECK 들이 갈라졌는가 (데이터가 아니라 제약 정의를 본다)
+--     검사 대상 묶음이 갈라지면 lists 가 2 이상이 된다
+SELECT grp, COUNT(*) AS checks, COUNT(DISTINCT vals) AS lists
+  FROM (SELECT REGEXP_REPLACE(
+                 REPLACE(REGEXP_REPLACE(check_clause, '`[^`]*`', ''), '_latin1', ''),
+                 '[^A-Z_,]', '') AS vals,
+               CASE
+                 WHEN constraint_name IN ('chk_order_status','chk_osh_to_status','chk_osh_from_status') THEN 'order_status'
+                 WHEN constraint_name IN ('chk_mc_status','chk_mcsh_to_status','chk_mcsh_from_status') THEN 'coupon_status'
+                 WHEN constraint_name IN ('chk_product_sale_status','chk_option_sale_status') THEN 'sale_status'
+                 WHEN constraint_name IN ('chk_coupon_discount_type','chk_mc_discount_type') THEN 'discount_type'
+                 WHEN constraint_name IN ('chk_product_image_status','chk_claim_attachment_status',
+                                          'chk_shipment_photo_status') THEN 'upload_status'
+               END AS grp
+          FROM information_schema.check_constraints
+         WHERE constraint_schema = DATABASE()) t
+ WHERE grp IS NOT NULL
+ GROUP BY grp
+HAVING COUNT(DISTINCT vals) > 1;
+
+-- 12. 자식이 하나도 없는 부모가 있는가
 SELECT 'order' AS kind, o.order_id AS id FROM orders o
  WHERE NOT EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = o.order_id)
 UNION ALL
