@@ -15,7 +15,7 @@
 
 | 무엇 | 명령 | API 키 | 파일을 고치나 |
 |---|---|---|---|
-| 로컬 검증 | `/verify` | 아니오 | 기록을 남긴다 |
+| 로컬 검증 | `/v-local` | 아니오 | 기록을 남긴다 |
 | 무엇이 켜지는지 | `run.py --mode judge --dry-run` | 아니오 | 아니오 |
 | 어떤 규칙이 걸렸는지 | `run.py --mode match` | 아니오 | 아니오 |
 | 실제 판정 | `run.py --mode judge` | **예** | 결과 파일 |
@@ -33,9 +33,9 @@
 backend 디렉터리에서 Claude Code 를 띄운 뒤 친다.
 
 ```
-/verify
-/verify HEAD
-/verify HEAD~5
+/v-local
+/v-local HEAD
+/v-local HEAD~5
 ```
 
 | 인자 | 범위 |
@@ -185,7 +185,7 @@ check
   -> 2. --dry-run 으로 의도한 항목이 켜지는지 확인
 
 커밋했다
-  -> 1. /verify
+  -> 1. /v-local
 
 CI 가 이상하다
   -> 3. --mode match 로 규칙 확인  ->  4. 실제 판정으로 재현
