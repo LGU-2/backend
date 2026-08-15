@@ -26,8 +26,21 @@ ls ~/.cache/llm-verify/common/.github/llm-verify/items.yml
 
 | 순서 | 위치 | 어떻게 다루나 |
 |------|------|---------------|
-| 1 | `../common` | 사용자가 직접 clone 해 둔 것. **그대로 쓰고 건드리지 않는다** |
+| 1 | 옆에 clone 된 것 | 사용자가 직접 clone 해 둔 것. **그대로 쓰고 건드리지 않는다** |
 | 2 | `~/.cache/llm-verify/common` | 아래 절차로 **원격 최신에 맞춘 뒤** 쓴다 |
+
+옆 저장소는 **디렉터리 이름으로 찾지 않는다.** clone 이름이 사람마다 다르고 저장소 이름도 바뀐다.
+원격 URL 로 판별한다.
+
+```bash
+for d in ../*/; do
+  url=$(git -C "$d" remote get-url origin 2>/dev/null) || continue
+  case "$url" in
+    *fresh-market/.github*)  COMMON="$d" ;;
+    *fresh-market/fm-infra*) INFRA="$d" ;;
+  esac
+done
+```
 
 **1번을 우선하는 이유**는 사용자가 관리하는 저장소이기 때문이다.
 직접 clone 한 사람은 이 명령이 네트워크를 쓰지 않고, 그 저장소를 갱신하지도 않는다.

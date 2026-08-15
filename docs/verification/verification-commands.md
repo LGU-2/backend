@@ -135,8 +135,9 @@ OK  common 217건. 문서와 레지스트리가 일치한다
 지금 무엇이 켜지고 무엇이 막혀 있는지를 계산해 문서로 낸다.
 
 ```bash
-python3 common/.github/llm-verify/gen_status.py . \
-        -o backend/docs/verification/verification-status.md
+python3 .github/llm-verify/gen_status.py \
+        --backend ../fm-backend --common . --infra ../fm-infra \
+        -o ../fm-backend/docs/verification/verification-status.md
 ```
 
 항목을 추가하거나 앵커 규칙을 고친 뒤에 돌린다.
