@@ -31,7 +31,7 @@
               |  run.py 가 조립해 LLM 에 넘긴다
               v
    4층   실행기                 판정하고 출력한다
-          run.py, llm-verify.yml
+          run.py, llm-verify.yml, pr-gate.yml
 ```
 
 **아래층은 위층을 모른다.** `run.py`는 항목이 무슨 뜻인지 모르고 ID 와 제목만 넘긴다.
@@ -58,7 +58,7 @@ docs/software-quality/          docs/code-architecture/    docs/system-design/
   known-conflicts.yml
 
 .github/workflows/              .github/workflows/         .github/workflows/
-  llm-verify.yml   본체            llm-verify.yml  호출자     registry-check.yml
+  llm-verify.yml   본체            pr-gate.yml     호출자     registry-check.yml
   registry-check.yml               registry-check.yml
   llm-verify/verify.sh           verify.sh        G-LOCAL 진입점
     G-LOCAL 본체                  .claude/commands/
@@ -105,7 +105,7 @@ docs/verification/                 v-commit.md    Claude 편의 진입점
 | `common/.github/llm-verify/run.py` | 722 | 범위 산출, 필터, 입력 수집, LLM 호출, 출력 |
 | `common/.github/llm-verify/gen_items.py` | 244 | 문서 -> `items.yml`. `--check` 로 대조 |
 | `common/.github/workflows/llm-verify.yml` | 140 | 체크아웃과 코멘트. 재사용 워크플로 |
-| `backend/.github/workflows/llm-verify.yml` | 25 | 트리거만. 본체를 부른다 |
+| `backend/.github/workflows/pr-gate.yml` | 87 | G-BUILD 와 G-PR. needs 로 순서를 매긴다 |
 | `*/.github/workflows/registry-check.yml` | 33~42 | 문서와 레지스트리 일치 검사 |
 | `<repo>/verify.sh` | 41 | G-LOCAL 진입점. common 을 찾아 본체를 부른다 |
 | `common/.github/llm-verify/verify.sh` | 117 | G-LOCAL 본체. 계산과 판정 지시문 생성. LLM 없음 |

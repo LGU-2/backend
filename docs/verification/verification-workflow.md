@@ -188,10 +188,11 @@ build.gradle               ->  MNT PERF INF(10장)
       |
       v
 +- 1 --------------------------------------------------------------+
-|  backend/.github/workflows/llm-verify.yml            [ 있음 ]    |
-|  트리거만 정의. 본체를 부른다                                    |
-|    on: pull_request [opened, synchronize, reopened]              |
-|    uses: fresh-market/.github/.github/workflows/llm-verify.yml@v1       |
+|  backend/.github/workflows/pr-gate.yml               [ 있음 ]    |
+|  G-BUILD 를 먼저 돌리고 성공하면 본체를 부른다                   |
+|    on: pull_request  branches: [develop, main]                   |
+|    build:  ./gradlew check, sonar          <- 차단한다           |
+|    verify: needs build, base_ref == develop                      |
 +--------------------------+---------------------------------------+
                            v
 +- 2 --------------------------------------------------------------+
