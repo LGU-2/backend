@@ -62,7 +62,7 @@ docs/software-quality/          docs/code-architecture/    docs/system-design/
   registry-check.yml               registry-check.yml
   llm-verify/verify.sh           verify.sh        G-LOCAL 진입점
     G-LOCAL 본체                  .claude/commands/
-docs/verification/                 v-local.md     Claude 편의 진입점
+docs/verification/                 v-commit.md    Claude 편의 진입점
   g-local.md       절차
   세 저장소 공용
 ```
@@ -110,7 +110,7 @@ docs/verification/                 v-local.md     Claude 편의 진입점
 | `<repo>/verify.sh` | 41 | G-LOCAL 진입점. common 을 찾아 본체를 부른다 |
 | `common/.github/llm-verify/verify.sh` | 117 | G-LOCAL 본체. 계산과 판정 지시문 생성. LLM 없음 |
 | `common/docs/verification/g-local.md` | 219 | G-LOCAL 판정 절차. 도구에 매이지 않는다. 세 저장소가 함께 쓴다 |
-| `backend/.claude/commands/v-local.md` | 16 | Claude Code 편의 진입점. `./verify.sh` 를 부른다 |
+| `backend/.claude/commands/v-commit.md` | 16 | Claude Code 편의 진입점. `./verify.sh` 를 부른다 |
 
 ## 4. 항목 하나가 판정되기까지
 
