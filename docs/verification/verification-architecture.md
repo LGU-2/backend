@@ -60,8 +60,10 @@ docs/software-quality/          docs/code-architecture/    docs/system-design/
 .github/workflows/              .github/workflows/         .github/workflows/
   llm-verify.yml   본체            llm-verify.yml  호출자     registry-check.yml
   registry-check.yml               registry-check.yml
-                                 .claude/commands/
-                                   verify.md      G-LOCAL
+  llm-verify/verify.sh           .claude/commands/
+    G-LOCAL 계산                    verify.md      G-LOCAL 진입점
+                                 docs/verification/
+                                   g-local.md     G-LOCAL 절차
 ```
 
 **판정 기준은 셋에서 오지만 판정 대상은 backend 코드 하나다.**
@@ -104,7 +106,9 @@ docs/software-quality/          docs/code-architecture/    docs/system-design/
 | `common/.github/workflows/llm-verify.yml` | 140 | 체크아웃과 코멘트. 재사용 워크플로 |
 | `backend/.github/workflows/llm-verify.yml` | 25 | 트리거만. 본체를 부른다 |
 | `*/.github/workflows/registry-check.yml` | 33~42 | 문서와 레지스트리 일치 검사 |
-| `backend/.claude/commands/verify.md` | 236 | G-LOCAL 절차. Claude 가 읽는다 |
+| `common/.github/llm-verify/verify.sh` | 89 | G-LOCAL 계산. 기준 저장소 확인, 빌드 게이트, 앵커 매칭. LLM 없음 |
+| `backend/docs/verification/g-local.md` | 216 | G-LOCAL 판정 절차. 도구에 매이지 않는다 |
+| `backend/.claude/commands/verify.md` | 71 | Claude Code 진입점. 절차 문서를 가리킨다 |
 
 ## 4. 항목 하나가 판정되기까지
 

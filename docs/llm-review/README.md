@@ -1,7 +1,7 @@
 # 로컬 검증 기록
 
 `/verify` (G-LOCAL) 를 돌린 결과가 이 디렉터리에 쌓인다.
-절차는 `.claude/commands/verify.md`, 설계 근거는 `fresh-market/.github` 의 `docs/software-quality/qa-llm-verification.md` 에 있다.
+절차는 `docs/verification/g-local.md`, 설계 근거는 `fresh-market/.github` 의 `docs/software-quality/qa-llm-verification.md` 에 있다.
 
 ## 파일명
 
