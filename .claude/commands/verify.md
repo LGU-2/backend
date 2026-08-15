@@ -95,6 +95,10 @@ git -C ~/.cache/llm-verify/common fetch --depth 1 -q origin HEAD && \
 git -C ~/.cache/llm-verify/common reset --hard -q FETCH_HEAD
 git -C ~/.cache/llm-verify/infra  fetch --depth 1 -q origin HEAD && \
 git -C ~/.cache/llm-verify/infra  reset --hard -q FETCH_HEAD
+
+# 캐시를 쓰기로 했으면 변수도 여기서 채운다. 이후 본문은 $COMMON 과 $INFRA 만 쓴다
+: "${COMMON:=$HOME/.cache/llm-verify/common}"
+: "${INFRA:=$HOME/.cache/llm-verify/infra}"
 ```
 
 **`pull` 대신 `fetch` + `reset --hard` 를 쓴다.** 얕은 clone 이라 병합할 이력이 없고,
