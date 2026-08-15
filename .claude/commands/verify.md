@@ -7,7 +7,7 @@ allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Ba
 
 마지막 커밋의 변경분을 판정한다. **차단하지 않는다.** 작업 중 반복 실행하는 도구이므로 중간 상태에서 위반이 나오는 것이 정상이다.
 
-설계 근거는 `fresh-market/.github` 의 `docs/software-quality/qa-llm-verification.md`, 실행 방법과 워크 플로우는 이 저장소의 `docs/verification/` 에 있다.
+설계 근거는 common 저장소의 `docs/software-quality/qa-llm-verification.md`, 실행 방법과 워크 플로우는 이 저장소의 `docs/verification/` 에 있다.
 
 인자로 커밋 범위를 받으면 그것을 쓰고, 없으면 `HEAD~1..HEAD` 를 쓴다: $ARGUMENTS
 
@@ -17,9 +17,12 @@ allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Ba
 
 `common` 과 `infra` 를 **따로 판단한다.** 하나만 없을 수도 있다.
 
-```bash
-ls ../common/.github/llm-verify/items.yml
-ls ~/.cache/llm-verify/common/.github/llm-verify/items.yml
+찾는 대상은 `.github/llm-verify/items.yml` 이고, 그 파일 첫머리의 `source` 값이 갈래를 말한다.
+
+```yaml
+version: 1
+source: common      # common | infra | backend
+count: 219
 ```
 
 찾는 순서는 이렇다.
@@ -33,14 +36,23 @@ ls ~/.cache/llm-verify/common/.github/llm-verify/items.yml
 원격 URL 로 판별한다.
 
 ```bash
-for d in ../*/; do
-  url=$(git -C "$d" remote get-url origin 2>/dev/null) || continue
-  case "$url" in
-    *fresh-market/.github*)  COMMON="$d" ;;
-    *fresh-market/fm-infra*) INFRA="$d" ;;
+# 저장소를 이름으로 찾지 않는다. 조직명과 저장소명은 바뀐다.
+# items.yml 첫머리의 source 필드가 그 저장소가 어느 갈래인지 스스로 말한다.
+#
+# 글롭 대신 find 를 쓰는 이유가 둘이다.
+#   common 저장소의 기본 clone 이름이 .github 라 숨김 디렉터리가 되는데 ../*/ 가 건너뛴다.
+#   ../.*/ 를 더하면 zsh 에서 매칭이 없을 때 no matches found 로 죽는다.
+# 파이프 대신 프로세스 치환을 쓰는 이유는, 파이프로 while 을 돌리면 서브셸이라
+# COMMON 과 INFRA 가 바깥으로 전달되지 않기 때문이다.
+while IFS= read -r f; do
+  case "$(sed -n 's/^source: *//p' "$f" | head -1)" in
+    common) COMMON=$(cd "$(dirname "$f")/../.." && pwd) ;;
+    infra)  INFRA=$(cd "$(dirname "$f")/../.." && pwd) ;;
   esac
-done
+done < <(find .. -maxdepth 4 -path '*/.github/llm-verify/items.yml' 2>/dev/null)
 ```
+
+찾지 못하면 2번(`~/.cache/llm-verify/`)으로 떨어진다. 옆에 없거나 다른 곳에 clone 한 경우다.
 
 **1번을 우선하는 이유**는 사용자가 관리하는 저장소이기 때문이다.
 직접 clone 한 사람은 이 명령이 네트워크를 쓰지 않고, 그 저장소를 갱신하지도 않는다.
@@ -48,7 +60,7 @@ done
 
 `infra` 도 같은 순서로 정한다.
 
-이후 단계에서는 여기서 정한 경로를 쓴다. 아래 본문의 `../common`, `../infra` 는 그 경로를 가리킨다.
+이후 단계에서는 여기서 정한 `$COMMON` 과 `$INFRA` 를 쓴다. 아래 본문의 경로는 그것을 가리킨다.
 
 ### 옆에 없으면 받아서 최신으로 맞춘다
 
@@ -64,9 +76,16 @@ common 과 infra 를 찾지 못했습니다.
 승인하면 받는다.
 
 ```bash
+# 조직은 현재 저장소의 origin 에서 유도한다. 조직 이름이 바뀌어도 따라간다.
+ORG=$(git remote get-url origin | sed -E 's#.*[/:]([^/]+)/[^/]+$#\1#')
+
+# 저장소 이름이 나오는 유일한 자리다. 옆에 clone 이 없을 때만 쓰는 폴백이다.
+# .github 는 GitHub 이 조직 단위로 예약한 이름이라 바뀌지 않는다.
+INFRA_REPO=fm-infra
+
 mkdir -p ~/.cache/llm-verify
-git clone --depth 1 https://github.com/fresh-market/.github.git ~/.cache/llm-verify/common
-git clone --depth 1 https://github.com/fresh-market/fm-infra.git   ~/.cache/llm-verify/infra
+git clone --depth 1 "https://github.com/$ORG/.github.git"      ~/.cache/llm-verify/common
+git clone --depth 1 "https://github.com/$ORG/$INFRA_REPO.git"  ~/.cache/llm-verify/infra
 ```
 
 이미 있으면 묻지 않고 최신으로 맞춘다.
@@ -145,8 +164,8 @@ CI 의 G-PR 과 범위가 다르다. G-PR 은 PR 누적 diff(`base...HEAD`)를 �
 
 ```
 .github/llm-verify/items.yml              250건
-../common/.github/llm-verify/items.yml    217건
-../infra/.github/llm-verify/items.yml     100건
+$COMMON/.github/llm-verify/items.yml    217건
+$INFRA/.github/llm-verify/items.yml     100건
 ```
 
 각 항목의 접두사(ID 의 첫 토큰)를 기준으로 세 조건을 **모두** 만족하는 것만 켠다.
@@ -166,12 +185,12 @@ CI 의 G-PR 과 범위가 다르다. G-PR 은 PR 누적 diff(`base...HEAD`)를 �
 
 ## 6. 확정값 로드
 
-매칭된 규칙 중 하나라도 `needs_baseline_values: true` 면 `../infra/docs/system-design/` 의 문서를 읽는다.
+매칭된 규칙 중 하나라도 `needs_baseline_values: true` 면 `$INFRA/docs/system-design/` 의 문서를 읽는다.
 아니면 읽지 않는다.
 
 ## 7. 알려진 모순 로드
 
-`../common/.github/llm-verify/known-conflicts.yml` 을 읽는다.
+`$COMMON/.github/llm-verify/known-conflicts.yml` 을 읽는다.
 
 * `status: unresolved` 인 모순의 `affects` 에 있는 항목은 `CONFLICTING_BASELINE` 으로 두고 **양쪽 값을 함께 표기**한다. 한쪽을 골라 판정하지 않는다.
 * `status: intentional` 은 모순이 아니다. `sources` 의 뒤쪽(확정값)을 기준으로 판정한다.
@@ -182,9 +201,9 @@ CI 의 G-PR 과 범위가 다르다. G-PR 은 PR 누적 diff(`base...HEAD`)를 �
 활성 항목이 속한 문서만 읽는다. 각 항목의 `doc` 필드가 파일명이다.
 
 ```
-../common/docs/software-quality/qa-*.md
+$COMMON/docs/software-quality/qa-*.md
 docs/code-architecture/*-guideline.md
-../infra/docs/infra-review/code-guideline.md
+$INFRA/docs/infra-review/code-guideline.md
 ```
 
 ID 와 제목만으로 판정하지 않는다. **본문에 판정 기준과 예외가 적혀 있다.**
