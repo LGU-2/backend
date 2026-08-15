@@ -14,7 +14,7 @@ allowed-tools: Bash(./verify.sh*), Bash(git *), Read, Glob, Grep, Write
 | `HEAD~5` | 최신 커밋 5개 |
 
 스크립트가 기준 저장소를 찾고 빌드 게이트를 돌리고 판정 범위를 계산한다.
-절차는 `docs/verification/g-local.md` 에 있고 지시문이 그 문서를 가리킨다.
+절차는 common 저장소의 `docs/verification/g-local.md` 에 있고 지시문이 그 문서를 가리킨다.
 
 **이 파일은 편의 진입점일 뿐이다.** 다른 CLI 에이전트를 쓰는 팀원은 `./verify.sh` 를 직접 돌린다.
 그래서 절차도 계산도 여기 두지 않는다.
