@@ -59,11 +59,11 @@
 
 | 사안 | 소유 문서와 항목 |
 |------|-----------------|
-| 트랜잭션 경계, 외부 호출 위치, 트랜잭션 길이 | `qa-data-integrity.md` 4장 (`DI-4-*`) |
-| 잠금 전략, 획득 순서, 갱신 손실 | `qa-data-integrity.md` 2장 (`DI-2-*`) |
-| N+1, 인덱스, 쿼리 성능 | `qa-performance-efficiency.md` 2장 (`PERF-2-*`) |
-| 인가와 소유권 검증 | `qa-security.md` 1장 (`SEC-1-*`) |
-| 타임아웃, 재시도, 서킷 브레이커 | `qa-reliability.md` 2장 (`REL-2-*`) |
+| 트랜잭션 경계, 외부 호출 위치, 트랜잭션 길이 | `qa-data-integrity-guideline.md` 4장 (`DI-4-*`) |
+| 잠금 전략, 획득 순서, 갱신 손실 | `qa-data-integrity-guideline.md` 2장 (`DI-2-*`) |
+| N+1, 인덱스, 쿼리 성능 | `qa-performance-efficiency-guideline.md` 2장 (`PERF-2-*`) |
+| 인가와 소유권 검증 | `qa-security-guideline.md` 1장 (`SEC-1-*`) |
+| 타임아웃, 재시도, 서킷 브레이커 | `qa-reliability-guideline.md` 2장 (`REL-2-*`) |
 
 **반대로 아래는 이 디렉터리가 소유한다.** common에서 이관받은 사안이다.
 

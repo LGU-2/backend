@@ -341,7 +341,7 @@ class ArchitectureTest {
 동기 호출은 트랜잭션이 도메인을 가로질러 길어지는 문제를 구조적으로 안고 있다.
 
 > **트랜잭션 경계와 잠금 전략의 점검 항목은 common 저장소가 소유한다.**
-> `fresh-market/.github`의 `docs/software-quality/qa-data-integrity.md` 4장(`DI-4-*`)과 2장(`DI-2-*`)을 따른다.
+> `fresh-market/.github`의 `docs/software-quality/qa-data-integrity-guideline.md` 4장(`DI-4-*`)과 2장(`DI-2-*`)을 따른다.
 > 그쪽이 MySQL 격리 수준과 잠금 전략 선택표를 갖고 있어 판정 근거가 더 강하다.
 
 이 절은 **도메인 경계 때문에 트랜잭션이 길어지는 구조**만 다룬다. 판정은 위 문서가 하고, 여기서는 왜 그런 구조가 생기는지를 설명한다.

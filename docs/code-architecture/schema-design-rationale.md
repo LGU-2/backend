@@ -7,7 +7,7 @@ DDL 주석이 **무엇을** 하는지를 적는다면 이 문서는 **왜 그렇
 
 * 식별자: [identifier-strategy-guideline.md](./identifier-strategy-guideline.md)
 * 엔티티 매핑: [entity-creation-guideline.md](./entity-creation-guideline.md), [jpa-rdb-guideline.md](./jpa-rdb-guideline.md)
-* DB 제약 일반론: `fresh-market/.github` 의 `qa-data-integrity.md` 3장
+* DB 제약 일반론: `fresh-market/.github` 의 `qa-data-integrity-guideline.md` 3장
 
 ---
 

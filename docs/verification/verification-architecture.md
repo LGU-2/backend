@@ -117,20 +117,20 @@ docs/verification/                 v-commit.md    Claude 편의 진입점
 `SEC-1-01`(리소스 접근 시 소유권 검증)을 예로 든다.
 
 ```
-qa-security.md 1장
+qa-security-guideline.md 1장
   * `[코드]` `SEC-1-01` 리소스 접근 시 소유권 또는 권한을 검증하는가
         |
         |  gen_items.py
         v
 items.yml
-  {id: SEC-1-01, doc: qa-security.md, ch: 1, level: 코드, gate: G-PR,
+  {id: SEC-1-01, doc: qa-security-guideline.md, ch: 1, level: 코드, gate: G-PR,
    gates: [local, ci], ci_stage: 2, domains: [security], title: "..."}
         |
         |  anchors.yml 의 service 규칙이 SEC 1장을 켠다
         v
 활성 항목에 포함
         |
-        |  run.py 가 qa-security.md 본문과 앵커 파일을 함께 넘긴다
+        |  run.py 가 qa-security-guideline.md 본문과 앵커 파일을 함께 넘긴다
         v
 LLM 판정 -> VIOLATION / OK / NOT_APPLICABLE / ...
         |
