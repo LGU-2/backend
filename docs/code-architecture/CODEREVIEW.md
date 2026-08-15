@@ -54,7 +54,7 @@
 
 ### common 저장소가 소유하는 사안
 
-`LGU-2/.github`의 `docs/software-quality/`가 시스템 품질 속성을 다룬다.
+`fresh-market/.github`의 `docs/software-quality/`가 시스템 품질 속성을 다룬다.
 아래 사안은 그쪽이 소유하므로 이 디렉터리의 가이드로 지적하지 않는다.
 
 | 사안 | 소유 문서와 항목 |

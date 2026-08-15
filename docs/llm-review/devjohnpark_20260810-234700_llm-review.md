@@ -2,7 +2,7 @@
 검증: G-LOCAL
 계정: devjohnpark
 시각: 2026-08-10T14:47:00Z
-저장소: https://github.com/LGU-2/backend.git
+저장소: https://github.com/fresh-market/fm-backend.git
 브랜치: main
 커밋: 479c254571520c6f6de58fb8bd32996cf0a0b33b
 범위: 479c254~1..479c254 (308f2a3..479c254)

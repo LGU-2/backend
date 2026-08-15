@@ -1,6 +1,6 @@
 # G-PR 호출자
 #
-# 트리거만 정의하고 판정은 LGU-2/.github 의 재사용 워크플로가 한다.
+# 트리거만 정의하고 판정은 fresh-market/.github 의 재사용 워크플로가 한다.
 # 본체를 한곳에 두어야 세 저장소의 판정 절차가 갈라지지 않는다.
 #
 # synchronize 를 넣은 이유는 PR 이 열린 뒤의 push 도 판정해야 하기 때문이다.
@@ -20,6 +20,6 @@ concurrency:
 
 jobs:
   verify:
-    uses: LGU-2/.github/.github/workflows/llm-verify.yml@main
+    uses: fresh-market/.github/.github/workflows/llm-verify.yml@main
     secrets:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

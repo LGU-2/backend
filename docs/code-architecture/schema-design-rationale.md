@@ -7,7 +7,7 @@ DDL 주석이 **무엇을** 하는지를 적는다면 이 문서는 **왜 그렇
 
 * 식별자: [identifier-strategy-guideline.md](./identifier-strategy-guideline.md)
 * 엔티티 매핑: [entity-creation-guideline.md](./entity-creation-guideline.md), [jpa-rdb-guideline.md](./jpa-rdb-guideline.md)
-* DB 제약 일반론: `LGU-2/.github` 의 `qa-data-integrity.md` 3장
+* DB 제약 일반론: `fresh-market/.github` 의 `qa-data-integrity.md` 3장
 
 ---
 
@@ -835,7 +835,7 @@ PUT    클라이언트 -> S3
 한 표에 `owner_type` + `owner_id` 로 담으면 외래 키를 걸 수 없어 고아 행을 DB 가 막지 못한다.
 나눠 두니 대표 이미지 소유 검증과 조회 확정 적용 범위를 표 단위로 정할 수 있는 이점도 따라왔다.
 
-자세한 흐름은 `LGU-2/infra` 의 `백엔드공통_이미지저장소_설계.md` 6.2절에 있다.
+자세한 흐름은 `fresh-market/fm-infra` 의 `백엔드공통_이미지저장소_설계.md` 6.2절에 있다.
 
 ---
 

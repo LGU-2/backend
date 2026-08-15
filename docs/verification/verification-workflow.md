@@ -2,7 +2,7 @@
 
 다섯 게이트가 각각 무엇을 언제 판정하는지를 한 장으로 정리한다.
 
-설계 근거와 상세는 [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md)에 있다.
+설계 근거와 상세는 [qa-llm-verification.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/qa-llm-verification.md)에 있다.
 이 문서는 그 설계가 실제로 어떻게 흐르는지를 보기 위한 참조용이다.
 
 ## 전체 흐름
@@ -141,9 +141,9 @@ RDS 상태, 대상 그룹 healthy 수, 인증서 잔여일, CPU 크레딧 잔량
 ## 카테고리가 어디서 오는가
 
 ```
-LGU-2/.github  docs/software-quality/    217건   품질 속성 (ISO 25010 기반)
-LGU-2/backend  docs/code-architecture/   250건   코드 관용과 패턴
-LGU-2/infra    docs/infra-review/        100건   인프라 결정이 코드에 부과하는 제약
+fresh-market/.github  docs/software-quality/    217건   품질 속성 (ISO 25010 기반)
+fresh-market/fm-backend  docs/code-architecture/   250건   코드 관용과 패턴
+fresh-market/fm-infra    docs/infra-review/        100건   인프라 결정이 코드에 부과하는 제약
                                          -----
                                          567건
 ```
@@ -175,7 +175,7 @@ build.gradle               ->  MNT PERF INF(10장)
 3장(입력 검증)은 controller 가, 5장(감사 이력)은 entity 와 migration 이 맡으므로 여기서는 제외한다.
 나머지 103건은 `INC` 37, `OPS` 34, `PRE` 13 등으로 **G-AUDIT과 G-RELEASE 소관이라 PR로 트리거되지 않는 것이 정상**이다.
 
-수치의 재현 방법은 [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md) 9.2절에 있다.
+수치의 재현 방법은 [qa-llm-verification.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/qa-llm-verification.md) 9.2절에 있다.
 
 ## 진입점부터의 실행 순서
 
@@ -191,7 +191,7 @@ build.gradle               ->  MNT PERF INF(10장)
 |  backend/.github/workflows/llm-verify.yml            [ 있음 ]    |
 |  트리거만 정의. 본체를 부른다                                    |
 |    on: pull_request [opened, synchronize, reopened]              |
-|    uses: LGU-2/.github/.github/workflows/llm-verify.yml@v1       |
+|    uses: fresh-market/.github/.github/workflows/llm-verify.yml@v1       |
 +--------------------------+---------------------------------------+
                            v
 +- 2 --------------------------------------------------------------+
@@ -413,7 +413,7 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 
 * 시스템 구조: [verification-architecture.md](./verification-architecture.md)
 
-* 설계 근거와 커버리지 계산: [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md)
-* 품질 속성 점검 항목: [quality-attributes.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/quality-attributes.md)
-* 코드 리뷰 점검 항목: `LGU-2/backend`의 `docs/code-architecture/CODEREVIEW.md`
-* 인프라 제약 점검 항목: `LGU-2/infra`의 `docs/infra-review/INFRAREVIEW.md`
+* 설계 근거와 커버리지 계산: [qa-llm-verification.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/qa-llm-verification.md)
+* 품질 속성 점검 항목: [quality-attributes.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/quality-attributes.md)
+* 코드 리뷰 점검 항목: `fresh-market/fm-backend`의 `docs/code-architecture/CODEREVIEW.md`
+* 인프라 제약 점검 항목: `fresh-market/fm-infra`의 `docs/infra-review/INFRAREVIEW.md`

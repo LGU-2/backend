@@ -7,7 +7,7 @@ allowed-tools: Bash(git *), Bash(./gradlew *), Bash(gh api *), Bash(mkdir *), Ba
 
 마지막 커밋의 변경분을 판정한다. **차단하지 않는다.** 작업 중 반복 실행하는 도구이므로 중간 상태에서 위반이 나오는 것이 정상이다.
 
-설계 근거는 `LGU-2/.github` 의 `docs/software-quality/qa-llm-verification.md`, 실행 방법과 워크 플로우는 이 저장소의 `docs/verification/` 에 있다.
+설계 근거는 `fresh-market/.github` 의 `docs/software-quality/qa-llm-verification.md`, 실행 방법과 워크 플로우는 이 저장소의 `docs/verification/` 에 있다.
 
 인자로 커밋 범위를 받으면 그것을 쓰고, 없으면 `HEAD~1..HEAD` 를 쓴다: $ARGUMENTS
 
@@ -52,8 +52,8 @@ common 과 infra 를 찾지 못했습니다.
 
 ```bash
 mkdir -p ~/.cache/llm-verify
-git clone --depth 1 https://github.com/LGU-2/.github.git ~/.cache/llm-verify/common
-git clone --depth 1 https://github.com/LGU-2/infra.git   ~/.cache/llm-verify/infra
+git clone --depth 1 https://github.com/fresh-market/.github.git ~/.cache/llm-verify/common
+git clone --depth 1 https://github.com/fresh-market/fm-infra.git   ~/.cache/llm-verify/infra
 ```
 
 이미 있으면 묻지 않고 최신으로 맞춘다.

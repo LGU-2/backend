@@ -1,7 +1,7 @@
 # 로컬 검증 기록
 
 `/verify` (G-LOCAL) 를 돌린 결과가 이 디렉터리에 쌓인다.
-절차는 `.claude/commands/verify.md`, 설계 근거는 `LGU-2/.github` 의 `docs/software-quality/qa-llm-verification.md` 에 있다.
+절차는 `.claude/commands/verify.md`, 설계 근거는 `fresh-market/.github` 의 `docs/software-quality/qa-llm-verification.md` 에 있다.
 
 ## 파일명
 
@@ -23,7 +23,7 @@ G-AUDIT 은 "복원 리허설을 수행했는가" 같은 것을 판정할 수 �
 같은 논리가 여기에도 적용된다. 이 디렉터리가 비어 있으면 로컬 게이트는 설계상으로만 존재하는 것이다.
 
 다만 **이 기록의 존재를 점검하는 항목은 아직 등록되어 있지 않다.**
-넣으려면 `LGU-2/.github` 의 품질 속성 문서에 항목을 추가하고 `items.yml` 을 다시 생성해야 한다.
+넣으려면 `fresh-market/.github` 의 품질 속성 문서에 항목을 추가하고 `items.yml` 을 다시 생성해야 한다.
 
 ## 무엇이 들어 있는가
 

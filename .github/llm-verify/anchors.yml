@@ -1,12 +1,12 @@
 # 앵커 규칙 (backend)
 #
 # diff 에 어떤 파일이 있으면 (1) 어떤 파일을 함께 동봉하고 (2) 어떤 점검 항목을 켤지 정한다.
-# 판정 항목의 정의는 items.yml, 설계 근거는 LGU-2/.github 의 qa-llm-verification.md 3장에 있다.
+# 판정 항목의 정의는 items.yml, 설계 근거는 fresh-market/.github 의 qa-llm-verification.md 3장에 있다.
 #
 # 참조하는 레지스트리는 셋이다.
 #   backend/.github/llm-verify/items.yml   260건  코드 관용과 패턴, 빌드 게이트
-#   LGU-2/.github ... items.yml            217건  일반 품질 속성
-#   LGU-2/infra   ... items.yml             96건  인프라 결정이 코드에 부과하는 제약 (INF 접두사)
+#   fresh-market/.github ... items.yml            217건  일반 품질 속성
+#   fresh-market/fm-infra   ... items.yml             96건  인프라 결정이 코드에 부과하는 제약 (INF 접두사)
 # INF 항목은 판정 대상이 이 저장소의 코드이므로 여기서 활성화한다.
 #
 # trigger 패턴은 domain-package-boundary-guideline.md 1절이 확정한 패키지 구조를 따른다.
@@ -226,7 +226,7 @@ rules:
 #
 # 인프라 계층 점검 항목(레이트 리밋, 분산 락 만료, 트래픽 단계 유입, 복제본 승격 등)은
 # 이 저장소의 파일 변경으로 트리거되지 않는다. Terraform 과 k8s manifest 가 대상이므로
-# LGU-2/infra 의 anchors.yml 이 담당한다.
+# fresh-market/fm-infra 의 anchors.yml 이 담당한다.
 #
 # 프로세스 계층 항목(43건)은 G-PR 이 아니라 G-AUDIT 이 주기별로 판정한다.
 # 앵커 규칙의 대상이 아닌 것이 정상이다.

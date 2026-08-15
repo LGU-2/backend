@@ -146,8 +146,8 @@ tasks.named('sonar') {
 
 sonar {
     properties {
-        property 'sonar.projectKey', 'LGU-2_backend'
-        property 'sonar.organization', 'lgu-2'
+        property 'sonar.projectKey', 'fresh-market_fm-backend'
+        property 'sonar.organization', 'fresh-market'
         property 'sonar.host.url', 'https://sonarcloud.io'
         /* 커버리지 판정은 Gradle 이 한다. Sonar 는 버그와 취약점만 본다 (BLD-2-01).
            이 경로는 판정용이 아니라 대시보드 표시용이다. */

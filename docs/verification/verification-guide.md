@@ -36,14 +36,14 @@ PR 을 열면    CI 에서 gemini 가 본다    (자동)
 결과의 실물은 [verification-example.md](./verification-example.md),
 무엇이 언제 도는지는 [verification-workflow.md](./verification-workflow.md),
 무엇으로 이루어져 있는지는 [verification-architecture.md](./verification-architecture.md),
-설계 근거는 [qa-llm-verification.md](https://github.com/LGU-2/.github/blob/main/docs/software-quality/qa-llm-verification.md) 에 있다.
+설계 근거는 [qa-llm-verification.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/qa-llm-verification.md) 에 있다.
 
 ## 준비
 
 **backend 만 clone 해도 된다.**
 
 ```bash
-git clone https://github.com/LGU-2/be.git backend
+git clone https://github.com/fresh-market/fm-backend.git backend
 ```
 
 판정 기준 567건 중 317건이 다른 두 저장소에 있다.
@@ -231,7 +231,7 @@ OK  backend 250건. 문서와 레지스트리가 일치한다
 | 활성 항목이 유난히 적고 규칙이 `on_no_match` 다 | 정상이다. 문서만 고쳤을 때 그렇다 |
 | 같은 항목이 계속 `INSUFFICIENT_EVIDENCE` | `backend/.github/llm-verify/anchors.yml` 의 `anchors` 에 파일 추가 |
 | 2단계가 매번 건너뛰어진다 | 코멘트의 사유를 보고 로컬로 대신 본다 |
-| CI 워크플로가 빨갛다 | `GEMINI_API_KEY` 시크릿 등록 (조직 또는 `LGU-2/be`) |
+| CI 워크플로가 빨갛다 | `GEMINI_API_KEY` 시크릿 등록 (조직 또는 `fresh-market/fm-backend`) |
 | PR 을 열었는데 아무것도 안 돈다 | `registry-check` 는 문서를 건드린 PR 에서만 돈다 |
 | main 에 push 했는데 아무것도 안 돌았다 | 정상이다. CI 는 PR 에서만 돈다 |
 | 같은 지적이 매 PR 마다 나온다 | `common/.github/llm-verify/known-conflicts.yml` 에 등록 |
