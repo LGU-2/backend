@@ -35,16 +35,18 @@ backend 디렉터리에서 Claude Code 를 띄운 뒤 친다.
 ```
 /v-commit
 /v-commit HEAD
-/v-commit HEAD~5
+/v-commit -n 5
 ```
 
 | 인자 | 범위 |
 |---|---|
 | 없음 | 아직 push 하지 않은 커밋 전부 |
-| `HEAD` | 최신 커밋 1개 |
-| `HEAD~5` | 최신 커밋 5개 |
+| `HEAD` | HEAD 커밋 하나 |
+| `HEAD~1` | 그 앞 커밋 하나. git 이 읽는 그대로다 |
+| `<SHA>` | 그 커밋 하나 |
+| `-n 5` | 최신 5개 |
 
-인자는 **몇 개를 볼지**를 뜻한다. git 의 `base..head` 와 다르게 읽는다.
+**ref 는 언제나 git 이 읽는 그대로다.** 개수는 `-n` 이 맡는다.
 빌드 게이트 확인, 판정, `backend/docs/llm-review/` 에 기록 저장까지 한다.
 
 `common` 이나 `infra` 가 옆에 없으면 0단계에서 멈춘다.
