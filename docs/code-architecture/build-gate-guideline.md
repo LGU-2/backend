@@ -22,6 +22,10 @@
 * `BLD-1-05` `check`가 `integrationTest`와 `jacocoTestCoverageVerification`에 의존하는가
 * `BLD-1-06` `jacocoTestReport`가 `sonar` 태스크보다 먼저 도는가
   순서가 바뀌면 SonarQube에 커버리지가 0으로 표시된다.
+* `BLD-1-07` 검증 대상 클래스가 있는데 실행 데이터가 없는 상태를 막는가
+  `jacocoTestCoverageVerification`은 `.exec`가 하나도 없으면 Gradle이 태스크를 통째로 건너뛴다.
+  건너뛴 것은 초록으로 보이므로, 테스트를 하나도 안 쓰면 무사통과하고 하나라도 쓰면 100%를 요구하는 거꾸로 걸린 게이트가 된다.
+  대상 클래스의 존재와 실행 데이터의 존재를 따로 확인해 이 구간을 막는다.
 
 ## 2. 정적 분석
 
