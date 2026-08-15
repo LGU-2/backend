@@ -9,6 +9,8 @@
 #   ./verify.sh HEAD                 HEAD 커밋 하나
 #   ./verify.sh <SHA>                그 커밋 하나
 #   ./verify.sh -n 5                 최신 5개
+#   ./verify.sh --full               다른 저장소 항목까지 판정한다 (기본은 자기 것만)
+#   ./verify.sh HEAD --full          범위와 함께 쓴다. ref 와 축이 다르다
 #   ./verify.sh --agent claude       지시문을 그 명령에 넘긴다
 #   ./verify.sh --help               나머지 사용법
 

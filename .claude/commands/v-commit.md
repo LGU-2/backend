@@ -14,8 +14,11 @@ allowed-tools: Bash(./verify.sh*), Bash(git *), Read, Glob, Grep, Write
 | `HEAD~1` | 그 앞 커밋 하나. git 이 읽는 그대로다 |
 | `<SHA>` | 그 커밋 하나 |
 | `-n 5` | 최신 5개 |
+| `--full` | 커밋이 아니라 점검 항목을 넓힌다. 다른 저장소 항목까지 본다 |
 
 **ref 는 언제나 git 이 읽는 그대로다.** 개수는 `-n` 이 맡는다.
+`--full` 은 축이 달라 ref 와 함께 쓴다. `/v-commit HEAD --full` 처럼 준다.
+기본은 이 저장소 항목만 보며, 근거는 g-local.md 1장에 있다.
 
 스크립트가 기준 저장소를 찾고 빌드 게이트를 돌리고 판정 범위를 계산한다.
 절차는 common 저장소의 `docs/verification/g-local.md` 에 있고 지시문이 그 문서를 가리킨다.

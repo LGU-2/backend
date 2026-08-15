@@ -16,6 +16,8 @@
 | 무엇 | 명령 | API 키 | 파일을 고치나 |
 |---|---|---|---|
 | 로컬 검증 | `/v-commit` | 아니오 | 기록을 남긴다 |
+| 로컬 검증 (다른 저장소 항목까지) | `/v-commit --full` | 아니오 | 기록을 남긴다 |
+| 로컬 검증 (다른 CLI) | `./verify.sh --agent "<명령>"` | 아니오 | 기록을 남긴다 |
 | 무엇이 켜지는지 | `run.py --mode judge --dry-run` | 아니오 | 아니오 |
 | 어떤 규칙이 걸렸는지 | `run.py --mode match` | 아니오 | 아니오 |
 | 실제 판정 | `run.py --mode judge` | **예** | 결과 파일 |
@@ -35,7 +37,11 @@ backend 디렉터리에서 Claude Code 를 띄운 뒤 친다.
 ```
 /v-commit
 /v-commit HEAD
+/v-commit HEAD~1
+/v-commit 84fa77d
 /v-commit -n 5
+/v-commit --full
+/v-commit HEAD --full
 ```
 
 | 인자 | 범위 |
@@ -45,11 +51,84 @@ backend 디렉터리에서 Claude Code 를 띄운 뒤 친다.
 | `HEAD~1` | 그 앞 커밋 하나. git 이 읽는 그대로다 |
 | `<SHA>` | 그 커밋 하나 |
 | `-n 5` | 최신 5개 |
+| `--full` | 커밋 범위가 아니라 점검 항목을 넓힌다. 아래를 본다 |
 
 **ref 는 언제나 git 이 읽는 그대로다.** 개수는 `-n` 이 맡는다.
 빌드 게이트 확인, 판정, `backend/docs/llm-review/` 에 기록 저장까지 한다.
 
 `common` 이나 `infra` 가 옆에 없으면 0단계에서 멈춘다.
+
+### 판정 범위는 기본이 좁다
+
+**backend 에서 돌리면 backend 항목만 본다.** 어느 것이 자기 것인지는 `items.yml` 의 `source` 가 밝힌다.
+common 과 infra 항목은 `--full` 로 연다. 커밋 범위를 정하는 ref 와는 축이 다르므로 함께 쓴다.
+
+```
+/v-commit                  push 하지 않은 커밋 전부, backend 항목만
+/v-commit --full           push 하지 않은 커밋 전부, 세 저장소 항목 전부
+/v-commit HEAD --full      HEAD 커밋 하나, 세 저장소 항목 전부
+/v-commit 84fa77d --full   그 커밋 하나, 세 저장소 항목 전부
+/v-commit -n 5 --full      최신 5개, 세 저장소 항목 전부
+```
+
+기본을 좁게 둔 이유는 비용이다. 전부 보면 기준 문서 12개에 확정값까지 읽어야 해서
+**판정 한 번에 20만 토큰이 넘어간다.** 작업 중 반복 실행하는 도구라 그러면 쓸 수가 없다.
+
+`--full` 은 **PR 을 올리기 전에** 쓴다. CI 의 G-PR 은 1단계에서 backend 항목만 보므로,
+**common 과 infra 기준은 여기서 `--full` 로 보지 않으면 아무도 안 본다.**
+
+무엇이 몇 건 켜지는지는 판정 지시문의 `계산 결과` 줄에 찍힌다.
+
+```json
+{"active": "308", "source": "backend", "own": "180", "other": "128"}
+```
+
+`own` 이 기본으로 판정하는 범위이고, `other` 가 `--full` 로 열리는 몫이다.
+근거와 계산 규칙은 common 저장소의 `docs/verification/g-local.md` 1장에 있다.
+
+### 다른 CLI 에이전트로 돌리기
+
+`/v-commit` 은 Claude Code 편의 진입점일 뿐이다. 다른 에이전트를 쓰면 `./verify.sh` 를 직접 돌린다.
+`--agent <명령>` 을 주면 판정 지시문을 그 명령의 stdin 으로 바로 넘긴다.
+
+```bash
+# 아직 push 하지 않은 커밋 전부
+./verify.sh --agent "claude -p"
+
+# HEAD 커밋 하나
+./verify.sh HEAD --agent "claude -p"
+
+# 특정 커밋 하나. ref 는 git 이 읽는 그대로다
+./verify.sh 84fa77d --agent "claude -p"
+./verify.sh HEAD~1 --agent "gemini -p"
+
+# 최신 5개
+./verify.sh -n 5 --agent "claude -p"
+
+# 다른 저장소 항목까지 판정한다. ref 와 함께 쓴다
+./verify.sh --full --agent "codex exec"
+./verify.sh HEAD --full --agent "claude -p"
+./verify.sh 84fa77d --full --agent "gemini -p"
+```
+
+**조건은 하나다.** stdin 을 읽어 비대화식으로 도는 명령이어야 한다.
+따옴표 없이 전개되므로 `"gemini -p"` 처럼 인자를 붙인 명령도 그대로 쓸 수 있다.
+
+`--agent` 를 빼면 지시문을 화면에 출력만 한다. 쓰는 에이전트에 붙여넣어도 결과는 같다.
+
+```bash
+./verify.sh
+./verify.sh HEAD
+./verify.sh HEAD~1
+./verify.sh 84fa77d
+./verify.sh -n 5
+./verify.sh --full
+./verify.sh HEAD --full
+```
+
+`./verify.sh --help` 가 이 목록을 그대로 뿌린다. 본체의 사용법 헤더를 읽어 내는 것이라 항상 최신이다.
+
+기록 저장은 지시문이 시키는 일이므로 어느 쪽으로 돌려도 `backend/docs/llm-review/` 에 남는다.
 
 ## 2. 무엇이 켜지는지 보기
 

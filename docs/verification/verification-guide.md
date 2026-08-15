@@ -17,8 +17,19 @@
 | `HEAD~1` | 그 앞 커밋 하나. git 이 읽는 그대로다 |
 | `<SHA>` | 그 커밋 하나 |
 | `-n 5` | 최신 5개 |
+| `--full` | 커밋이 아니라 점검 항목을 넓힌다. common 과 infra 항목까지 본다 |
 
 **ref 는 언제나 git 이 읽는 그대로다.** 개수는 `-n` 이 맡는다.
+
+```
+/v-commit HEAD             HEAD 커밋 하나, backend 항목만
+/v-commit HEAD --full      HEAD 커밋 하나, 세 저장소 항목 전부
+/v-commit -n 5 --full      최신 5개, 세 저장소 항목 전부
+```
+
+**기본은 backend 항목만 본다.** 전부 보면 판정 한 번에 20만 토큰이 넘어가서다.
+CI 는 1단계에서 backend 항목만 보므로, **common 과 infra 기준은 `--full` 로 보지 않으면 아무도 안 본다.**
+PR 을 올리기 전에 한 번 돌린다. 자세한 것은 [verification-commands.md](./verification-commands.md) 1장에 있다.
 
 **CI.** **PR 을 열었을 때만** 돈다. 칠 것이 없다.
 PR 에 push 를 더하면 다시 돈다. main 에 직접 push 하면 아무것도 안 돈다.
