@@ -11,11 +11,13 @@ LLM API 를 부르는 것은 CI 의 G-PR 뿐이다. 여기서는 API 를 쓰지 
 ## 1. 계산을 돌린다
 
 ```bash
-"$COMMON/.github/llm-verify/verify.sh" [base] [head]
+./verify.sh [base] [head]
 ```
 
-스크립트가 기준 저장소를 찾고, 빌드 게이트를 돌리고, 이번 변경에 걸리는 앵커 규칙을 계산해 낸다.
-`$COMMON` 을 찾는 방법과 없을 때 받는 절차는 도구별 진입점에 있다.
+저장소 루트의 `verify.sh` 가 진입점이다. common 저장소를 찾아 본체를 부르고,
+본체가 빌드 게이트를 돌리고 이번 변경에 걸리는 앵커 규칙을 계산한 뒤 **이 지시문을 낸다.**
+
+이 문서를 읽고 있다면 그 단계는 이미 끝났다. 지시문에 계산 결과가 함께 들어 있다.
 
 ```json
 {"needs_baseline": "false", "rules": "on_no_match", "changed": "1"}
