@@ -8,11 +8,15 @@
 /verify
 ```
 
-범위를 바꾸려면 인자를 준다. 기본은 `HEAD~1..HEAD` 다.
+범위를 바꾸려면 인자를 준다.
 
-```
-/verify HEAD~3..HEAD
-```
+| 인자 | 범위 |
+|---|---|
+| 없음 | 아직 push 하지 않은 커밋 전부 |
+| `HEAD` | 최신 커밋 1개 |
+| `HEAD~5` | 최신 커밋 5개 |
+
+인자는 **몇 개를 볼지**를 뜻한다. git 의 `base..head` 와 다르게 읽는다.
 
 **CI.** **PR 을 열었을 때만** 돈다. 칠 것이 없다.
 PR 에 push 를 더하면 다시 돈다. main 에 직접 push 하면 아무것도 안 돈다.
@@ -71,7 +75,7 @@ git clone https://github.com/fresh-market/fm-backend.git backend
 
 ```
 1  ./gradlew check      커버리지와 정적 분석. 알림만
-2  마지막 커밋의 diff
+2  push 하지 않은 커밋의 diff
 3  판정                 바꾼 파일에 해당하는 항목 전부
 4  기록 저장            backend/docs/llm-review/<계정>_<YYYYMMDD-HHMMSS>_llm-review.md
 ```

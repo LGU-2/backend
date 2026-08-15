@@ -11,8 +11,18 @@ LLM API 를 부르는 것은 CI 의 G-PR 뿐이다. 여기서는 API 를 쓰지 
 ## 1. 계산을 돌린다
 
 ```bash
-./verify.sh [base] [head]
+./verify.sh          # 아직 push 하지 않은 커밋 전부
+./verify.sh HEAD     # 최신 커밋 1개
+./verify.sh HEAD~5   # 최신 커밋 5개
 ```
+
+인자는 **몇 개를 볼지**를 뜻한다. git 의 `base..head` 와 다르게 읽는다.
+`HEAD` 를 주면 빈 구간이 아니라 최신 커밋 하나다.
+
+두 개를 주면 `<base> <head>` 구간을 그대로 쓴다. 지난 구간을 다시 볼 때만 쓴다.
+
+인자를 안 주면 upstream 과의 차이를 본다. upstream 이 없으면 `origin/HEAD` 를 쓰고,
+그것도 없으면 범위를 정할 수 없어 종료 코드 `2` 로 멈춘다.
 
 저장소 루트의 `verify.sh` 가 진입점이다. common 저장소를 찾아 본체를 부르고,
 본체가 빌드 게이트를 돌리고 이번 변경에 걸리는 앵커 규칙을 계산한 뒤 **이 지시문을 낸다.**
@@ -20,7 +30,7 @@ LLM API 를 부르는 것은 CI 의 G-PR 뿐이다. 여기서는 API 를 쓰지 
 이 문서를 읽고 있다면 그 단계는 이미 끝났다. 지시문에 계산 결과가 함께 들어 있다.
 
 ```json
-{"needs_baseline": "false", "rules": "on_no_match", "changed": "1"}
+{"needs_baseline": "false", "rules": "on_no_match", "changed": "11"}
 ```
 
 | 값 | 뜻 |
