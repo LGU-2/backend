@@ -60,6 +60,33 @@ jobs:
         if: env.SONAR_TOKEN != ''
         run: ./gradlew sonar --no-daemon
 
+      # sonar 태스크는 분석 결과를 올리기만 하고 성공으로 끝난다. 차단은 여기서 한다.
+      #
+      # sonar.qualitygate.wait 을 쓰지 않는 이유는 무료 플랜이 내장 게이트 Sonar way 만
+      # 쓸 수 있어서다. 거기에는 "신규 코드 커버리지 80% 이상" 이 들어 있어, Gradle 의
+      # 서비스 레이어 100% 기준과 커버리지 판정 주체가 둘이 된다 (BLD-2-01).
+      # 커스텀 게이트로 그 조건을 빼려면 Team 플랜이 필요하다.
+      # 이슈 검색 API 는 무료 플랜에서도 되므로 신규 Blocker 만 직접 센다 (BLD-2-02).
+      - name: 신규 Blocker 0건 확인
+        if: env.SONAR_TOKEN != ''
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          KEY=fresh-market_fm-backend
+          Q="componentKeys=$KEY&severities=BLOCKER&resolved=false&ps=100&pullRequest=$PR"
+          RES=$(curl -sS -u "$SONAR_TOKEN:" "https://sonarcloud.io/api/issues/search?$Q")
+          N=$(printf '%s' "$RES" | jq -r '.total // "err"')
+          echo "신규 Blocker ${N}건"
+          if [ "$N" = "err" ]; then
+            echo "::error::이슈 조회에 실패했다. 응답: $(printf '%s' "$RES" | head -c 300)"
+            exit 1
+          fi
+          if [ "$N" != "0" ]; then
+            printf '%s' "$RES" | jq -r '.issues[] | "::error file=\(.component | sub("^[^:]*:"; "")),line=\(.line // 1)::\(.message)"'
+            echo "신규 Blocker 가 남아 있어 병합을 막는다."
+            exit 1
+          fi
+
       - name: 정적 분석을 건너뛴 이유
         if: env.SONAR_TOKEN == ''
         run: |

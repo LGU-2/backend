@@ -30,13 +30,31 @@
 ## 2. 정적 분석
 
 점검 항목
-* `BLD-2-01` SonarQube Quality Gate에서 커버리지 조건을 제거했는가
+* `BLD-2-01` SonarQube Quality Gate가 커버리지를 판정하지 않는가
   판정 주체가 둘이면 기본 게이트값(신규 코드 80% 등)이 Gradle 기준과 충돌한다.
+  무료 플랜은 커스텀 게이트를 만들 수 없어 조건을 뺄 수 없으므로, `sonar.qualitygate.wait` 을 켜지 않는 것으로 대신한다.
 * `BLD-2-02` 정적 분석 차단 조건이 신규 `Blocker` 이슈 0건인가
   `Blocker`는 프로덕션에서 애플리케이션을 망가뜨릴 높은 확률의 버그를 뜻한다. 병합을 막을 근거가 되는 것은 이 등급뿐이다.
   그 아래 등급은 차단하지 않고 경고로만 표시한다.
+  차단은 워크플로가 이슈 검색 API 로 신규 `Blocker` 수를 직접 세어 수행한다.
 * `BLD-2-03` 브랜치 보호의 필수 상태 검사에 두 게이트가 등록되어 있는가
   이것이 두 게이트를 강제하는 유일한 수단이다.
+
+### 무료 플랜에서 차단하는 방법
+
+커스텀 Quality Gate 는 Team 플랜부터 쓸 수 있다. 무료 플랜은 내장 `Sonar way` 뿐인데
+거기에는 신규 코드 커버리지 80% 조건이 들어 있어 그대로 켜면 커버리지 판정이 둘이 된다.
+
+그래서 `sonar.qualitygate.wait` 을 쓰지 않고 이슈 검색 API 로 신규 `Blocker` 만 센다.
+이 API 는 무료 플랜에서도 동작하며, 세는 대상이 정확히 `BLD-2-02` 가 요구하는 것이다.
+
+```bash
+curl -u "$SONAR_TOKEN:" \
+  "https://sonarcloud.io/api/issues/search?componentKeys=<키>&severities=BLOCKER&resolved=false&pullRequest=<번호>"
+```
+
+Team 플랜으로 올리면 커스텀 게이트에서 커버리지 조건을 빼고 `qualitygate.wait` 을 켜는 편이 낫다.
+그때는 이 단계를 지운다.
 
 ```gradle
 jacocoTestCoverageVerification {
