@@ -26,7 +26,13 @@
 -- 설계와 판단 기준은 docs/code-architecture/identifier-strategy-guideline.md 에 있다.
 
 -- =====================================================================
--- 1. 회원 / 권한
+-- 표는 docs/code-architecture/domain-map.md 의 도메인 13개로 묶는다.
+-- 절 순서는 층 순서가 아니라 FK 가 요구하는 생성 순서다. 참조 대상이 먼저 있어야 한다.
+-- 도메인을 더하거나 표를 옮기면 domain-map.md 도 함께 고친다.
+-- =====================================================================
+
+-- =====================================================================
+-- 1. member (L0)
 -- =====================================================================
 
 CREATE TABLE member_grade (
@@ -88,36 +94,8 @@ CREATE TABLE address (
     CONSTRAINT fk_address_member FOREIGN KEY (member_id) REFERENCES member (member_id)
 ); -- 회원 배송지
 
-CREATE TABLE admin (
-    admin_id        BIGINT       NOT NULL AUTO_INCREMENT, -- admin PK
-    login_id        VARCHAR(50)  NOT NULL, -- 관리자 로그인 아이디
-    password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
-    name            VARCHAR(50)  NOT NULL, -- 관리자 이름
-    role            VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
-    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ACTIVE', -- 관리자 상태(ACTIVE 활성/DELETED 삭제). 이력 표 다섯이 admin_id 를 참조해 하드 삭제가 불가능하다
-    refresh_token_hash CHAR(64)  NULL, -- 리프레시 토큰의 SHA-256 hex. 평문은 저장하지 않는다. NULL 은 로그아웃 상태다
-    refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
-    deleted_at      DATETIME(6)  NULL, -- 소프트딜리트(삭제 시각)
-    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (admin_id),
-    CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
-    CONSTRAINT chk_admin_status CHECK (status IN ('ACTIVE','DELETED')),
-    /*
-     * 삭제가 status 와 deleted_at 두 곳에 표현되어 어긋날 수 있다. 둘을 묶는다.
-     * 삭제된 관리자는 리프레시 토큰도 비어 있어야 한다. 남아 있으면 세션이 그대로 살아 있다
-     */
-    CONSTRAINT chk_admin_deleted CHECK (
-        (status =  'DELETED' AND deleted_at IS NOT NULL AND refresh_token_hash IS NULL)
-     OR (status <> 'DELETED' AND deleted_at IS NULL)),
-    CONSTRAINT chk_admin_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
-        (refresh_token_hash IS NULL     AND refresh_token_expires_at IS NULL)
-     OR (refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL)),
-    UNIQUE KEY uk_admin_login_id (login_id) -- 삭제해도 이 값은 다시 쓰지 않는다. 감사 로그가 admin_id 를 가리키므로 이력은 안전하지만, 같은 아이디가 다른 사람이 되면 사람이 헷갈린다
-); -- 관리자
-
 -- =====================================================================
--- 2. 상품 / 재고
+-- 2. product (L0)
 -- =====================================================================
 
 CREATE TABLE category (
@@ -202,27 +180,51 @@ CREATE TABLE product_image (
     CONSTRAINT fk_image_product FOREIGN KEY (product_id) REFERENCES product (product_id)
 ); -- 상품 이미지. 크기와 Content-Type 은 저장하지 않는다(S3 객체 메타데이터가 진실이고 조회는 브라우저가 직접 받는다)
 
-CREATE TABLE stock_lot (
-    stock_lot_id          BIGINT       NOT NULL AUTO_INCREMENT, -- stock_lot PK
-    product_option_id BIGINT     NOT NULL, -- 옵션 FK(로트는 옵션 단위)
-    received_date   DATE         NOT NULL, -- 입고일
-    expiry_date     DATE         NOT NULL, -- 소비기한
-    initial_qty     INT          NOT NULL, -- 입고수량
-    available_qty   INT          NOT NULL, -- 판매 가능 수량. 예약(RESERVE)에서 빼고 해제(RELEASE)에서 되돌린다. 확정(CONFIRM)은 바꾸지 않는다
-    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE 판매 가능/SOLD_OUT 소진/DISPOSED 폐기/EXPIRED 소비기한 경과). stock_movement 의 DISPOSE 와 EXPIRE 에 각각 대응한다
+-- =====================================================================
+-- 3. admin (L0)
+-- =====================================================================
+
+CREATE TABLE admin (
+    admin_id        BIGINT       NOT NULL AUTO_INCREMENT, -- admin PK
+    login_id        VARCHAR(50)  NOT NULL, -- 관리자 로그인 아이디
+    password_hash   VARCHAR(255) NOT NULL, -- BCrypt 단방향 해시
+    name            VARCHAR(50)  NOT NULL, -- 관리자 이름
+    role            VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- RBAC 권한(SUPER_ADMIN/ADMIN)
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'ACTIVE', -- 관리자 상태(ACTIVE 활성/DELETED 삭제). 이력 표 다섯이 admin_id 를 참조해 하드 삭제가 불가능하다
+    refresh_token_hash CHAR(64)  NULL, -- 리프레시 토큰의 SHA-256 hex. 평문은 저장하지 않는다. NULL 은 로그아웃 상태다
+    refresh_token_expires_at DATETIME(6) NULL, -- 리프레시 토큰 만료 시각. 지나면 재로그인을 요구한다. 컬럼이 하나라 기기 한 대만 로그인이 유지되며, 다중 기기가 필요해지면 별도 테이블로 뺀다
+    deleted_at      DATETIME(6)  NULL, -- 소프트딜리트(삭제 시각)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
     updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (stock_lot_id),
-    CONSTRAINT chk_lot_status CHECK (status IN ('AVAILABLE','SOLD_OUT','DISPOSED','EXPIRED')),
-    KEY idx_lot_fefo (product_option_id, status, expiry_date), -- FEFO 조회 최적화: 옵션+상태별 소비기한 임박순
-    CONSTRAINT fk_lot_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
-    CONSTRAINT chk_lot_qty CHECK (available_qty >= 0 AND available_qty <= initial_qty),
-    CONSTRAINT chk_lot_expiry_date CHECK (expiry_date >= received_date),
-    CONSTRAINT chk_lot_status_qty CHECK (status = 'AVAILABLE' OR available_qty = 0) -- 소진/폐기/만료된 로트에 가용재고가 남아 있으면 FEFO 조회가 없는 재고를 집는다
-); -- 입고 로트(실재고 단위, 공급처는 product.supplier_id 기준)
+    PRIMARY KEY (admin_id),
+    CONSTRAINT chk_admin_role CHECK (role IN ('SUPER_ADMIN','ADMIN')),
+    CONSTRAINT chk_admin_status CHECK (status IN ('ACTIVE','DELETED')),
+    /*
+     * 삭제가 status 와 deleted_at 두 곳에 표현되어 어긋날 수 있다. 둘을 묶는다.
+     * 삭제된 관리자는 리프레시 토큰도 비어 있어야 한다. 남아 있으면 세션이 그대로 살아 있다
+     */
+    CONSTRAINT chk_admin_deleted CHECK (
+        (status =  'DELETED' AND deleted_at IS NOT NULL AND refresh_token_hash IS NULL)
+     OR (status <> 'DELETED' AND deleted_at IS NULL)),
+    CONSTRAINT chk_admin_refresh_token CHECK ( -- 둘 다 있거나 둘 다 없거나. 해시만 남고 만료가 NULL 이면 영구 토큰이 된다
+        (refresh_token_hash IS NULL     AND refresh_token_expires_at IS NULL)
+     OR (refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL)),
+    UNIQUE KEY uk_admin_login_id (login_id) -- 삭제해도 이 값은 다시 쓰지 않는다. 감사 로그가 admin_id 를 가리키므로 이력은 안전하지만, 같은 아이디가 다른 사람이 되면 사람이 헷갈린다
+); -- 관리자
+
+CREATE TABLE audit_log (
+    audit_log_id          BIGINT       NOT NULL AUTO_INCREMENT, -- audit_log PK
+    admin_id        BIGINT       NOT NULL, -- 행위 관리자 FK
+    action          VARCHAR(50)  NOT NULL, -- PRODUCT_DELETE/REFUND/GRADE_CHANGE 등
+    target          VARCHAR(100) NULL, -- 대상 식별자
+    detail          TEXT         NULL, -- 상세 내용
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    PRIMARY KEY (audit_log_id),
+    CONSTRAINT fk_audit_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id)
+); -- 감사 로그
 
 -- =====================================================================
--- 3. 쿠폰
+-- 4. coupon (L1)
 -- =====================================================================
 
 CREATE TABLE coupon (
@@ -348,7 +350,7 @@ CREATE TABLE member_coupon_status_history (
 ); -- 발급 쿠폰 상태 이력. reason 이 만료와 어뷰징 취소를 가른다
 
 -- =====================================================================
--- 4. 장바구니
+-- 5. cart (L1)
 -- =====================================================================
 
 CREATE TABLE cart (
@@ -376,7 +378,7 @@ CREATE TABLE cart_item (
 ); -- 장바구니 상품
 
 -- =====================================================================
--- 5. 주문 / 결제
+-- 6. order (L2)
 -- =====================================================================
 
 CREATE TABLE orders (
@@ -469,6 +471,43 @@ CREATE TABLE order_item (
     CONSTRAINT chk_orderitem_coupon_pair CHECK ((member_coupon_id IS NULL) = (coupon_id IS NULL)) -- 한쪽만 채우면 복합 외래 키가 검사에서 빠져 사슬이 끊긴다
 ); -- 주문 상품
 
+CREATE TABLE order_status_history (
+    order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
+    order_id        BIGINT       NOT NULL, -- 주문 FK
+    from_status     VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NULL, -- 이전 상태
+    to_status       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 변경 상태(orders.status와 동일 집합)
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    PRIMARY KEY (order_status_history_id),
+    CONSTRAINT chk_osh_to_status CHECK (to_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')), -- orders.status 와 같은 집합. 한쪽만 고치면 전이가 막힌다
+    CONSTRAINT chk_osh_from_status CHECK (from_status IS NULL OR from_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')), -- orders.status 와 같은 집합
+    CONSTRAINT fk_history_order FOREIGN KEY (order_id) REFERENCES orders (order_id)
+); -- 주문 상태 이력
+
+-- =====================================================================
+-- 7. stock (L1)
+-- 층은 L1 이지만 stock_allocation 이 order_item 을, stock_movement 가 orders 를 참조해
+-- order 뒤에 둔다. 참조일 뿐 호출 의존이 아닌 이유는 domain-map.md 에 있다.
+-- =====================================================================
+
+CREATE TABLE stock_lot (
+    stock_lot_id          BIGINT       NOT NULL AUTO_INCREMENT, -- stock_lot PK
+    product_option_id BIGINT     NOT NULL, -- 옵션 FK(로트는 옵션 단위)
+    received_date   DATE         NOT NULL, -- 입고일
+    expiry_date     DATE         NOT NULL, -- 소비기한
+    initial_qty     INT          NOT NULL, -- 입고수량
+    available_qty   INT          NOT NULL, -- 판매 가능 수량. 예약(RESERVE)에서 빼고 해제(RELEASE)에서 되돌린다. 확정(CONFIRM)은 바꾸지 않는다
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'AVAILABLE', -- 로트 상태(AVAILABLE 판매 가능/SOLD_OUT 소진/DISPOSED 폐기/EXPIRED 소비기한 경과). stock_movement 의 DISPOSE 와 EXPIRE 에 각각 대응한다
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    PRIMARY KEY (stock_lot_id),
+    CONSTRAINT chk_lot_status CHECK (status IN ('AVAILABLE','SOLD_OUT','DISPOSED','EXPIRED')),
+    KEY idx_lot_fefo (product_option_id, status, expiry_date), -- FEFO 조회 최적화: 옵션+상태별 소비기한 임박순
+    CONSTRAINT fk_lot_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
+    CONSTRAINT chk_lot_qty CHECK (available_qty >= 0 AND available_qty <= initial_qty),
+    CONSTRAINT chk_lot_expiry_date CHECK (expiry_date >= received_date),
+    CONSTRAINT chk_lot_status_qty CHECK (status = 'AVAILABLE' OR available_qty = 0) -- 소진/폐기/만료된 로트에 가용재고가 남아 있으면 FEFO 조회가 없는 재고를 집는다
+); -- 입고 로트(실재고 단위, 공급처는 product.supplier_id 기준)
+
 CREATE TABLE stock_allocation (
     stock_allocation_id   BIGINT       NOT NULL AUTO_INCREMENT, -- stock_allocation PK
     order_item_id   BIGINT       NOT NULL, -- 주문 상품 FK
@@ -522,75 +561,8 @@ CREATE TABLE stock_movement (
      OR (movement_type =  'ADJUST'  AND (qty_after = qty_before + quantity OR qty_after = qty_before - quantity)))
 ); -- 재고 변동 이력(로트 단위 시간순). 재고에 관한 모든 사건의 단일 창구다. available_qty 를 바꾸는 연산과 같은 트랜잭션에서 함께 INSERT 하고, 재입고하지 않은 회수품 폐기처럼 값을 안 바꾸는 것은 qty_before = qty_after 로 남긴다
 
-/*
- * 판매 집계(일 1회 배치가 옵션별/일자별로 집계). 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합).
- * 재고 대조는 이 표가 아니라 stock_movement 의 qty_before/qty_after 로 한다.
- * 배치는 움직임이 없는 옵션에도 행을 만든다. 다음 날 opening_stock 이 전날 기말이 되려면 날짜가 끊기면 안 된다
- */
-CREATE TABLE daily_sales (
-    daily_sales_id  BIGINT       NOT NULL AUTO_INCREMENT, -- daily_sales PK
-    product_option_id BIGINT     NOT NULL, -- 집계 대상 옵션 FK. 재고(stock_lot)와 소비기한이 옵션 단위라 집계도 같은 단위여야 한다. 상품 단위 수치는 옵션을 합산해 얻는다(반대 방향은 불가능하다)
-    stat_date       DATE         NOT NULL, -- 집계 일자
-    opening_stock   INT          NOT NULL DEFAULT 0, -- 기초 재고(그날 시작 시점 가용재고 스냅샷). 소진율 분모이고 다음 날 행의 이 값이 곧 이 날의 기말이다
-    inbound_qty     INT          NOT NULL DEFAULT 0, -- 당일 신규 입고 수량. 소진율 분모
-    restocked_qty   INT          NOT NULL DEFAULT 0, -- 당일 반품 재입고 수량. 소진율 분모에는 넣지 않는다. 새로 들여온 물량이 아니라 팔았다가 돌아온 것이라 분모에 넣으면 소진율이 낮아 보인다
-    sold_qty        INT          NOT NULL DEFAULT 0, -- 당일 판매 수량(결제 완료 기준). 소진율 분자
-    sold_amount     BIGINT       NOT NULL DEFAULT 0, -- 당일 판매 금액(결제 완료 기준)
-    disposed_qty    INT          NOT NULL DEFAULT 0, -- 당일 폐기 수량. 로트로 돌아가지 않은 회수품 폐기는 available_qty 를 바꾸지 않으므로 여기 안 들어간다
-    expired_qty     INT          NOT NULL DEFAULT 0, -- 당일 만료 전환 수량. 소비기한이 지나 판매 불가로 바뀐 것이며 폐기와 별개다
-    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (daily_sales_id),
-    UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
-    CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
-    CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND restocked_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND expired_qty >= 0)
-);
-
-CREATE TABLE order_status_history (
-    order_status_history_id      BIGINT       NOT NULL AUTO_INCREMENT, -- order_status_history PK
-    order_id        BIGINT       NOT NULL, -- 주문 FK
-    from_status     VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NULL, -- 이전 상태
-    to_status       VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 변경 상태(orders.status와 동일 집합)
-    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    PRIMARY KEY (order_status_history_id),
-    CONSTRAINT chk_osh_to_status CHECK (to_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')), -- orders.status 와 같은 집합. 한쪽만 고치면 전이가 막힌다
-    CONSTRAINT chk_osh_from_status CHECK (from_status IS NULL OR from_status IN ('PAYMENT_PENDING','PAID','PRODUCT_PREPARING','SHIPMENT_PREPARING','SHIPPING','DELIVERED','CONFIRMED','RETURN_REQUESTED','RETURNED','EXCHANGE_REQUESTED','EXCHANGED','CANCELED')), -- orders.status 와 같은 집합
-    CONSTRAINT fk_history_order FOREIGN KEY (order_id) REFERENCES orders (order_id)
-); -- 주문 상태 이력
-
-CREATE TABLE payment (
-    payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
-    order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
-    method          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 결제수단(CARD 카드/EASY_PAY 간편결제). 무통장입금은 두지 않는다
-    amount          INT          NOT NULL, -- 결제 금액. 아래 복합 외래 키가 orders.total_amount 와 같기를 요구한다
-    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
-    refunded_amount INT          NOT NULL DEFAULT 0, -- 환불 누적액(PENDING 환불 포함). refund 행을 만들 때 조건부 UPDATE 로 올린다
-    pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 NULL 이다. UNIQUE 는 한 거래가 두 주문에 붙는 것을 막는다
-    paid_at         DATETIME(6)  NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
-    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
-    PRIMARY KEY (payment_id),
-    CONSTRAINT chk_payment_method CHECK (method IN ('CARD','EASY_PAY')),
-    CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
-    UNIQUE KEY uk_payment_order (order_id),
-    UNIQUE KEY uk_payment_pg_tid (pg_tid),
-    /*
-     * 결제 금액이 주문 최종금액과 다를 수 없다.
-     * 결제 행이 있는 동안 orders.total_amount 수정도 막힌다
-     */
-    CONSTRAINT fk_payment_order FOREIGN KEY (order_id, amount) REFERENCES orders (order_id, total_amount),
-    CONSTRAINT chk_payment_amount CHECK (amount > 0), -- 0원 주문은 이 행을 만들지 않으므로 0을 허용하지 않는다
-    CONSTRAINT chk_payment_refunded CHECK (refunded_amount >= 0 AND refunded_amount <= amount), -- 환불 총액이 결제액을 넘을 수 없다
-    CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 모든 결제 수단이 PG를 타므로 예외가 없다
-        status <> 'PAID' OR pg_tid IS NOT NULL),
-    CONSTRAINT chk_payment_paid_at CHECK ( -- 상태와 완료 시각이 따로 놀지 않도록. CANCELED 는 결제 전 취소와 결제 후 취소가 모두 정상이라 제외한다
-        (status IN ('PENDING','FAILED') AND paid_at IS NULL)
-     OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
-     OR  status = 'CANCELED')
-); -- 결제(주문당 최대 1건). total_amount 가 0인 주문은 이 행이 없다. refunded_amount 가 환불 총액의 상한을 쥔다
-
 -- =====================================================================
--- 6. 클레임 (취소 / 반품 / 교환)
+-- 8. claim (L2)
 -- =====================================================================
 
 CREATE TABLE claim (
@@ -637,6 +609,18 @@ CREATE TABLE claim (
     CONSTRAINT fk_claim_admin FOREIGN KEY (processed_by) REFERENCES admin (admin_id)
 ); -- 클레임(취소/반품/교환. 회수/재배송 송장, 시각, 상태 흡수)
 
+CREATE TABLE claim_item (
+    claim_item_id   BIGINT       NOT NULL AUTO_INCREMENT, -- claim_item PK
+    claim_id        BIGINT       NOT NULL, -- 클레임 FK
+    order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK
+    order_id        BIGINT       NOT NULL, -- 조상 키 복제. 복합 외래 키가 클레임과 주문 상품을 같은 주문으로 묶는다
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    PRIMARY KEY (claim_item_id),
+    UNIQUE KEY uk_claimitem_claim_orderitem (claim_id, order_item_id), -- '클레임 내 동일 항목 중복 방지'
+    CONSTRAINT fk_claimitem_claim FOREIGN KEY (claim_id, order_id) REFERENCES claim (claim_id, order_id),
+    CONSTRAINT fk_claimitem_orderitem FOREIGN KEY (order_item_id, order_id) REFERENCES order_item (order_item_id, order_id)
+); -- 클레임 대상 상품(라인 단위. 부분 수량을 지정하지 않는다)
+
 CREATE TABLE claim_attachment (
     claim_attachment_id BIGINT       NOT NULL AUTO_INCREMENT, -- claim_attachment PK
     claim_id            BIGINT       NOT NULL, -- 클레임 FK
@@ -653,17 +637,41 @@ CREATE TABLE claim_attachment (
     CONSTRAINT fk_claim_attachment_claim FOREIGN KEY (claim_id) REFERENCES claim (claim_id)
 ); -- 클레임 증빙 사진(파손, 오배송). 비공개다
 
-CREATE TABLE claim_item (
-    claim_item_id   BIGINT       NOT NULL AUTO_INCREMENT, -- claim_item PK
-    claim_id        BIGINT       NOT NULL, -- 클레임 FK
-    order_item_id   BIGINT       NOT NULL, -- 대상 주문 상품 FK
-    order_id        BIGINT       NOT NULL, -- 조상 키 복제. 복합 외래 키가 클레임과 주문 상품을 같은 주문으로 묶는다
+-- =====================================================================
+-- 9. payment (L2)
+-- refund 가 claim 을 참조해 claim 뒤에 둔다.
+-- =====================================================================
+
+CREATE TABLE payment (
+    payment_id      BIGINT       NOT NULL AUTO_INCREMENT, -- payment PK
+    order_id        BIGINT       NOT NULL, -- 주문 FK(1:1)
+    method          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL, -- 결제수단(CARD 카드/EASY_PAY 간편결제). 무통장입금은 두지 않는다
+    amount          INT          NOT NULL, -- 결제 금액. 아래 복합 외래 키가 orders.total_amount 와 같기를 요구한다
+    status          VARCHAR(30) COLLATE utf8mb4_0900_as_cs  NOT NULL DEFAULT 'PENDING', -- 결제 상태(PENDING/PAID/FAILED/CANCELED/REFUNDED)
+    refunded_amount INT          NOT NULL DEFAULT 0, -- 환불 누적액(PENDING 환불 포함). refund 행을 만들 때 조건부 UPDATE 로 올린다
+    pg_tid          VARCHAR(100) NULL, -- PG 거래번호. 결제 요청 전에는 NULL 이다. UNIQUE 는 한 거래가 두 주문에 붙는 것을 막는다
+    paid_at         DATETIME(6)  NULL, -- 결제 완료 시각(서버 애플리케이션이 기록)
     created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    PRIMARY KEY (claim_item_id),
-    UNIQUE KEY uk_claimitem_claim_orderitem (claim_id, order_item_id), -- '클레임 내 동일 항목 중복 방지'
-    CONSTRAINT fk_claimitem_claim FOREIGN KEY (claim_id, order_id) REFERENCES claim (claim_id, order_id),
-    CONSTRAINT fk_claimitem_orderitem FOREIGN KEY (order_item_id, order_id) REFERENCES order_item (order_item_id, order_id)
-); -- 클레임 대상 상품(라인 단위. 부분 수량을 지정하지 않는다)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    PRIMARY KEY (payment_id),
+    CONSTRAINT chk_payment_method CHECK (method IN ('CARD','EASY_PAY')),
+    CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED','CANCELED','REFUNDED')),
+    UNIQUE KEY uk_payment_order (order_id),
+    UNIQUE KEY uk_payment_pg_tid (pg_tid),
+    /*
+     * 결제 금액이 주문 최종금액과 다를 수 없다.
+     * 결제 행이 있는 동안 orders.total_amount 수정도 막힌다
+     */
+    CONSTRAINT fk_payment_order FOREIGN KEY (order_id, amount) REFERENCES orders (order_id, total_amount),
+    CONSTRAINT chk_payment_amount CHECK (amount > 0), -- 0원 주문은 이 행을 만들지 않으므로 0을 허용하지 않는다
+    CONSTRAINT chk_payment_refunded CHECK (refunded_amount >= 0 AND refunded_amount <= amount), -- 환불 총액이 결제액을 넘을 수 없다
+    CONSTRAINT chk_payment_pg_tid CHECK ( -- 완료된 결제는 거래번호를 갖는다. 모든 결제 수단이 PG를 타므로 예외가 없다
+        status <> 'PAID' OR pg_tid IS NOT NULL),
+    CONSTRAINT chk_payment_paid_at CHECK ( -- 상태와 완료 시각이 따로 놀지 않도록. CANCELED 는 결제 전 취소와 결제 후 취소가 모두 정상이라 제외한다
+        (status IN ('PENDING','FAILED') AND paid_at IS NULL)
+     OR (status IN ('PAID','REFUNDED')  AND paid_at IS NOT NULL)
+     OR  status = 'CANCELED')
+); -- 결제(주문당 최대 1건). total_amount 가 0인 주문은 이 행이 없다. refunded_amount 가 환불 총액의 상한을 쥔다
 
 CREATE TABLE refund (
     refund_id           BIGINT   NOT NULL AUTO_INCREMENT, -- refund PK
@@ -691,6 +699,10 @@ CREATE TABLE refund (
         (status = 'PENDING' AND refunded_at IS NULL)
      OR (status = 'DONE'    AND refunded_at IS NOT NULL))
 ); -- 환불(돈에 대한 것만). 클레임당 1건이고, 총액 상한은 payment.refunded_amount 가 쥔다
+
+-- =====================================================================
+-- 10. shipment (L2)
+-- =====================================================================
 
 CREATE TABLE shipment (
     shipment_id   BIGINT       NOT NULL AUTO_INCREMENT, -- shipment PK
@@ -730,7 +742,7 @@ CREATE TABLE shipment_photo (
 ); -- 문앞 배송 완료 사진. 비공개다
 
 -- =====================================================================
--- 7. 리뷰 / Q&A
+-- 11. review (L2)
 -- =====================================================================
 
 CREATE TABLE review (
@@ -752,6 +764,10 @@ CREATE TABLE review (
     CONSTRAINT fk_review_option FOREIGN KEY (product_option_id, product_id) REFERENCES product_option (product_option_id, product_id), -- 옵션과 상품을 잇는다. product_id 는 이 사슬로 검증되므로 product 를 직접 참조하지 않는다
     CONSTRAINT chk_review_rating CHECK (rating BETWEEN 1 AND 5)
 ); -- 상품 리뷰(복합 외래 키 둘이 주문 상품, 옵션, 상품, 구매자를 묶는다)
+
+-- =====================================================================
+-- 12. qna (L2)
+-- =====================================================================
 
 CREATE TABLE qna (
     qna_id          BIGINT       NOT NULL AUTO_INCREMENT, -- qna PK
@@ -777,7 +793,35 @@ CREATE TABLE qna (
 ); -- 상품 Q&A
 
 -- =====================================================================
--- 8. 공통 (알림 / 감사 로그)
+-- 13. statistics (L2)
+-- =====================================================================
+
+/*
+ * 판매 집계(일 1회 배치가 옵션별/일자별로 집계). 소진율 = 기간 sold_qty 합 / (기간 시작 opening_stock + 기간 inbound_qty 합).
+ * 재고 대조는 이 표가 아니라 stock_movement 의 qty_before/qty_after 로 한다.
+ * 배치는 움직임이 없는 옵션에도 행을 만든다. 다음 날 opening_stock 이 전날 기말이 되려면 날짜가 끊기면 안 된다
+ */
+CREATE TABLE daily_sales (
+    daily_sales_id  BIGINT       NOT NULL AUTO_INCREMENT, -- daily_sales PK
+    product_option_id BIGINT     NOT NULL, -- 집계 대상 옵션 FK. 재고(stock_lot)와 소비기한이 옵션 단위라 집계도 같은 단위여야 한다. 상품 단위 수치는 옵션을 합산해 얻는다(반대 방향은 불가능하다)
+    stat_date       DATE         NOT NULL, -- 집계 일자
+    opening_stock   INT          NOT NULL DEFAULT 0, -- 기초 재고(그날 시작 시점 가용재고 스냅샷). 소진율 분모이고 다음 날 행의 이 값이 곧 이 날의 기말이다
+    inbound_qty     INT          NOT NULL DEFAULT 0, -- 당일 신규 입고 수량. 소진율 분모
+    restocked_qty   INT          NOT NULL DEFAULT 0, -- 당일 반품 재입고 수량. 소진율 분모에는 넣지 않는다. 새로 들여온 물량이 아니라 팔았다가 돌아온 것이라 분모에 넣으면 소진율이 낮아 보인다
+    sold_qty        INT          NOT NULL DEFAULT 0, -- 당일 판매 수량(결제 완료 기준). 소진율 분자
+    sold_amount     BIGINT       NOT NULL DEFAULT 0, -- 당일 판매 금액(결제 완료 기준)
+    disposed_qty    INT          NOT NULL DEFAULT 0, -- 당일 폐기 수량. 로트로 돌아가지 않은 회수품 폐기는 available_qty 를 바꾸지 않으므로 여기 안 들어간다
+    expired_qty     INT          NOT NULL DEFAULT 0, -- 당일 만료 전환 수량. 소비기한이 지나 판매 불가로 바뀐 것이며 폐기와 별개다
+    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
+    updated_at      DATETIME(6)  NOT NULL, -- 수정 시각(애플리케이션에서 생성)
+    PRIMARY KEY (daily_sales_id),
+    UNIQUE KEY uk_daily_option_date (product_option_id, stat_date), -- 옵션+일자 1행(배치 재실행 시 UPSERT 덮어쓰기, 재조회 동일 결과 보장)
+    CONSTRAINT fk_daily_option FOREIGN KEY (product_option_id) REFERENCES product_option (product_option_id),
+    CONSTRAINT chk_daily_qty CHECK (opening_stock >= 0 AND inbound_qty >= 0 AND restocked_qty >= 0 AND sold_qty >= 0 AND sold_amount >= 0 AND disposed_qty >= 0 AND expired_qty >= 0)
+);
+
+-- =====================================================================
+-- 아직 만들지 않는 표
 -- =====================================================================
 
 -- 알림 테이블은 아직 쓰지 않는다. 발송 대상 리소스(주문, QnA 등)를 가리키는 참조가 없어
@@ -798,14 +842,3 @@ CREATE TABLE qna (
 --     CONSTRAINT chk_noti_status CHECK (status IN ('SENT','FAILED','RETRY')),
 --     CONSTRAINT fk_noti_member FOREIGN KEY (member_id) REFERENCES member (member_id)
 -- ); -- 알림
-
-CREATE TABLE audit_log (
-    audit_log_id          BIGINT       NOT NULL AUTO_INCREMENT, -- audit_log PK
-    admin_id        BIGINT       NOT NULL, -- 행위 관리자 FK
-    action          VARCHAR(50)  NOT NULL, -- PRODUCT_DELETE/REFUND/GRADE_CHANGE 등
-    target          VARCHAR(100) NULL, -- 대상 식별자
-    detail          TEXT         NULL, -- 상세 내용
-    created_at      DATETIME(6)  NOT NULL, -- 생성 시각(애플리케이션에서 생성)
-    PRIMARY KEY (audit_log_id),
-    CONSTRAINT fk_audit_admin FOREIGN KEY (admin_id) REFERENCES admin (admin_id)
-); -- 감사 로그
