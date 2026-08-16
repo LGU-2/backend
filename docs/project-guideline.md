@@ -30,7 +30,7 @@ Java 21, Spring Boot 4.0.5, MySQL 8.4, Gradle.
 
 ```bash
 git switch develop && git pull
-git switch -c feat/주문-취소
+git switch -c feat/order-cancel
 
 # 작업하고 커밋 (한 줄, [태그] 형식)
 git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
@@ -39,7 +39,7 @@ git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
 /v-commit              # 점검 항목 판정이며 PR 를 막지는 않는다. Claude CLI 모드에서 실행시킨다
                        # --full 옵션은 ISO 품질 속성과 인프라 기준까지 (토큰과 시간 비용이 크므로 권장하지 않음)
 
-git push -u origin feat/주문-취소
+git push -u origin feat/order-cancel
 gh pr create --base develop     # 본문에 Closes #12
 ```
 

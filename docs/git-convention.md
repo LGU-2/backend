@@ -4,7 +4,7 @@
 
 ```bash
 git switch develop && git pull
-git switch -c feat/주문-취소
+git switch -c feat/order-cancel
 
 # 작업하고 커밋
 git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
@@ -12,7 +12,7 @@ git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
 ./gradlew check      # 이것이 통과해야 병합된다
 /v-commit            # 점검 항목 판정이며 PR 를 막지는 않는다. Claude CLI 모드에서 실행시킨다
 
-git push -u origin feat/주문-취소
+git push -u origin feat/order-cancel
 gh pr create --base develop
 ```
 
@@ -31,7 +31,12 @@ test/     테스트만
 chore/    빌드, 설정, 의존성
 ```
 
-슬래시는 하나만 쓴다.
+슬래시는 하나만 쓴다. **이름은 영어로 쓴다.** 소문자와 하이픈만 쓰고 한글을 넣지 않는다.
+
+```
+좋음   feat/order-cancel
+나쁨   feat/주문-취소
+```
 
 ## 커밋
 
