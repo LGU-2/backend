@@ -1,0 +1,161 @@
+package com.freshmarket;
+
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+import jakarta.persistence.Entity;
+import org.springframework.transaction.annotation.Transactional;
+
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+
+/*
+ * 패키지 경계를 빌드에서 강제한다 (DPB-6-03).
+ * 규칙의 근거는 docs/code-architecture/domain-package-boundary-guideline.md 5장과 6장에 있다.
+ *
+ * 도메인이 생기기 전에 넣는다. 클래스가 쌓인 뒤에 넣으면 이미 깨진 것을 무더기로 만나
+ * 고치는 대신 규칙을 끄게 된다.
+ */
+@AnalyzeClasses(packages = "com.freshmarket", importOptions = ImportOption.DoNotIncludeTests.class)
+class ArchitectureTest {
+
+    private static final String BASE = "com.freshmarket";
+
+    /*
+     * 검사 대상이 0개인 규칙은 ArchUnit 이 기본으로 실패시킨다.
+     * 도메인이 아직 없어 대부분의 규칙이 그 상태이므로 빈 것을 허용한다.
+     * 규칙이 잠자고 있다가 첫 도메인이 생기는 순간부터 문다.
+     */
+
+    /*
+     * 다른 도메인의 domain 패키지에 손대지 못하게 막는다.
+     * 도메인끼리는 루트에 공개한 Api 인터페이스와 DTO 로만 오간다.
+     */
+    @ArchTest
+    static final ArchRule 도메인_내부는_다른_도메인에_닫혀_있다 = slices()
+            .matching(BASE + ".(*)..")
+            .namingSlices("$1")
+            .should().notDependOnEachOther()
+            .ignoreDependency(
+                    resideInAPackage(BASE + ".."),
+                    resideInAnyPackage(
+                            BASE + ".*",            // 도메인 루트만 허용
+                            BASE + ".common..",
+                            BASE + ".config.."));
+
+    /*
+     * 도메인 안에서 위에서 아래로만 흐르게 한다.
+     * consideringOnlyDependenciesInLayers 를 주지 않으면 계층 밖 클래스까지 검사해 오탐이 난다.
+     */
+    @ArchTest
+    static final ArchRule 계층은_아래로만_흐른다 = layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            .withOptionalLayers(true)
+            .layer("Controller").definedBy("..domain.controller..")
+            .layer("Service").definedBy("..domain.service..")
+            .layer("Repository").definedBy("..domain.repository..")
+            .layer("Client").definedBy("..domain.client..")
+            .whereLayer("Controller").mayNotBeAccessedByAnyLayer()
+            .whereLayer("Service").mayOnlyBeAccessedByLayers("Controller")
+            .whereLayer("Repository").mayOnlyBeAccessedByLayers("Service")
+            .whereLayer("Client").mayOnlyBeAccessedByLayers("Service");
+
+    /*
+     * 도메인 사이의 호출을 층으로 강제한다 (DPB-5-01, DPB-5-02).
+     *
+     * 층별로 묶지 않고 도메인 하나를 층 하나로 선언한다.
+     * layeredArchitecture 는 같은 층 안의 호출을 허용하므로, L1 셋을 한 층으로 묶으면
+     * cart 가 coupon 을 직접 부르는 것을 못 잡는다. 실제로 확인했다.
+     *
+     * 층 배정은 docs/code-architecture/domain-map.md 에 있다. 도메인을 더하면 여기도 고친다.
+     */
+    private static final String[] L1 = {"stock", "coupon", "cart"};
+    private static final String[] L2 = {"order", "payment", "claim", "shipment",
+                                        "review", "qna", "statistics"};
+
+    @ArchTest
+    static final ArchRule 도메인은_아래로만_부른다 = domainLayers();
+
+    private static ArchRule domainLayers() {
+        var arch = layeredArchitecture()
+                .consideringOnlyDependenciesInLayers()
+                .withOptionalLayers(true);
+        for (String d : concat(new String[]{"member", "product", "admin"}, L1, L2)) {
+            arch = arch.layer(d).definedBy(BASE + "." + d + "..");
+        }
+        // L0 는 L1 과 L2 전부가 부를 수 있다
+        for (String d : new String[]{"member", "product", "admin"}) {
+            arch = arch.whereLayer(d).mayOnlyBeAccessedByLayers(concat(L1, L2));
+        }
+        // L1 은 L2 만 부를 수 있다. 같은 층인 L1 끼리는 목록에 없으므로 막힌다
+        for (String d : L1) {
+            arch = arch.whereLayer(d).mayOnlyBeAccessedByLayers(L2);
+        }
+        // L2 는 아무도 부르지 못한다
+        for (String d : L2) {
+            arch = arch.whereLayer(d).mayNotBeAccessedByAnyLayer();
+        }
+        return arch;
+    }
+
+    private static String[] concat(String[]... parts) {
+        return java.util.Arrays.stream(parts).flatMap(java.util.Arrays::stream)
+                .toArray(String[]::new);
+    }
+
+    // 순환 의존은 어느 층에서든 막는다
+    @ArchTest
+    static final ArchRule 순환_의존이_없다 = slices()
+            .matching(BASE + ".(*)..")
+            .should().beFreeOfCycles();
+
+    /*
+     * API 구현체와 외부 연동 클래스에 트랜잭션을 걸지 않는다 (DPB-3-04, DPB-7-01).
+     * 호출당하는 쪽이 트랜잭션을 열면 호출하는 도메인의 트랜잭션 경계가 흐려지고,
+     * 외부 호출이 트랜잭션 안에 들어가면 그동안 커넥션과 락을 점유한다.
+     */
+    @ArchTest
+    static final ArchRule ApiImpl_에_트랜잭션이_없다 = noClasses()
+            .that().haveSimpleNameEndingWith("ApiImpl")
+            .should().beAnnotatedWith(Transactional.class)
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule ApiImpl_메서드에_트랜잭션이_없다 = noMethods()
+            .that().areDeclaredInClassesThat().haveSimpleNameEndingWith("ApiImpl")
+            .should().beAnnotatedWith(Transactional.class)
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule client_에_트랜잭션이_없다 = noClasses()
+            .that().resideInAPackage("..domain.client..")
+            .should().beAnnotatedWith(Transactional.class)
+            .allowEmptyShould(true);
+
+    /*
+     * 엔티티는 도메인 안에만 둔다 (DPB-2-01).
+     * 루트에 올라오면 다른 도메인이 엔티티를 직접 받게 되어 내부 구조가 계약이 된다.
+     */
+    @ArchTest
+    static final ArchRule 엔티티는_도메인_안에만_있다 = classes()
+            .that().areAnnotatedWith(Entity.class)
+            .should().resideInAPackage("..domain.entity..")
+            .allowEmptyShould(true);
+
+    /*
+     * common 은 도메인을 모른다 (DPB-5-03).
+     * 여기서 개별 도메인 예외를 잡거나 도메인 타입을 참조하면 경계가 무너진다.
+     */
+    @ArchTest
+    static final ArchRule common_은_도메인을_모른다 = noClasses()
+            .that().resideInAnyPackage(BASE + ".common..", BASE + ".config..")
+            .should().dependOnClassesThat()
+            .resideInAPackage(BASE + ".*.domain..")
+            .allowEmptyShould(true);
+}
