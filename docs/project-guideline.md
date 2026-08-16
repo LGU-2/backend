@@ -15,6 +15,19 @@ Java 21, Spring Boot 4.0.5, MySQL 8.4, Gradle.
 
 ## 작업 흐름
 
+작업은 이슈에서 시작한다. [프로젝트 보드](https://github.com/orgs/fresh-market/projects/6) 에서 무엇을 잡을지 고른다.
+
+```
+1. 이슈를 만든다        템플릿에 도메인과 작업 체크리스트가 뜬다
+                       보드에 Todo 로 자동 등록된다
+2. 담당자를 자신으로     Status 를 In Progress 로 옮긴다
+3. 아래대로 작업한다
+4. PR 본문에 Closes #12
+5. 병합되면 이슈가 닫히고 카드가 Done 으로 간다
+```
+
+**이슈 없이 시작하지 않는다.** 보드에 없는 작업은 남들이 모르고, 같은 것을 두 사람이 잡는다.
+
 ```bash
 git switch develop && git pull
 git switch -c feat/주문-취소
@@ -27,8 +40,10 @@ git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
                        # --full 옵션은 ISO 품질 속성과 인프라 기준까지 (토큰과 시간 비용이 크므로 권장하지 않음)
 
 git push -u origin feat/주문-취소
-gh pr create --base develop
+gh pr create --base develop     # 본문에 Closes #12
 ```
+
+PR 을 열면 카드를 **`In Review`** 로 옮긴다. 누가 리뷰를 기다리는지 보이게 하는 자리다.
 
 `/v-commit` 은 **Claude Code 를 띄운 뒤 그 안에서 치는 슬래시 명령**이다. 터미널에서는 동작하지 않는다.
 다른 CLI 를 쓰면 터미널에서 `./verify.sh --agent <명령>` 으로 넘긴다.
