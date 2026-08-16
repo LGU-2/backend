@@ -1,14 +1,26 @@
 # 검증 시스템 실행 방법
 
-## 실행
+## 로컬 검증
 
-**로컬.** 커밋한 뒤 backend 디렉터리에서 친다.
+커밋한 뒤 backend 디렉터리에서 돌린다. **인자를 안 주면 아직 push 하지 않은 커밋 전부**를 본다.
+
+### Claude Code
 
 ```
 /v-commit
 ```
 
-범위를 바꾸려면 인자를 준다.
+### 그 밖의 방법
+
+```bash
+./verify.sh                      # 지시문을 화면에 낸다. 쓰는 에이전트에 붙여넣는다
+./verify.sh --agent claude       # 지시문을 그 명령에 바로 넘긴다
+./verify.sh --agent "gemini -p"  # 임의의 CLI 에 넘긴다
+```
+
+`/v-commit` 은 `./verify.sh` 를 부르는 얇은 진입점이라 **둘의 결과가 같다.**
+
+### 범위 바꾸기
 
 | 인자 | 범위 |
 |---|---|
@@ -17,45 +29,69 @@
 | `HEAD~1` | 그 앞 커밋 하나. git 이 읽는 그대로다 |
 | `<SHA>` | 그 커밋 하나 |
 | `-n 5` | 최신 5개 |
-| `--full` | 커밋이 아니라 점검 항목을 넓힌다. common 과 infra 항목까지 본다 |
 
 **ref 는 언제나 git 이 읽는 그대로다.** 개수는 `-n` 이 맡는다.
 
-```
-/v-commit HEAD             HEAD 커밋 하나, backend 항목만
-/v-commit HEAD --full      HEAD 커밋 하나, 세 저장소 항목 전부
-/v-commit -n 5 --full      최신 5개, 세 저장소 항목 전부
-```
-
-**기본은 backend 항목만 본다.** 전부 보면 판정 한 번에 20만 토큰이 넘어가서다.
-CI 는 1단계에서 backend 항목만 보므로, **common 과 infra 기준은 `--full` 로 보지 않으면 아무도 안 본다.**
-PR 을 올리기 전에 한 번 돌린다. 자세한 것은 [verification-commands.md](./verification-commands.md) 1장에 있다.
-
-**CI.** **PR 을 열었을 때만** 돈다. 칠 것이 없다.
-PR 에 push 를 더하면 다시 돈다. main 에 직접 push 하면 아무것도 안 돈다.
-
-**처음이라면** 아래 [준비](#준비) 를 먼저 한다. 옆에 없으면 `/v-commit` 이 물어보고 받는다.
-
----
-
-코드 품질 점검을 LLM 에게 맡긴다. 점검 항목은 세 저장소에 나뉘어 총 567건이고, 판정 대상은 backend 코드다.
+인자는 두 방식에 똑같이 준다.
 
 ```
-커밋하면      로컬에서 Claude 가 본다   (/v-commit 을 쳐야 돈다)
-PR 을 열면    CI 에서 gemini 가 본다    (자동)
-둘 다         병합을 막지 않는다
+/v-commit HEAD
+./verify.sh HEAD
 ```
 
-병합을 막는 것은 커버리지(service 패키지 메서드 100%)와 SonarQube 신규 Blocker 0건뿐이다.
+### 항목 범위 넓히기
 
-칠 수 있는 명령은 [verification-commands.md](./verification-commands.md),
-지금 무엇을 검증하고 있는지는 [verification-status.md](./verification-status.md),
-결과의 실물은 [verification-example.md](./verification-example.md),
-무엇이 언제 도는지는 [verification-workflow.md](./verification-workflow.md),
-무엇으로 이루어져 있는지는 [verification-architecture.md](./verification-architecture.md),
-설계 근거는 [qa-llm-verification.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/qa-llm-verification.md) 에 있다.
+```
+/v-commit --full
+```
 
-## 준비
+```bash
+./verify.sh --full
+```
+
+`--full` 은 커밋이 아니라 **점검 항목**을 넓힌다. 기본은 backend 항목만 보고,
+`--full` 이면 common 과 infra 항목까지 본다.
+
+```
+/v-commit HEAD               # HEAD 커밋 하나, backend 항목만
+/v-commit HEAD --full        # HEAD 커밋 하나, 세 저장소 항목 전부
+/v-commit -n 5 --full        # 최신 5개, 세 저장소 항목 전부
+```
+
+```bash
+./verify.sh HEAD             # 위와 같다. 인자는 양쪽에 똑같이 통한다
+./verify.sh HEAD --full
+./verify.sh -n 5 --full
+```
+
+**기본이 backend 항목만인 이유는 분량이다.** 전부 보면 판정 한 번에 20만 토큰이 넘어간다.
+
+**CI 도 backend 항목만 본다.** 그래서 common 과 infra 기준은 `--full` 로 보지 않으면 아무도 안 본다.
+PR 을 올리기 전에 한 번 돌린다.
+
+### 판정할 것이 없으면 바로 끝난다
+
+```
+판정할 항목 없음. 판정 대상 파일이 바뀌지 않았다.
+다른 저장소 항목까지 보려면 --full 을 준다.
+```
+
+문서만 고친 커밋에서 이렇게 나온다. **정상이다.** 자바가 안 바뀌었으면 코드 항목이 위반될 수 없다.
+
+## 무엇이 병합을 막나
+
+| 게이트 | 막나 | 언제 |
+|---|---|---|
+| **커버리지** service 메서드 100% | **막는다** | PR |
+| **SonarQube 신규 Blocker 0건** | **막는다** | PR |
+| **다른 팀원 승인 1건** | **막는다** | PR (develop) |
+| G-LOCAL (`./verify.sh`) | 안 막는다 | 로컬, 재량 |
+| G-PR (CI 의 LLM 판정) | 안 막는다 | PR, 자동 |
+
+**LLM 판정은 막지 않는다.** 재현율이 측정되지 않아 차단 근거로 쓰지 않는다.
+지적이 있어도 병합은 되지만, 읽고 판단은 해야 한다.
+
+## 처음이라면
 
 **backend 만 clone 해도 된다.**
 
@@ -63,8 +99,7 @@ PR 을 열면    CI 에서 gemini 가 본다    (자동)
 git clone https://github.com/fresh-market/fm-backend.git backend
 ```
 
-판정 기준 567건 중 317건이 다른 두 저장소에 있다.
-`/v-commit` 은 그 둘을 세 단계로 찾는다.
+판정 기준 590건 중 317건이 다른 두 저장소에 있다. `./verify.sh` 가 그 둘을 두 단계로 찾는다.
 
 | 순서 | 위치 | 어떻게 다루나 |
 |------|------|---------------|
@@ -74,8 +109,6 @@ git clone https://github.com/fresh-market/fm-backend.git backend
 없으면 한 번 물어보고 받는다 (약 1.3MB, 공개 저장소라 인증 불필요). 다음부터는 묻지 않는다.
 
 **2번은 판정 전에 항상 원격 최신으로 맞춘다.** 낡은 기준으로 판정하는 일이 없다.
-네트워크가 안 되면 받아 둔 것으로 진행하고 그 사실을 알린다.
-
 1번은 사용자가 관리하는 저장소이므로 **갱신하지 않는다.** 기준을 바꾸려면 직접 `git pull` 한다.
 
 어느 시점의 기준으로 판정했는지는 결과와 기록에 남는다.
@@ -84,16 +117,38 @@ git clone https://github.com/fresh-market/fm-backend.git backend
 기준: common @ dfe9fd9, infra @ aa74a76
 ```
 
-## 로컬에서 도는 것
+---
+
+## 이 시스템이 하는 일
+
+코드 품질 점검을 LLM 에게 맡긴다. 점검 항목은 세 저장소에 나뉘어 총 590건이고, 판정 대상은 backend 코드다.
 
 ```
-1  ./gradlew check      커버리지와 정적 분석. 알림만
-2  push 하지 않은 커밋의 diff
-3  판정                 바꾼 파일에 해당하는 항목 전부
+커밋하면      로컬에서 판정한다   (./verify.sh 를 쳐야 돈다)
+PR 을 열면    CI 에서 gemini 가 본다  (자동)
+둘 다         병합을 막지 않는다
+```
+
+칠 수 있는 명령은 [verification-commands.md](./verification-commands.md),
+지금 무엇을 검증하고 있는지는 [verification-status.md](./verification-status.md),
+결과의 실물은 [verification-example.md](./verification-example.md),
+무엇이 언제 도는지는 [verification-workflow.md](./verification-workflow.md),
+무엇으로 이루어져 있는지는 [verification-architecture.md](./verification-architecture.md),
+설계 근거는 [qa-llm-verification.md](https://github.com/fresh-market/.github/blob/main/docs/software-quality/qa-llm-verification.md) 에 있다.
+
+## 로컬에서 도는 순서
+
+```
+1  대상 항목 계산        바꾼 파일에 걸리는 앵커 규칙을 본다
+2  ./gradlew check      커버리지와 정적 분석. 알림만
+3  판정                 활성 항목 전부
 4  기록 저장            backend/docs/llm-review/<계정>_<YYYYMMDD-HHMMSS>_llm-review.md
 ```
 
-작업 중 여러 번 돌려도 된다. 중간 상태에서 위반이 나오는 것은 정상이고, 기록은 초 단위로 구분되어 덮어쓰지 않는다.
+**소스가 안 바뀌었으면 2번을 건너뛴다.** 결과가 직전과 같아서다.
+
+작업 중 여러 번 돌려도 된다. 중간 상태에서 위반이 나오는 것은 정상이고,
+기록은 초 단위로 구분되어 덮어쓰지 않는다.
 
 ## CI
 
@@ -104,15 +159,16 @@ git clone https://github.com/fresh-market/fm-backend.git backend
 | PR 생성 | 돈다 |
 | PR 에 push (`synchronize`) | 돈다 |
 | PR 을 닫았다 다시 열기 | 돈다 |
-| **main 에 직접 push** | **안 돈다** |
-
-마지막 줄이 지금 열려 있는 구멍이다.
-추후 main 과 develop 을 보호해 **PR 병합으로만 반영**하도록 막을 예정이며, 그전까지는 직접 push 로 게이트를 건너뛸 수 있다.
+| main 에 직접 push | 안 돈다. 관리자만 할 수 있고 브랜치 보호가 막는다 |
 
 `registry-check.yml` 은 조건이 하나 더 붙는다. **점검 항목 문서나 `items.yml` 을 건드린 PR 에서만** 돈다.
 Java 코드만 고친 PR 에서는 실행조차 되지 않는다.
 
-코멘트는 push 마다 새로 달리지 않고 **같은 것이 갱신된다.**
+**G-PR 은 G-BUILD 가 통과해야 돈다.** 빌드가 깨진 PR 에 LLM 을 부르면 무료 티어만 낭비한다.
+
+판정 코멘트는 **돌 때마다 옛 것을 지우고 새로 단다.** 항상 하나만 남고 그것이 최신이다.
+지난 판정은 Actions 탭의 실행 기록과 Job Summary 에 남는다.
+
 코멘트는 위반을 둘로 나눈다.
 
 ```
@@ -126,25 +182,20 @@ Java 코드만 고친 PR 에서는 실행조차 되지 않는다.
 |---|---|
 | 로컬 | 터미널 화면 |
 | 로컬 | `backend/docs/llm-review/<계정>_<YYYYMMDD-HHMMSS>_llm-review.md` |
-| CI | PR 의 리뷰 코멘트 (하나가 계속 갱신된다) |
+| CI | PR 의 리뷰 코멘트 (항상 최신 하나) |
 | CI | Actions 실행 화면의 **Summary** |
 
-**CI 결과는 파일로 저장하지 않는다.** PR 코멘트와 Actions Summary 에만 남는다.
-같은 코멘트를 갱신하므로 이력이 남지 않고, Actions 로그는 보존 기간이 지나면 사라진다.
-되짚어 볼 필요가 있으면 로컬에서 `/v-commit` 을 돌려 기록을 남긴다.
+**CI 결과는 저장소에 파일로 남기지 않는다.** PR 코멘트와 Actions 에만 남는다.
+코멘트는 판정할 때마다 교체되고, Actions 로그는 보존 기간이 지나면 사라진다.
+오래 남겨야 하면 로컬에서 돌려 기록을 만든다.
 
 로컬 기록에는 **어느 저장소의 어느 시점 기준으로 판정했는지**가 함께 남는다.
-옆 저장소를 썼는지 캐시를 썼는지도 경로로 구분된다.
 
 ```
 backend/docs/llm-review/
   devjohnpark_20260806-174500_llm-review.md
-  devjohnpark_20260806-181203_llm-review.md
   teammate_20260807-093011_llm-review.md
 ```
-
-로컬 기록 파일은 화면에 나온 것과 같은 내용에 머리말이 붙는다.
-어느 커밋을, 어느 시점의 점검 항목으로 판정했는지가 들어 있어 나중에 다시 읽을 수 있다.
 
 ```markdown
 ---
@@ -191,8 +242,6 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 ```
 매칭 규칙   <걸린 규칙>
 활성 항목   <n>건
-  1단계    <a>건
-  2단계    <b>건
 앵커 파일   읽음 <x>, 부재 <y>, 실패 <z>
 확정값      <m>건 또는 불필요
 ```
@@ -208,7 +257,7 @@ python3 ../common/.github/llm-verify/run.py --mode judge --dry-run \
 ```bash
 cd ../common/.github/llm-verify
 
-python3 gen_items.py ../../docs/software-quality 'qa-*.md' common \
+python3 gen_items.py ../../docs/software-quality 'qa-*-guideline.md' common \
         -o items.yml
 python3 gen_items.py ../../../backend/docs/code-architecture '*-guideline.md' backend 코드 \
         -o ../../../backend/.github/llm-verify/items.yml
@@ -219,18 +268,19 @@ python3 gen_items.py ../../../infra/docs/infra-review '*-guideline.md' infra 코
 `--check` 를 주면 파일을 쓰지 않고 어긋났는지만 본다.
 
 ```
-OK  backend 250건. 문서와 레지스트리가 일치한다
+OK  backend 273건. 문서와 레지스트리가 일치한다
 ```
 
 **재생성을 잊어도 CI 가 잡는다.** 세 저장소 모두 `registry-check.yml` 이 이 검사를 돌린다.
 결정론적이라 오탐이 없으므로 **LLM 게이트와 달리 병합을 막는다.**
-문서를 안 고친 PR 에서는 아예 실행되지 않으므로 평소에는 부담이 없다.
 
 문서에 적는 형식은 이렇다. 층위 태그는 common 에만 붙인다.
+**항목 줄 아래 들여쓴 줄은 판정 기준으로 함께 실린다.**
 
 ```markdown
 점검 항목
 * `[코드]` `SEC-1-07` 세션 고정 공격을 막는가       <- common
+  로그인 성공 시 세션 식별자를 새로 발급해야 한다.    <- 판정 기준
 * `EJ-1-07` 인스턴스화를 막으려면 private 생성자를 쓰는가   <- backend, infra
 ```
 
@@ -241,17 +291,15 @@ OK  backend 250건. 문서와 레지스트리가 일치한다
 
 | 증상 | 조치 |
 |---|---|
-| `/v-commit` 이 기준 저장소를 받겠다고 묻는다 | 처음 한 번만 묻는다. 승인한다 |
+| 기준 저장소를 받겠다고 묻는다 | 처음 한 번만 묻는다. 승인한다 |
 | 받기를 거절해 멈췄다 | 승인하거나, `common` 과 `infra` 를 옆에 clone 한다 |
+| 종료 코드 `2` | 기준 저장소를 못 찾았다. 화면의 안내대로 받는다 |
 | "원격을 확인하지 못했습니다" | 네트워크가 안 된다. 받아 둔 기준으로 판정한다 |
 | 옆 저장소가 낡았다 | 1번은 자동 갱신하지 않는다. 직접 `git pull` 한다 |
-| 활성 항목이 유난히 적고 규칙이 `on_no_match` 다 | 정상이다. 문서만 고쳤을 때 그렇다 |
+| "판정할 항목 없음" | 정상이다. 문서만 고쳤을 때 그렇다 |
+| 활성 항목이 적고 규칙이 `on_no_match` 다 | 정상이다. 어떤 앵커에도 안 걸린 변경이다 |
 | 같은 항목이 계속 `INSUFFICIENT_EVIDENCE` | `backend/.github/llm-verify/anchors.yml` 의 `anchors` 에 파일 추가 |
-| 2단계가 매번 건너뛰어진다 | 코멘트의 사유를 보고 로컬로 대신 본다 |
-| CI 워크플로가 빨갛다 | `GEMINI_API_KEY` 시크릿 등록 (조직 또는 `fresh-market/fm-backend`) |
-| PR 을 열었는데 아무것도 안 돈다 | `registry-check` 는 문서를 건드린 PR 에서만 돈다 |
-| main 에 push 했는데 아무것도 안 돌았다 | 정상이다. CI 는 PR 에서만 돈다 |
+| CI 워크플로가 빨갛다 | `GEMINI_API_KEY`, `SONAR_TOKEN` 시크릿 확인 |
+| PR 을 열었는데 registry-check 가 안 돈다 | 문서를 건드린 PR 에서만 돈다 |
+| `G-PR` 이 skipped 다 | `G-BUILD` 가 실패했다. 그것부터 고친다 |
 | 같은 지적이 매 PR 마다 나온다 | `common/.github/llm-verify/known-conflicts.yml` 에 등록 |
-
-**지금은 아직 판정할 대상이 없다.** backend 에 Java 코드가 없어 모든 규칙이 기본 집합으로 떨어지고,
-`build.gradle` 에 JaCoCo 와 SonarQube 설정이 없어 빌드 게이트가 돌지 않는다.
