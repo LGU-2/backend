@@ -9,7 +9,7 @@ cd backend
 ```
 
 **처음 작업시 [docs/project-guideline.md](./docs/project-guideline.md) 부터 본다.**
-작업 흐름, 병합을 막는 조건, 코드를 쓸 때 볼 문서가 거기에 있다.
+작업 흐름, Merge를 차단하는 조건, 코드 작성시 볼 문서가 거기에 있다.
 
 | | |
 |---|---|
