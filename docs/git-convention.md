@@ -1,0 +1,98 @@
+# Git 규약
+
+## 작업 사이클
+
+```bash
+git switch develop && git pull
+git switch -c feat/주문-취소
+
+# 작업하고 커밋
+git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
+
+./gradlew check      # 이것이 통과해야 병합된다
+./verify.sh          # 점검 항목 판정. 막지는 않는다
+
+git push -u origin feat/주문-취소
+gh pr create --base develop
+```
+
+## 브랜치
+
+`develop` 에서 딴다. **`main` 에는 직접 못 올린다** (관리자만).
+
+```
+feat/     기능 추가
+fix/      버그 수정
+refactor/ 동작은 그대로, 구조만
+docs/     문서만
+test/     테스트만
+chore/    빌드, 설정, 의존성
+```
+
+슬래시는 하나만 쓴다.
+
+## 커밋
+
+**한 줄로 쓴다. 본문을 붙이지 않는다.**
+
+```
+[태그] 무엇이 달라지는지 한 문장
+```
+
+| 태그 | 언제 | 태그 | 언제 |
+|---|---|---|---|
+| `[Feat]` | 기능 추가 | `[Comment]` | 주석 추가나 수정 |
+| `[Fix]` | 버그 수정 | `[Rename]` | 이름 변경, 파일 이동 |
+| `[Refactor]` | 구조만 변경 | `[Remove]` | 파일 삭제 |
+| `[Docs]` | 문서만 | `[Clean]` | 쓰지 않는 코드 정리 |
+| `[Test]` | 테스트만 | `[Style]` | 포맷, 공백 |
+| `[Perf]` | 성능 개선 | `[Chore]` | 빌드, 설정, 의존성 |
+
+**무엇을 했는지가 아니라 무엇이 달라지는지를 쓴다.**
+
+```
+나쁨   [Fix] OrderService.java 수정
+좋음   [Fix] 취소된 주문이 다시 취소되지 않게 막는다
+```
+
+평서형(`~한다`)으로 끝내고 마침표는 안 찍는다.
+하나의 커밋은 되돌릴 수 있는 하나의 변경이다.
+
+## PR
+
+**대상은 `develop` 이다.** `main` 으로 열면 병합할 수 없다.
+
+병합 조건 셋이 전부 충족되어야 버튼이 살아난다.
+
+| 조건 | |
+|------|---|
+| `G-BUILD` 통과 | 테스트, 커버리지 100%, 신규 Blocker 0건 |
+| 다른 팀원 승인 1건 | 자기 PR 은 자기가 승인 못 한다 |
+| 리뷰 대화 전부 해결 | `Resolve conversation` |
+
+승인 뒤에 코드를 더 올리면 **승인이 무효가 된다.** 다시 받는다.
+
+`G-PR`(LLM 판정)은 지적만 하고 막지 않는다. 읽고 판단은 한다.
+
+## 하지 않는 것
+
+* 강제 push. `main` 과 `develop` 은 GitHub 이 막는다
+* `--author` 로 남의 이름 쓰기. 로컬 git 설정 그대로 쓴다
+* 무관한 변경을 한 커밋에 섞기
+
+병합된 브랜치는 GitHub 이 제안하는 `Delete branch` 로 지운다.
+
+## 막혔을 때
+
+| 증상 | 원인 |
+|------|------|
+| `GH006: Protected branch update failed` | `main` 이나 `develop` 에 직접 push |
+| 병합 버튼이 회색 | 체크 실패, 승인 부족, 미해결 대화 중 하나 |
+| 승인받았는데 다시 막힘 | 승인 후 push 했다 |
+| `G-PR` 이 skipped | `G-BUILD` 가 실패했다. 그것부터 고친다 |
+
+## 더 볼 것
+
+* 검증 도구 사용법: [verification/verification-guide.md](./verification/verification-guide.md)
+* 코드 리뷰 점검 항목: [code-architecture/CODEREVIEW.md](./code-architecture/CODEREVIEW.md)
+* 주석과 문서 규칙: 저장소 루트 `CLAUDE.md`
