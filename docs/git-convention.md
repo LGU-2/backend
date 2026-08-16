@@ -107,7 +107,7 @@ chore/    빌드, 설정, 의존성
 | 승인받았는데 다시 막힘 | 승인 후 push 했다 |
 | `G-PR` 이 skipped | `G-BUILD` 가 실패했다. 그것부터 고친다 |
 
-## 더 볼 것
+## 참고 자료
 
 * 검증 도구 사용법: [verification/verification-guide.md](./verification/verification-guide.md)
 * 코드 리뷰 점검 항목: [code-architecture/CODEREVIEW.md](./code-architecture/CODEREVIEW.md)

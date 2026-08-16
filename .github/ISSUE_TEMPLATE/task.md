@@ -1,5 +1,5 @@
 ---
-name: "작업 Task"
+name: "TASK ISSUE"
 about: "도메인과 할 일을 적는다"
 title: ''
 labels: ''
