@@ -52,7 +52,7 @@ PR 을 열면 카드를 **`In Review`** 로 옮긴다. 누가 리뷰를 기다�
 
 자세한 규칙은 [git-convention.md](./git-convention.md).
 
-## 병합을 막는 것
+## Merge를 차단하는 것
 
 | | |
 |---|---|
@@ -64,26 +64,26 @@ PR 을 열면 카드를 **`In Review`** 로 옮긴다. 누가 리뷰를 기다�
 
 LLM 판정(G-PR)은 지적만 하고 막지 않는다. 읽고 판단은 한다.
 
-## 코드를 쓸 때 보는 것
+## 코드 작성시 참고 자료
 
 `docs/code-architecture/` 에 판정 기준이 있다. **리뷰에서 지적되는 근거가 전부 여기 있다.**
 
 | 무엇을 만들 때 | 볼 문서 |
 |---|---|
-| **어느 도메인에 넣을지** | [`domain-map.md`](./code-architecture/domain-map.md) |
-| 엔티티 | `entity-creation-guideline.md`, `base-entity-guideline.md` |
-| 레포지토리, 쿼리 | `jpa-rdb-guideline.md` |
-| 컨트롤러, DTO | `api-design-guideline.md` |
-| 패키지 배치 | `domain-package-boundary-guideline.md` |
-| 테스트 | `unit-testing-guideline.md` |
-| 식별자 | `identifier-strategy-guideline.md` |
+| 어느 도메인에 넣을지 | [`domain-map.md`](./code-architecture/domain-map.md) |
+| 엔티티 | [`entity-creation-guideline.md`](./code-architecture/entity-creation-guideline.md), [`base-entity-guideline.md`](./code-architecture/base-entity-guideline.md) |
+| 레포지토리, 쿼리 | [`jpa-rdb-guideline.md`](./code-architecture/jpa-rdb-guideline.md) |
+| 컨트롤러, DTO | [`api-design-guideline.md`](./code-architecture/api-design-guideline.md) |
+| 패키지 배치 | [`domain-package-boundary-guideline.md`](./code-architecture/domain-package-boundary-guideline.md) |
+| 테스트 | [`unit-testing-guideline.md`](./code-architecture/unit-testing-guideline.md) |
+| 식별자 | [`identifier-strategy-guideline.md`](./code-architecture/identifier-strategy-guideline.md) |
 
 **각 문서에는 짝이 되는 `-rationale.md` 가 있다.** 규칙은 guideline, 왜 그런지는 rationale 이다.
 
-`domain-map.md` 는 13개 도메인과 층을 정해 둔 것이다. **호출은 아래로만 하고 같은 층끼리는 부르지 않는다.**
+[`domain-map.md`](./code-architecture/domain-map.md) 는 13개 도메인과 층을 정해 둔 것이다. **호출은 아래로만 하고 같은 층끼리는 부르지 않는다.**
 `ArchitectureTest` 가 빌드에서 강제하므로 어기면 `./gradlew check` 가 실패한다.
 
-## 문서를 쓸 때
+## 문서 작성
 
 | 어디에 | 무엇을 |
 |---|---|
@@ -91,7 +91,7 @@ LLM 판정(G-PR)은 지적만 하고 막지 않는다. 읽고 판단은 한다.
 | `docs/code-architecture/` | 코드와 함께 봐야 하는 기준. 직접 쓰지 않는다 |
 | `docs/llm-review/` | 검증 기록. 직접 쓰지 않는다 |
 
-## 더 볼 것
+## 참고 자료
 
 * 설정 파일과 로컬 DB: [configuration.md](./configuration.md)
 * 검증 도구 사용법: [verification/verification-guide.md](./verification/verification-guide.md)
