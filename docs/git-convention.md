@@ -111,4 +111,3 @@ chore/    빌드, 설정, 의존성
 
 * 검증 도구 사용법: [verification/verification-guide.md](./verification/verification-guide.md)
 * 코드 리뷰 점검 항목: [code-architecture/CODEREVIEW.md](./code-architecture/CODEREVIEW.md)
-* 주석과 문서 규칙: 저장소 루트 `CLAUDE.md`
