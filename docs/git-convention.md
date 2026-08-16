@@ -10,11 +10,13 @@ git switch -c feat/주문-취소
 git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
 
 ./gradlew check      # 이것이 통과해야 병합된다
-./verify.sh          # 점검 항목 판정. 막지는 않는다
+/v-commit            # 점검 항목 판정이며 PR 를 막지는 않는다. Claude CLI 모드에서 실행시킨다
 
 git push -u origin feat/주문-취소
 gh pr create --base develop
 ```
+
+`/v-commit` 은 Claude Code 안에서만 동작한다. 다른 CLI 를 쓰면 `./verify.sh --agent <명령>` 을 쓴다.
 
 ## 브랜치
 

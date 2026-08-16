@@ -1,0 +1,82 @@
+# 프로젝트 가이드
+
+신선식품 자사몰 백엔드. 처음 왔다면 이 문서부터 본다.
+
+## 시작하기
+
+```bash
+git clone https://github.com/fresh-market/fm-backend.git backend
+cd backend
+./gradlew bootRun      # compose.yaml 의 MySQL 을 자동으로 띄운다
+```
+
+Java 21, Spring Boot 4.0.5, MySQL 8.4, Gradle.
+버전은 [tech-stack.md](./tech-stack.md) 에 있고 **Spring Boot BOM 이 관리하는 것은 버전을 박지 않는다.**
+
+## 작업 흐름
+
+```bash
+git switch develop && git pull
+git switch -c feat/주문-취소
+
+# 작업하고 커밋 (한 줄, [태그] 형식)
+git commit -m "[Feat] 주문 취소 시 재고를 되돌린다"
+
+./gradlew check        # 이것이 통과해야 병합된다
+/v-commit              # 점검 항목 판정이며 PR 를 막지는 않는다. Claude CLI 모드에서 실행시킨다
+                       # --full 옵션은 ISO 품질 속성과 인프라 기준까지 (토큰과 시간 비용이 크므로 권장하지 않음)
+
+git push -u origin feat/주문-취소
+gh pr create --base develop
+```
+
+`/v-commit` 은 **Claude Code 를 띄운 뒤 그 안에서 치는 슬래시 명령**이다. 터미널에서는 동작하지 않는다.
+다른 CLI 를 쓰면 터미널에서 `./verify.sh --agent <명령>` 으로 넘긴다.
+
+**`./verify.sh` 만 치면 지시문만 내고 판정은 하지 않는다.**
+
+자세한 규칙은 [git-convention.md](./git-convention.md).
+
+## 병합을 막는 것
+
+| | |
+|---|---|
+| `*.domain.service.*` 메서드 커버리지 **100%** | 여유가 없다. 서비스 메서드를 만들면 테스트도 만든다 |
+| SonarQube 신규 **Blocker 0건** | |
+| 다른 팀원 승인 **1건** | 자기 PR 은 자기가 승인 못 한다 |
+
+**`main` 에는 직접 못 올린다.** 팀원은 `develop` 으로만 PR 을 연다.
+
+LLM 판정(G-PR)은 지적만 하고 막지 않는다. 읽고 판단은 한다.
+
+## 코드를 쓸 때 보는 것
+
+`docs/code-architecture/` 에 판정 기준이 있다. **리뷰에서 지적되는 근거가 전부 여기 있다.**
+
+| 무엇을 만들 때 | 볼 문서 |
+|---|---|
+| 엔티티 | `entity-creation-guideline.md`, `base-entity-guideline.md` |
+| 레포지토리, 쿼리 | `jpa-rdb-guideline.md` |
+| 컨트롤러, DTO | `api-design-guideline.md` |
+| 패키지 배치 | `domain-package-boundary-guideline.md` |
+| 테스트 | `unit-testing-guideline.md` |
+| 식별자 | `identifier-strategy-guideline.md` |
+
+**각 문서에는 짝이 되는 `-rationale.md` 가 있다.** 규칙은 guideline, 왜 그런지는 rationale 이다.
+
+## 문서를 쓸 때
+
+| 어디에 | 무엇을 |
+|---|---|
+| `docs/code-architecture/` | 코드와 함께 봐야 하는 기준 |
+| `docs/wiki/` | 회의 결과, 문제 해결 공유. GitHub 위키로 자동 반영된다 |
+| `docs/llm-review/` | 검증 기록. 직접 쓰지 않는다 |
+
+주석과 문서 표기 규칙은 저장소 루트 `CLAUDE.md` 에 있다.
+`—`, `·` 를 쓰지 않고 화살표는 `->` 로 쓴다.
+
+## 더 볼 것
+
+* 검증 도구 사용법: [verification/verification-guide.md](./verification/verification-guide.md)
+* 코드 리뷰 점검 항목: [code-architecture/CODEREVIEW.md](./code-architecture/CODEREVIEW.md)
+* 빌드 게이트 기준: [code-architecture/build-gate-guideline.md](./code-architecture/build-gate-guideline.md)

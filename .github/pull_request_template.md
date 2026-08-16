@@ -11,7 +11,7 @@
 <!-- 어떻게 확인했는지. 테스트 이름이나 재현 절차 -->
 
 - [ ] `./gradlew check` 통과
-- [ ] `./verify.sh` 판정 확인
+- [ ] 검증 판정 확인 (Claude Code 안에서 `/v-commit`, 그 밖에는 `./verify.sh --agent <명령>`)
 
 ## 리뷰 요청 사항
 
