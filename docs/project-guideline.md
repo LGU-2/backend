@@ -96,6 +96,7 @@ LLM 판정(G-PR)은 지적만 하고 막지 않는다. 읽고 판단은 한다.
 
 ## 더 볼 것
 
+* 설정 파일과 로컬 DB: [configuration.md](./configuration.md)
 * 검증 도구 사용법: [verification/verification-guide.md](./verification/verification-guide.md)
 * 코드 리뷰 점검 항목: [code-architecture/CODEREVIEW.md](./code-architecture/CODEREVIEW.md)
 * 빌드 게이트 기준: [code-architecture/build-gate-guideline.md](./code-architecture/build-gate-guideline.md)

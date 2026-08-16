@@ -15,6 +15,7 @@ cd backend
 |---|---|
 | [project-guideline.md](./docs/project-guideline.md) | 시작점. 여기부터 |
 | [git-convention.md](./docs/git-convention.md) | 브랜치와 커밋 규칙 |
+| [configuration.md](./docs/configuration.md) | 설정 파일과 로컬 DB |
 | [code-architecture/domain-map.md](./docs/code-architecture/domain-map.md) | 13개 도메인과 층 |
 | [verification/verification-guide.md](./docs/verification/verification-guide.md) | 검증 도구 사용법 |
 | [위키](https://github.com/fresh-market/fm-backend/wiki) | 회의 결과, 문제 해결 공유 |
