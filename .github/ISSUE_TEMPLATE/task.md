@@ -1,3 +1,12 @@
+---
+name: "작업 Task"
+about: "도메인과 할 일을 적는다"
+title: ''
+labels: ''
+assignees: ''
+
+---
+
 ## 도메인
 
 <!-- domain-map.md 의 13개 중 하나 -->

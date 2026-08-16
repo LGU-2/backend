@@ -1,0 +1,2 @@
+# 빈 이슈를 막는다. 도메인과 작업 체크리스트 없이 열리는 이슈를 없애려는 것이다
+blank_issues_enabled: false
