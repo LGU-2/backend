@@ -2,10 +2,12 @@ spring:
   application:
     name: freshmarket
 
+  # 아래 셋은 환경마다 갈린다. 값을 주지 않으면 compose.yaml 의 기본 구성에 맞는다.
+  # bootRun 은 spring-boot-docker-compose 가 띄운 컨테이너에서 읽어낸 값이 이 셋을 덮는다
   datasource:
-    url: jdbc:mysql://localhost:3306/freshmarket?serverTimezone=UTC&characterEncoding=UTF-8
-    username: freshmarket
-    password: freshmarket
+    url: "${DB_URL:jdbc:mysql://localhost:3306/freshmarket?serverTimezone=UTC&characterEncoding=UTF-8}"
+    username: "${DB_USERNAME:freshmarket}"
+    password: "${DB_PASSWORD:freshmarket}"
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:

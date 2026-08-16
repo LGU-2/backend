@@ -1,20 +1,23 @@
+# 값은 .env 로 덮는다. .env 가 없으면 아래 기본값으로 뜬다.
+# .env 는 추적하지 않으므로 각자 다른 포트를 써도 남의 설정을 건드리지 않는다. .env.example 을 복사해 쓴다
 services:
   mysql:
     # 통합 테스트의 Testcontainers 와 같은 태그를 쓴다. 로컬과 CI 가 어긋나면 검증이 의미를 잃는다
     image: mysql:8.4
-    container_name: freshmarket-mysql
+    container_name: ${MYSQL_CONTAINER_NAME:-freshmarket-mysql}
     ports:
-      - "3306:3306"
+      # 왼쪽만 바꾼다. 컨테이너 안은 3306 으로 고정이고 호스트 포트만 사람마다 갈린다
+      - "${MYSQL_PORT:-3306}:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: freshmarket
-      MYSQL_USER: freshmarket
-      MYSQL_PASSWORD: freshmarket
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-freshmarket}
+      MYSQL_USER: ${MYSQL_USER:-freshmarket}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-freshmarket}
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 5s
       timeout: 5s
       retries: 20
