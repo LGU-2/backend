@@ -95,6 +95,38 @@ cp .env.example .env     # 필요한 줄만 남기고 고친다
 **`.env` 는 Compose 만 읽는다. Spring 은 읽지 않는다.**
 `DB_URL` 같은 값을 `.env` 에 적어도 앱에 전달되지 않는다. 셸 환경변수로 줘야 한다.
 
+## 손으로 다룰 때
+
+`bootRun` 이 알아서 띄우므로 평소에는 쓸 일이 없다. DB 만 켜 두거나 안을 들여다볼 때 쓴다.
+
+```bash
+docker compose up -d          # DB 만 띄운다
+docker compose ps             # 떠 있나. healthy 가 될 때까지 기다린다
+docker compose logs -f mysql  # 안 뜰 때 이유를 본다
+docker compose down           # 끈다. 데이터는 남는다
+docker compose down -v        # 끄고 데이터까지 지운다
+```
+
+SQL 로 들어갈 때는 컨테이너 안의 클라이언트를 쓴다. 호스트에 mysql 을 깔지 않아도 된다.
+
+```bash
+docker compose exec mysql mysql -h127.0.0.1 -ufreshmarket -pfreshmarket freshmarket
+```
+
+**`-h127.0.0.1` 을 뺐다가는 소켓으로 붙으려다 실패한다.**
+
+## 안 될 때
+
+| 증상 | 원인과 조치 |
+|---|---|
+| `Bind for 0.0.0.0:3306 failed: port is already allocated` | 포트가 이미 쓰인다. `.env` 에 `MYSQL_PORT` 를 다른 값으로 |
+| 무엇이 그 포트를 쥐었는지 모르겠다 | `lsof -nP -iTCP:3306 -sTCP:LISTEN` |
+| `Migration checksum mismatch` | 적용된 마이그레이션 파일이 바뀌었다. `docker compose down -v` 로 비운다 |
+| 표가 하나도 안 생긴다 | Flyway 자동설정이 안 붙었다. 아래 절을 본다 |
+| `application.yml` 을 고쳤는데 안 바뀐다 | `bootRun` 은 컨테이너에서 읽은 값이 이긴다. 위 플로우 3번 |
+| `.env` 에 `DB_URL` 을 적었는데 안 먹는다 | `.env` 는 Compose 만 읽는다. 셸 환경변수로 준다 |
+| 컨테이너 이름이 겹친다 | `.env` 에 `MYSQL_CONTAINER_NAME` |
+
 ## 스키마는 Flyway 가 소유한다
 
 ```yaml
