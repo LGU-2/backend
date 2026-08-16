@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,18 +28,19 @@ class OrderServiceTest {
     @Test
     void 주문을_조회한다() {
         when(orderRepository.findById(any())).thenReturn(Optional.of(new Order()));
-        orderService.findOrder(1L);
+        assertThat(orderService.findOrder(1L)).isNotNull();
     }
 
     @Test
     void 회원의_주문을_모두_조회한다() {
         when(orderRepository.findByMemberId(any())).thenReturn(List.of(new Order()));
-        orderService.findAll(1L);
+        assertThat(orderService.findAll(1L)).hasSize(1);
     }
 
     @Test
     void 주문을_취소한다() {
         when(orderRepository.findById(any())).thenReturn(Optional.of(new Order()));
         orderService.cancel(1L);
+        verify(orderRepository).save(org.mockito.ArgumentMatchers.any());
     }
 }
