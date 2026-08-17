@@ -13,10 +13,13 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum CommonErrorCode implements ErrorCode {
 
-    // 어느 분기로도 잡히지 않은 예외. 내부 상세를 감추고 이것으로 응답한다
+    /*
+     * 어느 분기로도 잡히지 않은 예외다.
+     * 내부 상세를 감추고 이것으로 응답한다.
+     */
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON-001", "서버 오류가 발생했습니다."),
 
-    // Bean Validation 실패. MethodArgumentNotValidException, BindException, ConstraintViolationException
+    // Bean Validation 실패 (MethodArgumentNotValidException, BindException, ConstraintViolationException)
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON-002", "입력값이 올바르지 않습니다. 요청 형식을 확인해 주세요."),
 
     /*
@@ -25,7 +28,7 @@ public enum CommonErrorCode implements ErrorCode {
      */
     MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "COMMON-003", "요청을 해석할 수 없습니다. 본문과 파라미터 형식을 확인해 주세요."),
 
-    // 자격 증명이 없거나 유효하지 않다. AuthenticationException
+    // 자격 증명이 없거나 유효하지 않다 (AuthenticationException)
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "COMMON-004", "인증이 필요합니다. 로그인 후 다시 시도해 주세요."),
 
     /*
@@ -40,13 +43,13 @@ public enum CommonErrorCode implements ErrorCode {
      */
     ENDPOINT_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON-006", "요청하신 경로를 찾을 수 없습니다."),
 
-    // 경로는 있으나 HTTP 메서드가 다르다. HttpRequestMethodNotSupportedException
+    // 경로는 있으나 HTTP 메서드가 다르다 (HttpRequestMethodNotSupportedException)
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "COMMON-007", "지원하지 않는 요청 방식입니다."),
 
-    // 업로드 크기 상한 초과. MaxUploadSizeExceededException
+    // 업로드 크기 상한 초과 (MaxUploadSizeExceededException)
     CONTENT_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "COMMON-008", "요청 크기가 허용 범위를 넘었습니다."),
 
-    // Content-Type 을 처리할 수 없다. HttpMediaTypeNotSupportedException
+    // Content-Type 을 처리할 수 없다 (HttpMediaTypeNotSupportedException)
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "COMMON-009", "지원하지 않는 형식입니다. Content-Type 을 확인해 주세요.");
 
     private final HttpStatus httpStatus;

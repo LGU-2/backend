@@ -92,6 +92,36 @@ assertThat(order.getMemberId()).isEqualTo(1L);
 
 ## 5. 통합 테스트와 의존성
 
+통합 테스트는 `src/integrationTest/java` 에 둔다. 단위 테스트(`src/test/java`)와 소스셋이 다르다.
+`build.gradle` 이 소스셋을 나눠 두었고 `integrationTest` 태스크가 이 디렉터리만 실행한다.
+커버리지 게이트는 단위 테스트만 센다. 통합 테스트로는 서비스 메서드 100% 를 채울 수 없다.
+
+**테스트는 `domain` 아래에만 둔다.** 공개 창구(`OrderApi`)와 그 DTO 는 도메인 사이의 계약이라
+동작이 없다. 계약이 지켜지는지는 구현(`OrderApiImpl`)의 테스트가 본다.
+
+**단위 테스트는 대상과 정확히 같은 패키지에, 통합 테스트는 `domain` 아래에 둔다.**
+통합 테스트는 계층을 가로지르므로 대상보다 위에 두는 편이 자연스럽다.
+
+```
+src/main/java/com/freshmarket/order/OrderApi.java                             테스트 없음
+src/main/java/com/freshmarket/order/domain/OrderApiImpl.java
+src/main/java/com/freshmarket/order/domain/service/OrderService.java
+
+src/test/java/com/freshmarket/order/domain/OrderApiImplTest.java              같은 패키지
+src/test/java/com/freshmarket/order/domain/service/OrderServiceTest.java      같은 패키지
+
+src/integrationTest/java/com/freshmarket/order/domain/OrderApiImplIntegrationTest.java
+src/integrationTest/java/com/freshmarket/order/domain/OrderIntegrationTest.java
+```
+
+같은 패키지여야 package-private 클래스와 메서드에 닿는다.
+`~ApiImpl` 과 `Controller` 가 package-private 이므로(`DPB-6-01`) 패키지가 어긋나면 그 구현을 테스트할 수 없다.
+
+이름은 단위가 `~Test`, 통합이 `~IntegrationTest` 다.
+
+**넷 다 빌드가 강제한다.** `TestPlacementTest` 와 `PlacementIntegrationTest` 가 각 소스셋에서 확인하며,
+어기면 `./gradlew check` 가 실패해 병합이 막힌다.
+
 외부 의존성은 종류에 따라 다르게 다뤄야 한다.
 
 점검 항목
@@ -99,6 +129,8 @@ assertThat(order.getMemberId()).isEqualTo(1L);
   DB를 mock으로 대체하면 실제 쿼리와 매핑의 오류를 잡지 못한다.
 * `UT-5-02` 외부 결제 API처럼 우리가 통제할 수 없는 공유 의존성만 mock으로 대체하는가
 * `UT-5-03` 통합 테스트가 관리 의존성과의 실제 연동(쿼리, 트랜잭션, 매핑)을 검증하는가
+* `UT-5-04` 테스트 배치 규칙이 빌드에 묶여 있는가
+  `TestPlacementTest`와 `PlacementIntegrationTest`가 각 소스셋에서 위치, 패키지, 이름을 확인한다. 배치가 어긋나면 통합 테스트가 단위 테스트로 실행되어 커버리지에 합산되고, 통합 테스트를 제외한 `BLD-1-04`가 뚫린다.
 
 ```java
 // 점검 대상: DB(관리 의존성)를 mock으로 대체해 실제 연동을 검증하지 못함
