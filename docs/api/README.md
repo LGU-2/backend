@@ -16,6 +16,28 @@
 | [coupon.md](./coupon.md) | 쿠폰함, 선착순 발급, 쿠폰 관리 |
 | [statistics.md](./statistics.md) | 판매 집계, 소진율, 주문 통계, 캠페인 대상 |
 
+## 도메인과 문서
+
+문서는 도메인이 아니라 **사용자 흐름**으로 묶었다. 주문은 장바구니부터 클레임까지가 한 흐름이라
+나누면 상태 전이를 따라가기 어렵다. 코드 패키지는 [domain-map.md](../code-architecture/domain-map.md)
+의 13개를 따르므로 대응을 여기 적어 둔다.
+
+| 도메인 | 문서 | 절 |
+|---|---|---|
+| `member` | [member.md](./member.md) | 회원 정보, 배송지 |
+| `admin` | [member.md](./member.md), [auth.md](./auth.md) | 관리자 계정, 인증 |
+| `product` | [product.md](./product.md) | 상품, 카테고리 |
+| `review` | [product.md](./product.md) | 리뷰 |
+| `qna` | [product.md](./product.md) | Q&A |
+| `stock` | [stock.md](./stock.md) | 전체 |
+| `cart` | [order.md](./order.md) | 장바구니 |
+| `order` | [order.md](./order.md) | 주문 |
+| `payment` | [order.md](./order.md) | 결제 |
+| `claim` | [order.md](./order.md) | 클레임 |
+| `shipment` | [order.md](./order.md) | 관리자 주문 관리, 배송 사진 |
+| `coupon` | [coupon.md](./coupon.md) | 전체 |
+| `statistics` | [statistics.md](./statistics.md) | 전체 |
+
 ## 공통 규약
 
 ### 경로

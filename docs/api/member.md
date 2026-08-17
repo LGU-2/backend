@@ -51,6 +51,8 @@ PATCH /v1/members/me
 
 `PENDING_PROFILE` 상태에서 필수 항목을 채우면 `ACTIVE` 로 바뀐다.
 
+**회원 행이 만들어질 때 장바구니도 함께 만들어진다.** 회원당 하나이고 생성 API 가 없다 ([order.md](./order.md) 참고).
+
 ### 탈퇴
 
 ```
