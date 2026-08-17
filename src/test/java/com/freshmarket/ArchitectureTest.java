@@ -109,6 +109,33 @@ class ArchitectureTest {
                 .toArray(String[]::new);
     }
 
+    /*
+     * 계층 패키지의 클래스는 그 계층 이름을 접미사로 갖는다 (DPB-4-10).
+     *
+     * 커버리지 게이트가 service 패키지 전체를 100% 로 요구한다 (BLD-1-01).
+     * 그 패키지에 정책 객체나 계산 헬퍼를 두면 그것들에도 100% 가 요구된다.
+     * 이름을 강제하면 "여기 있는 것은 전부 서비스다" 가 성립한다.
+     *
+     * 접미사를 붙일 수 없는 클래스는 그 계층에 속하지 않는다. 정책 객체나 계산 헬퍼는
+     * service 패키지가 아니라 domain 바로 아래나 도메인 루트에 둔다.
+     */
+    @ArchTest
+    static final ArchRule 컨트롤러_이름 = layerSuffix("controller", "Controller");
+
+    @ArchTest
+    static final ArchRule 서비스_이름 = layerSuffix("service", "Service");
+
+    @ArchTest
+    static final ArchRule 레포지토리_이름 = layerSuffix("repository", "Repository");
+
+    private static ArchRule layerSuffix(String layer, String suffix) {
+        return classes()
+                .that().resideInAPackage("..domain." + layer + "..")
+                .and().areTopLevelClasses()
+                .should().haveSimpleNameEndingWith(suffix)
+                .allowEmptyShould(true);
+    }
+
     // 순환 의존은 어느 층에서든 막는다
     @ArchTest
     static final ArchRule 순환_의존이_없다 = slices()
