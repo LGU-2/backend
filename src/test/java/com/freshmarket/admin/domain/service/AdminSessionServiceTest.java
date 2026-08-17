@@ -35,18 +35,31 @@ class AdminSessionServiceTest {
     private final AdminRepository adminRepository = mock(AdminRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(TEST_JWT_SECRET);
+
     private final AdminSessionService adminSessionService = new AdminSessionService(
-            adminRepository, passwordEncoder, jwtTokenProvider, Clock.systemDefaultZone(), 1800L, 86400L);
+            adminRepository,
+            passwordEncoder,
+            jwtTokenProvider,
+            Clock.systemDefaultZone(),
+            1800L,
+            86400L
+    );
 
     @Test
     void 아이디와_비밀번호가_일치하면_토큰을_발급한다() {
         // given
-        Admin admin = AdminFixture.active("admin.kim", passwordEncoder.encode(RAW_PASSWORD), AdminRole.ADMIN);
+        Admin admin = AdminFixture.active(
+                "admin.kim",
+                passwordEncoder.encode(RAW_PASSWORD),
+                AdminRole.ADMIN
+        );
+
         when(adminRepository.findByLoginId("admin.kim")).thenReturn(Optional.of(admin));
 
+        AdminSessionCreateRequest request = new AdminSessionCreateRequest("admin.kim", RAW_PASSWORD);
+
         // when
-        AdminSessionResponse response = adminSessionService.create(
-                new AdminSessionCreateRequest("admin.kim", RAW_PASSWORD));
+        AdminSessionResponse response = adminSessionService.create(request);
 
         // then
         assertThat(response.accessToken()).isNotBlank();
@@ -55,7 +68,9 @@ class AdminSessionServiceTest {
         assertThat(response.refreshToken()).isNotBlank();
         assertThat(response.admin().loginId()).isEqualTo("admin.kim");
         assertThat(response.admin().role()).isEqualTo(AdminRole.ADMIN);
-        // 로그인 성공 시 리프레시 토큰이 엔티티에도 반영되어야 다음 로그인에서 이전 토큰이 무효가 된다
+
+        // 로그인 성공 시 리프레시 토큰이 엔티티에도 반영되어야
+        // 다음 로그인에서 이전 토큰이 무효가 된다.
         assertThat(admin.getRefreshTokenHash()).isNotNull();
         assertThat(admin.getRefreshTokenExpiresAt()).isNotNull();
     }
@@ -65,11 +80,13 @@ class AdminSessionServiceTest {
         // given
         when(adminRepository.findByLoginId("nobody")).thenReturn(Optional.empty());
 
+        AdminSessionCreateRequest request = new AdminSessionCreateRequest("nobody", RAW_PASSWORD);
+
         // when, then
-        // 이 경로에서도 내부적으로 더미 해시로 BCrypt 를 돌린다 (SEC-6-04). 예외 없이
-        // LOGIN_FAILED 로 끝나는 것 자체가 더미 해시가 유효한 BCrypt 형식이라는 회귀 방어다.
-        assertThatThrownBy(() -> adminSessionService.create(
-                new AdminSessionCreateRequest("nobody", RAW_PASSWORD)))
+        // 이 경로에서도 내부적으로 더미 해시로 BCrypt 를 돌린다 (SEC-6-04).
+        // 예외 없이 LOGIN_FAILED 로 끝나는 것 자체가 더미 해시가
+        // 유효한 BCrypt 형식이라는 회귀 방어다.
+        assertThatThrownBy(() -> adminSessionService.create(request))
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
                 .isEqualTo(AdminErrorCode.LOGIN_FAILED);
@@ -78,12 +95,20 @@ class AdminSessionServiceTest {
     @Test
     void 비밀번호가_틀리면_로그인에_실패한다() {
         // given
-        Admin admin = AdminFixture.active("admin.kim", passwordEncoder.encode(RAW_PASSWORD), AdminRole.ADMIN);
-        when(adminRepository.findByLoginId("admin.kim")).thenReturn(Optional.of(admin));
+        Admin admin = AdminFixture.active(
+                "admin.kim",
+                passwordEncoder.encode(RAW_PASSWORD),
+                AdminRole.ADMIN
+        );
+
+        when(adminRepository.findByLoginId("admin.kim"))
+                .thenReturn(Optional.of(admin));
+
+        AdminSessionCreateRequest request =
+                new AdminSessionCreateRequest("admin.kim", "wrong-password");
 
         // when, then
-        assertThatThrownBy(() -> adminSessionService.create(
-                new AdminSessionCreateRequest("admin.kim", "wrong-password")))
+        assertThatThrownBy(() -> adminSessionService.create(request))
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
                 .isEqualTo(AdminErrorCode.LOGIN_FAILED);
@@ -92,31 +117,50 @@ class AdminSessionServiceTest {
     @Test
     void 비활성_계정이고_비밀번호가_맞으면_비활성화_사실을_알려준다() {
         // given
-        Admin admin = AdminFixture.inactive("admin.kim", passwordEncoder.encode(RAW_PASSWORD), AdminRole.ADMIN);
-        when(adminRepository.findByLoginId("admin.kim")).thenReturn(Optional.of(admin));
+        Admin admin = AdminFixture.inactive(
+                "admin.kim",
+                passwordEncoder.encode(RAW_PASSWORD),
+                AdminRole.ADMIN
+        );
+
+        when(adminRepository.findByLoginId("admin.kim"))
+                .thenReturn(Optional.of(admin));
+
+        AdminSessionCreateRequest request =
+                new AdminSessionCreateRequest("admin.kim", RAW_PASSWORD);
 
         // when, then
-        assertThatThrownBy(() -> adminSessionService.create(
-                new AdminSessionCreateRequest("admin.kim", RAW_PASSWORD)))
+        assertThatThrownBy(() -> adminSessionService.create(request))
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
                 .isEqualTo(AdminErrorCode.ACCOUNT_INACTIVE);
     }
 
     /*
-     * 순서를 바꾼 이유(SEC-6-04)를 잠그는 테스트다. 예전 순서(상태 확인이 먼저)였다면
-     * 비밀번호를 몰라도 계정이 비활성이라는 사실이 드러났다. 지금은 비밀번호가 맞아야만
-     * ACCOUNT_INACTIVE 에 도달하므로, 틀린 비밀번호로는 계정 상태를 알아낼 수 없다.
+     * 순서를 바꾼 이유(SEC-6-04)를 잠그는 테스트다.
+     * 예전 순서(상태 확인이 먼저)였다면 비밀번호를 몰라도
+     * 계정이 비활성이라는 사실이 드러났다.
+     *
+     * 지금은 비밀번호가 맞아야만 ACCOUNT_INACTIVE 에 도달하므로,
+     * 틀린 비밀번호로는 계정 상태를 알아낼 수 없다.
      */
     @Test
     void 비활성_계정이어도_비밀번호가_틀리면_계정_상태를_알려주지_않는다() {
         // given
-        Admin admin = AdminFixture.inactive("admin.kim", passwordEncoder.encode(RAW_PASSWORD), AdminRole.ADMIN);
-        when(adminRepository.findByLoginId("admin.kim")).thenReturn(Optional.of(admin));
+        Admin admin = AdminFixture.inactive(
+                "admin.kim",
+                passwordEncoder.encode(RAW_PASSWORD),
+                AdminRole.ADMIN
+        );
+
+        when(adminRepository.findByLoginId("admin.kim"))
+                .thenReturn(Optional.of(admin));
+
+        AdminSessionCreateRequest request =
+                new AdminSessionCreateRequest("admin.kim", "wrong-password");
 
         // when, then
-        assertThatThrownBy(() -> adminSessionService.create(
-                new AdminSessionCreateRequest("admin.kim", "wrong-password")))
+        assertThatThrownBy(() -> adminSessionService.create(request))
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
                 .isEqualTo(AdminErrorCode.LOGIN_FAILED);

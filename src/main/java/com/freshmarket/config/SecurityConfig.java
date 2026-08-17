@@ -12,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /*
@@ -64,7 +65,9 @@ public class SecurityConfig {
                  * 이 엔드포인트만 검사 대상에서 제외한다. 이후 Bearer 토큰 기반 변경 API를 추가할 때는
                  * 해당 API의 인증 방식에 맞춰 제외 범위를 명시적으로 추가한다.
                  */
-                .csrf(csrf -> csrf.ignoringRequestMatchers(adminLoginPath))
+                .csrf(csrf -> csrf
+                        .ignoringRequestMatchers(
+                                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, adminLoginPath)))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
