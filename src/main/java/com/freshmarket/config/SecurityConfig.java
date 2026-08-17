@@ -9,10 +9,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /*
@@ -70,13 +69,10 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 /*
-                 * CSRF 보호 자체는 유지한다. 관리자 로그인은 아직 인증 쿠키가 없는 공개 POST 이므로
-                 * 이 엔드포인트만 검사 대상에서 제외한다. 이후 Bearer 토큰 기반 변경 API를 추가할 때는
-                 * 해당 API의 인증 방식에 맞춰 제외 범위를 명시적으로 추가한다.
+                 * 서버 세션을 두지 않으므로 CSRF 토큰을 보관할 곳이 없다.
+                 * 쿠키 기반 인증으로 바꾸면 이 두 줄을 함께 되돌려야 한다.
                  */
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers(
-                                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, adminLoginPath)))
+                .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -100,6 +96,6 @@ public class SecurityConfig {
     // 관리자 비밀번호 해싱 전용. 회원은 카카오에 인증을 위임하므로 비밀번호 자체가 없다
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 }
