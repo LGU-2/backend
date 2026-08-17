@@ -16,16 +16,16 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Category extends BaseMutableTimeEntity {
 
+    private static final int NAME_MAX_LENGTH = 50;
+
     @Column(name = "parent_id")
     private Long parentId;
 
-    @Column(name = "name", nullable = false, length = 50)
+    @Column(name = "name", nullable = false, length = NAME_MAX_LENGTH)
     private String name;
 
     private Category(String name, Long parentId) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("name 은 필수다");
-        }
+        validateName(name);
         this.name = name;
         this.parentId = parentId;
     }
@@ -39,9 +39,17 @@ public class Category extends BaseMutableTimeEntity {
     }
 
     public void rename(String newName) {
-        if (newName == null || newName.isBlank()) {
+        validateName(newName);
+        this.name = newName;
+    }
+
+    private static void validateName(String name) {
+        if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("name 은 필수다");
         }
-        this.name = newName;
+        if (name.length() > NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "name 은 " + NAME_MAX_LENGTH + "자를 넘을 수 없다: " + name.length());
+        }
     }
 }

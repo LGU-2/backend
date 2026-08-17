@@ -6,6 +6,7 @@ import com.freshmarket.product.domain.exception.ProductErrorCode;
 import com.freshmarket.product.domain.exception.ProductException;
 import com.freshmarket.product.domain.repository.CategoryRepository;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,11 +32,16 @@ public class AdminCategoryService {
 
     @Transactional
     public CategoryResponse register(String name, Long parentId) {
-        if (categoryRepository.existsByParentIdAndName(parentId, name)) {
+        validateParentExists(parentId);
+        if (existsDuplicateName(parentId, name)) {
             throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME);
         }
         Category category = Category.register(name, parentId);
-        categoryRepository.save(category);
+        try {
+            categoryRepository.save(category);
+        } catch (DataIntegrityViolationException e) {
+            throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME, e);
+        }
         return CategoryResponse.from(category);
     }
 
@@ -43,18 +49,35 @@ public class AdminCategoryService {
     public CategoryResponse rename(Long categoryId, String newName) {
         Category category = getCategoryOrThrow(categoryId);
         boolean nameChanged = !category.getName().equals(newName);
-        if (nameChanged && categoryRepository.existsByParentIdAndName(category.getParentId(), newName)) {
+        if (nameChanged && existsDuplicateName(category.getParentId(), newName)) {
             throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME);
         }
-        category.rename(newName);
+        try {
+            category.rename(newName);
+            categoryRepository.flush();   // UPDATE를 지금 실행시켜서 제약 위반을 이 안에서 잡음
+        } catch (DataIntegrityViolationException e) {
+            throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME, e);
+        }
         return CategoryResponse.from(category);
     }
 
     @Transactional
     public void delete(Long categoryId) {
         Category category = getCategoryOrThrow(categoryId);
-        // 상품 도메인 완료 후 소속 상품 존재 검증 추가 — ProductErrorCode.CATEGORY_HAS_PRODUCTS
+        // TODO: 상품 도메인 완료 후 소속 상품 존재 검증 추가 — ProductErrorCode.CATEGORY_HAS_PRODUCTS
         categoryRepository.delete(category);
+    }
+
+    private boolean existsDuplicateName(Long parentId, String name) {
+        return parentId == null
+                ? categoryRepository.existsByParentIdIsNullAndName(name)
+                : categoryRepository.existsByParentIdAndName(parentId, name);
+    }
+
+    private void validateParentExists(Long parentId) {
+        if (parentId != null && !categoryRepository.existsById(parentId)) {
+            throw new ProductException(ProductErrorCode.CATEGORY_NOT_FOUND);
+        }
     }
 
     private Category getCategoryOrThrow(Long categoryId) {
