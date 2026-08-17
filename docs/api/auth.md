@@ -42,6 +42,34 @@ refresh_token_expires_at  DATETIME(6)
 `:refresh` 만 커스텀 메서드다. 갱신은 클라이언트가 필드를 고치는 것이 아니라
 **서버가 규칙에 따라 수행하는 동작**이라 `PATCH` 로 표현되지 않는다 (`API-3-08`).
 
+## 토큰을 어떻게 전달하나
+
+**둘을 다르게 준다.** 발급할 때와 쓸 때를 나눠 봐야 한다.
+
+| | 발급 (서버 -> 클라이언트) | 사용 (클라이언트 -> 서버) |
+|---|---|---|
+| Access | 응답 본문 | `Authorization: Bearer <token>` |
+| Refresh | **`Set-Cookie` 헤더** | **브라우저가 쿠키로 자동 첨부** |
+
+`Authorization` 은 요청 헤더라 서버가 응답으로 돌려줄 자리가 아니다. 그래서 **발급은 본문, 사용은 헤더**다.
+
+리프레시는 반대로 클라이언트가 손댈 일이 없다. 브라우저가 알아서 붙이므로
+**스크립트가 값을 알 필요가 없고, 그래서 `HttpOnly` 로 막을 수 있다.**
+
+```
+Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict;
+            Path=/v1/auth/tokens; Max-Age=1209600
+```
+
+**수명이 갈라서 그렇다.** Access 는 30분이라 탈취돼도 구간이 짧지만, Refresh 는 14일이라
+XSS 로 한 번 새면 2주 동안 재발급이 가능하다. `HttpOnly` 를 걸면 스크립트가 아예 읽지 못한다.
+
+`Path` 를 `:refresh` 와 `DELETE` 가 쓰는 경로로 좁힌다. **다른 API 요청에는 실려 가지 않는다.**
+
+**대신 CSRF 가 성립하게 된다.** 브라우저가 쿠키를 자동으로 붙이기 때문이다.
+`SameSite=Strict` 가 대부분을 막지만, 그 경로에 한해 CSRF 대응이 필요한지 따로 판단한다.
+쿠키를 쓰지 않았다면 없었을 문제이고, **이것이 XSS 위험과 맞바꾼 대가다.**
+
 ## 회원
 
 ### 로그인 시작
@@ -90,11 +118,12 @@ POST /v1/auth/tokens
     "accessToken": "eyJ...",
     "tokenType": "Bearer",
     "expiresInSeconds": 1800,
-    "refreshToken": "...",
     "member": { "memberId": 1, "nickname": "홍길동", "status": "PENDING_PROFILE" }
   }
 }
 ```
+
+리프레시 토큰은 본문에 없다. **`Set-Cookie` 헤더로 나간다.**
 
 **`status` 가 `PENDING_PROFILE` 이면 추가 정보 입력이 남아 있다.** 프론트가 입력 폼으로 보낸다.
 
@@ -111,11 +140,9 @@ POST /v1/auth/tokens
 POST /v1/auth/tokens:refresh
 ```
 
-```json
-{ "refreshToken": "..." }
-```
+**요청 본문이 없다.** 리프레시 토큰은 쿠키로 실려 온다.
 
-**Rotation 을 적용한다.** 재발급하면 이전 리프레시 토큰은 즉시 무효가 된다.
+**Rotation 을 적용한다.** 새 토큰을 다시 `Set-Cookie` 로 내린다. 재발급하면 이전 리프레시 토큰은 즉시 무효가 된다.
 같은 토큰으로 두 번 오면 탈취를 의심해 그 회원의 리프레시 토큰을 비운다.
 
 | 오류 | 코드 | 언제 |
@@ -128,7 +155,8 @@ POST /v1/auth/tokens:refresh
 DELETE /v1/auth/tokens
 ```
 
-`refresh_token_hash` 를 비우고, 카카오 로그아웃 API 를 어드민 키와 회원번호로 호출한다.
+`refresh_token_hash` 를 비우고 **쿠키를 만료시킨다**(`Max-Age=0`).
+그 뒤 카카오 로그아웃 API 를 어드민 키와 회원번호로 호출한다.
 **카카오계정 함께 로그아웃은 제공하지 않는다.**
 
 식별자를 받지 않는다. **지울 대상은 토큰의 주체로 정해진다** (`SEC-1-02`).
@@ -164,7 +192,6 @@ POST /v1/admin/auth/tokens
     "accessToken": "eyJ...",
     "tokenType": "Bearer",
     "expiresInSeconds": 1800,
-    "refreshToken": "...",
     "admin": { "loginId": "admin.kim", "name": "김관리", "role": "ADMIN" }
   }
 }
@@ -186,7 +213,33 @@ POST   /v1/admin/auth/tokens:refresh
 DELETE /v1/admin/auth/tokens
 ```
 
-회원과 같다. 수명만 다르다 (Refresh 1일, 자동 로그인 미제공).
+회원과 같다. 수명과 쿠키 경로만 다르다.
+
+```
+Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict;
+            Path=/v1/admin/auth/tokens; Max-Age=86400
+```
+
+Refresh 가 1일인 것은 **자동 로그인을 제공하지 않기 때문이다.** 관리자 콘솔은 회원 서비스보다
+권한이 크므로 로그인 상태를 오래 끌지 않는다.
+
+`Path` 가 달라 **관리자 쿠키가 회원 API 요청에 실려 가지 않는다.**
+
+**요구사항이 `HttpOnly` 쿠키를 지정한 것은 회원뿐이다.** 관리자는 전달 방식을 적어 두지 않았고,
+여기서 같은 방식으로 정했다. 근거는 보안이다.
+
+```
+관리자 콘솔도 브라우저 앱이라 XSS 위험이 같다
+관리자 토큰이 더 값지다. 털리면 상품 삭제, 환불, 권한 변경까지 열린다
+수명 1일은 위험을 줄일 뿐 없애지 못한다
+```
+
+**전제가 하나 있다. 관리자 콘솔과 API 가 같은 사이트여야 한다.**
+다른 사이트면 `SameSite=Strict` 쿠키가 실리지 않아 `None` 으로 낮춰야 하는데,
+그러면 CSRF 방어가 사라져 쿠키를 쓴 이점이 반감된다.
+
+배포를 나눠야 하는 상황이 오면 **`SameSite` 를 낮추기 전에 같은 사이트로 묶는 방법을 먼저 찾는다.**
+서브도메인은 같은 사이트로 취급되므로 `admin.example.com` 과 `api.example.com` 은 문제없다.
 
 ### 비밀번호 변경
 
