@@ -1,9 +1,10 @@
-package com.freshmarket.admin.domain.repository;
+package com.freshmarket.admin.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.freshmarket.admin.domain.entity.Admin;
 import com.freshmarket.admin.domain.entity.AdminRole;
+import com.freshmarket.admin.domain.repository.AdminRepository;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -26,7 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @Testcontainers
 @SpringBootTest
-class AdminRepositoryTest {
+class AdminIntegrationTest {
 
     @Container
     @ServiceConnection
