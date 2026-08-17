@@ -9,14 +9,14 @@
 핵심 원칙은 하나다. **도메인 루트에 API와 DTO만 두고, 나머지는 전부 `domain` 아래로 내린다.**
 
 > **코드 예시의 도메인 이름은 모두 예시다.**
-> `order`, `member`, `product`, `payment` 같은 이름과 베이스 패키지 `com.example.backend`는 규칙을 설명하기 위한 것이며, 실제 프로젝트에서는 각자의 이름으로 바꿔 적용한다.
+> `order`, `member`, `product`, `payment` 같은 이름과 베이스 패키지 `com.freshmarket`는 규칙을 설명하기 위한 것이며, 실제 프로젝트에서는 각자의 이름으로 바꿔 적용한다.
 
 ## 1. 패키지 구조
 
 베이스 패키지의 **직계 하위 패키지가 곧 도메인**이다. 도메인 안의 구현은 전부 `domain` 하위로 내린다.
 
 ```
-com.example.backend
+com.freshmarket
 ├── common                                <- 모든 도메인이 의존 가능. 도메인을 모른다
 │   ├── entity                            <- BaseMutableTimeEntity, BaseImmutableTimeEntity
 │   ├── response                          <- ResponseEnvelope, PageResponse
@@ -180,7 +180,30 @@ payment
 * `DPB-4-05` API 구현체에 비즈니스 로직이 없는가
   조합과 변환만 하고 규칙 판단은 내부 서비스에 남긴다.
 
-### 4.2 회원용과 관리자용
+### 4.2 계층 접미사
+
+계층 패키지에 두는 클래스는 그 계층 이름을 접미사로 갖는다.
+
+| 패키지 | 접미사 |
+|---|---|
+| `domain/controller` | `~Controller` |
+| `domain/service` | `~Service` |
+| `domain/repository` | `~Repository` |
+
+**커버리지 게이트가 `service` 패키지 전체를 100%로 요구한다**(`BLD-1-01`). 그 패키지에 정책 객체나
+계산 헬퍼를 함께 두면 그것들에도 100%가 요구된다. 이름을 강제하면 "여기 있는 것은 전부 서비스다"가
+성립해서, 대상 선정과 실제 내용이 어긋나지 않는다.
+
+이 규칙은 `ArchitectureTest`가 빌드에서 강제한다. 어기면 `./gradlew check`가 실패한다.
+
+**계층 패키지에 접미사를 붙일 수 없는 클래스는 그 계층에 속하지 않는다.** 정책 객체나 계산 헬퍼는
+`service` 패키지가 아니라 `domain` 바로 아래나 도메인 루트에 둔다.
+
+점검 항목
+* `DPB-4-10` 계층 패키지의 클래스가 그 계층 이름을 접미사로 갖는가
+  `service` 패키지는 전체가 커버리지 100% 대상이므로, 서비스가 아닌 클래스를 두면 그것까지 100%를 요구받는다.
+
+### 4.3 회원용과 관리자용
 
 한 도메인에 소비자가 둘이면 **관리자 쪽에만 `Admin`을 앞에 붙인다.** 회원용이 기본이라 접두사가 없다.
 
@@ -255,22 +278,22 @@ L0 기반    member, product
 ### 6.2 ArchUnit 아키텍처 테스트 (2차, 빌드 차원)
 
 ```java
-@AnalyzeClasses(packages = "com.example.backend",
+@AnalyzeClasses(packages = "com.freshmarket",
         importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
     // 다른 도메인의 domain 패키지 접근 금지
     @ArchTest
     static final ArchRule domainIsHidden = slices()
-            .matching("com.example.backend.(*)..")
+            .matching("com.freshmarket.(*)..")
             .namingSlices("$1")
             .should().notDependOnEachOther()
             .ignoreDependency(
-                    resideInAPackage("com.example.backend.."),
+                    resideInAPackage("com.freshmarket.."),
                     resideInAnyPackage(
-                            "com.example.backend.*",          // 도메인 루트만 허용
-                            "com.example.backend.common..",
-                            "com.example.backend.config.."));
+                            "com.freshmarket.*",          // 도메인 루트만 허용
+                            "com.freshmarket.common..",
+                            "com.freshmarket.config.."));
 
     // 도메인 내부 계층 방향 강제
     @ArchTest
@@ -305,19 +328,19 @@ class ArchitectureTest {
     // 순환 의존 금지
     @ArchTest
     static final ArchRule noCycles = slices()
-            .matching("com.example.backend.(*)..")
+            .matching("com.freshmarket.(*)..")
             .should().beFreeOfCycles();
 
     // 도메인 루트에 엔티티 유출 금지
     @ArchTest
     static final ArchRule noEntityInRoot = noClasses()
-            .that().resideInAPackage("com.example.backend.*")
+            .that().resideInAPackage("com.freshmarket.*")
             .should().beAnnotatedWith(Entity.class);
 
     // 도메인 루트는 인터페이스, record, 예외만
     @ArchTest
     static final ArchRule rootIsContractOnly = classes()
-            .that().resideInAPackage("com.example.backend.*")
+            .that().resideInAPackage("com.freshmarket.*")
             .should().beInterfaces()
             .orShould().beRecords()
             .orShould().beAssignableTo(RuntimeException.class);

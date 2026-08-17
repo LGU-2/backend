@@ -178,6 +178,8 @@ rules:
     status: unverified
     trigger:
       - "src/test/**/*Test.java"
+      # 통합 테스트는 별도 소스셋이라 src/test 글롭에 걸리지 않는다 (build.gradle 의 integrationTest)
+      - "src/integrationTest/**/*.java"
     anchors:
       # 대상 프로덕션 클래스를 함께 본다
       - "**/domain/service/*.java"

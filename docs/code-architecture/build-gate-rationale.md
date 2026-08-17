@@ -16,19 +16,19 @@
 
 | 항목 | 값 |
 |------|-----|
-| 대상 | `*.domain.service.*` (service 패키지 클래스) |
+| 대상 | `*.domain.service.*` (service 패키지 전체) |
 | 판정 단위 | 클래스별 (`element = 'CLASS'`) |
 | 카운터 | 메서드 (`counter = 'METHOD'`) |
 | 기준 | **100%** |
 | 판정 주체 | Gradle `jacocoTestCoverageVerification` |
 
-규칙은 한 문장으로 표현된다. **service 패키지의 모든 메서드는 최소 한 번은 테스트가 지나가야 한다.**
+규칙은 한 문장으로 표현된다. **service 패키지의 모든 메서드는 최소 한 번은 단위 테스트가 지나가야 한다.**
 
 `includes` 로 대상을 좁히므로 exclude 목록이 필요 없다. config, dto, entity, Q클래스가 자동으로 빠지고, 새 패키지가 생겨도 게이트가 흔들리지 않는다.
 
 ```gradle
 jacocoTestCoverageVerification {
-    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('test.exec')
     violationRules {
         rule {
             element = 'CLASS'
@@ -100,26 +100,27 @@ Mockito 의 `@InjectMocks` 든 직접 `new` 든 스프링 주입이든 전부 �
 
 private 메서드가 계산된다는 점도 유의한다. 특정 분기에서만 호출되는 private 헬퍼가 있으면 그 분기를 타는 테스트가 필요하다. 즉 METHOD 기준이라도 **private 메서드를 통해서는 간접적으로 경로 검증이 강제된다.**
 
-#### 3.10.4 단위 테스트와 통합 테스트를 합산한다
+#### 3.10.4 통합 테스트는 합산하지 않는다
 
-JaCoCo 는 실행마다 별도 `.exec` 파일을 만든다. 두 테스트의 결과를 합쳐야 한다. **각각 따로 보면 어느 쪽도 100% 를 못 넘지만 합치면 넘는 경우가 대부분이다.**
+JaCoCo 는 실행마다 별도 `.exec` 파일을 만든다. 게이트는 그중 `test.exec` 만 읽는다.
+
+**합산하면 게이트가 무의미해진다.** 통합 테스트는 계층을 가로질러 실행되므로 서비스 메서드를 지나가기만 해도
+커버리지가 찬다. 그 메서드의 분기와 예외 경로를 하나도 확인하지 않고 100% 를 채울 수 있다.
+게이트의 목적이 "서비스 로직에 단위 테스트가 있는가" 라면 합산은 그 목적을 지운다.
 
 ```gradle
-tasks.register('integrationTest', Test) {
-    useJUnitPlatform { includeTags 'integration' }
-    shouldRunAfter test
-}
-
 jacocoTestReport {
-    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    // 게이트와 같은 실행 데이터를 읽는다. 다르면 Sonar 수치와 차단 기준이 어긋난다
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('test.exec')
     reports {
         xml.required = true      // SonarQube 가 읽는 형식
-        html.required = true
     }
 }
 
-jacocoTestReport.dependsOn test, integrationTest
+jacocoTestReport.dependsOn test
 ```
+
+통합 테스트는 여전히 `check` 에 묶여 있어 깨지면 병합이 막힌다. 커버리지 계산에만 들어가지 않는다.
 
 통합 테스트는 Testcontainers 로 `mysql:8.4` 를 띄운다. 인메모리 DB 를 쓰면 방언과 잠금 동작이 달라 조건부 UPDATE 검증이 성립하지 않는다.
 
