@@ -151,7 +151,7 @@ PAYMENT_PENDING -> PAID -> PRODUCT_PREPARING -> SHIPMENT_PREPARING -> SHIPPING -
 | `PRODUCT_PREPARING` | **취소. 회원이 직접 취소할 수 있는 마지막 단계다** |
 | `SHIPMENT_PREPARING` 이후 | 직접 취소 불가. 고객센터를 거친다 |
 | `DELIVERED` | 반품 신청, 교환 신청, 구매확정 |
-| `CONFIRMED` | 없음. 쿠폰과 포인트가 확정된다 |
+| `CONFIRMED` | 없음. 쿠폰 사용이 확정된다 |
 
 **`CANCELED` 와 `RETURNED` 는 주문 전체에만 쓴다.** 취소는 라인 단위로 일어나지 않고,
 부분 반품은 헤더를 바꾸지 않고 라인만 바꾼다.
@@ -205,7 +205,7 @@ POST /v1/orders/{orderId}:requestExchange
 
 **동일 상품, 동일 옵션만 교환한다.** 다른 상품은 반품 후 재주문이다.
 
-결제 금액이 바뀌지 않으므로 **쿠폰과 포인트는 복원하지 않고 유지한다.**
+결제 금액이 바뀌지 않으므로 **쿠폰은 복원하지 않고 유지한다.**
 
 | 오류 | 코드 | 언제 |
 |---|---|---|
@@ -299,8 +299,3 @@ POST /v1/admin/shipments/{shipmentId}/photos/{photoId}:confirm
 
 **배송비 정책이 없다.** N원 이상 무료, 도서산간 추가 같은 규칙이 정해지지 않았다.
 지금은 `orders.shipping_fee` 에 계산된 값을 넣을 뿐이고, 계산 규칙을 어디에 둘지 결정이 필요하다.
-
-**무통장입금이 빠져 있다.** 요구사항에는 입금기한 3시간과 함께 있으나 `payment.method` 가
-`CARD` 와 `EASY_PAY` 만 허용한다. 넣으려면 CHECK 를 바꾸는 마이그레이션과 입금 확인 경로가 필요하다.
-
-**포인트 적립과 사용이 빠져 있다.** 저장할 테이블이 없다.
