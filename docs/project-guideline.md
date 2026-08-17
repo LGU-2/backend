@@ -74,6 +74,7 @@ LLM 판정(G-PR)은 지적만 하고 막지 않는다. 읽고 판단은 한다.
 | 컨트롤러, DTO | [`api-design-guideline.md`](./code-architecture/api-design-guideline.md) |
 | 패키지 배치 | [`domain-package-boundary-guideline.md`](./code-architecture/domain-package-boundary-guideline.md) |
 | 테스트 | [`unit-testing-guideline.md`](./code-architecture/unit-testing-guideline.md) |
+| 테스트를 어디에 둘지 | 단위 `src/test/java`, 통합 `src/integrationTest/java` |
 | 식별자 | [`identifier-strategy-guideline.md`](./code-architecture/identifier-strategy-guideline.md) |
 
 **각 문서에는 짝이 되는 `-rationale.md` 가 있다.** 규칙은 guideline, 왜 그런지는 rationale 이다.
