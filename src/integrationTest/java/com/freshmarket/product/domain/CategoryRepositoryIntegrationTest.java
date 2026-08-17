@@ -3,6 +3,7 @@ package com.freshmarket.product.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.freshmarket.config.JpaAuditingConfig;
 import com.freshmarket.product.domain.entity.Category;
 import com.freshmarket.product.domain.repository.CategoryRepository;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -17,6 +19,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+/*
+ * @DataJpaTest 는 애플리케이션 전체를 스캔하지 않아 JpaAuditingConfig 가 로드되지 않는다.
+ * 그러면 @CreatedDate/@LastModifiedDate 가 채워지지 않아 created_at 이 null 로 insert 되어
+ * DB의 NOT NULL 제약을 위반한다 (BE-3-03).
+ */
+@Import(JpaAuditingConfig.class)
 @Testcontainers
 class CategoryRepositoryIntegrationTest {
 
