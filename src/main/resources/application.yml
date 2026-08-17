@@ -26,3 +26,13 @@ spring:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+app:
+  jwt:
+    # 로컬 개발 편의를 위한 기본값이다. 운영에서는 반드시 환경변수/시크릿 매니저로 덮어쓴다.
+    # 소스에 실키를 넣지 않는다 (비기능요구사항 보안 > 자격 증명 관리).
+    secret: "${JWT_SECRET:local-dev-only-secret-key-please-override-in-real-environments}"
+    admin:
+      # 관리자 Access 30분 / Refresh 1일, 자동 로그인 미제공 (인증(OIDC) 설계 시트 3항)
+      access-token-validity-seconds: ${ADMIN_ACCESS_TOKEN_VALIDITY_SECONDS:1800}
+      refresh-token-validity-seconds: ${ADMIN_REFRESH_TOKEN_VALIDITY_SECONDS:86400}

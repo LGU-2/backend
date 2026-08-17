@@ -3,10 +3,13 @@ package com.freshmarket.config;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
@@ -27,6 +30,12 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html"
     };
+
+    /*
+     * 로그인은 그 자체가 인증 수단이라 인증 없이 열어야 한다.
+     * POST 만 연다. 나중에 세션 목록 조회(GET) 가 생기면 그건 인증이 필요하다.
+     */
+    private static final String ADMIN_LOGIN_PATH = "/v1/admin/sessions";
 
     /*
      * 헬스체크 경로는 아직 없다. actuator 를 의존성에 넣지 않았다.
@@ -58,6 +67,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
+                        .requestMatchers(HttpMethod.POST, ADMIN_LOGIN_PATH).permitAll()
                         .anyRequest().authenticated())
                 /*
                  * 넘긴 예외는 GlobalExceptionHandler 의 @ExceptionHandler 가 받는다.
@@ -69,5 +79,11 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) ->
                                 handlerExceptionResolver.resolveException(request, response, null, exception)));
         return http.build();
+    }
+
+    // 관리자 비밀번호 해싱 전용. 회원은 카카오에 인증을 위임하므로 비밀번호 자체가 없다
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
