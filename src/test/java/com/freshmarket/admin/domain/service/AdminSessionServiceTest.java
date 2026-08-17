@@ -14,6 +14,7 @@ import com.freshmarket.admin.domain.exception.AdminErrorCode;
 import com.freshmarket.admin.domain.exception.AdminException;
 import com.freshmarket.admin.domain.repository.AdminRepository;
 import com.freshmarket.common.security.JwtTokenProvider;
+import java.time.Clock;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -35,7 +36,7 @@ class AdminSessionServiceTest {
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(TEST_JWT_SECRET);
     private final AdminSessionService adminSessionService = new AdminSessionService(
-            adminRepository, passwordEncoder, jwtTokenProvider, 1800L, 86400L);
+            adminRepository, passwordEncoder, jwtTokenProvider, Clock.systemDefaultZone(), 1800L, 86400L);
 
     @Test
     void 아이디와_비밀번호가_일치하면_토큰을_발급한다() {
@@ -65,6 +66,8 @@ class AdminSessionServiceTest {
         when(adminRepository.findByLoginId("nobody")).thenReturn(Optional.empty());
 
         // when, then
+        // 이 경로에서도 내부적으로 더미 해시로 BCrypt 를 돌린다 (SEC-6-04). 예외 없이
+        // LOGIN_FAILED 로 끝나는 것 자체가 더미 해시가 유효한 BCrypt 형식이라는 회귀 방어다.
         assertThatThrownBy(() -> adminSessionService.create(
                 new AdminSessionCreateRequest("nobody", RAW_PASSWORD)))
                 .isInstanceOf(AdminException.class)
@@ -87,7 +90,7 @@ class AdminSessionServiceTest {
     }
 
     @Test
-    void 비활성_계정이면_비밀번호가_맞아도_로그인에_실패한다() {
+    void 비활성_계정이고_비밀번호가_맞으면_비활성화_사실을_알려준다() {
         // given
         Admin admin = AdminFixture.inactive("admin.kim", passwordEncoder.encode(RAW_PASSWORD), AdminRole.ADMIN);
         when(adminRepository.findByLoginId("admin.kim")).thenReturn(Optional.of(admin));
@@ -98,5 +101,24 @@ class AdminSessionServiceTest {
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
                 .isEqualTo(AdminErrorCode.ACCOUNT_INACTIVE);
+    }
+
+    /*
+     * 순서를 바꾼 이유(SEC-6-04)를 잠그는 테스트다. 예전 순서(상태 확인이 먼저)였다면
+     * 비밀번호를 몰라도 계정이 비활성이라는 사실이 드러났다. 지금은 비밀번호가 맞아야만
+     * ACCOUNT_INACTIVE 에 도달하므로, 틀린 비밀번호로는 계정 상태를 알아낼 수 없다.
+     */
+    @Test
+    void 비활성_계정이어도_비밀번호가_틀리면_계정_상태를_알려주지_않는다() {
+        // given
+        Admin admin = AdminFixture.inactive("admin.kim", passwordEncoder.encode(RAW_PASSWORD), AdminRole.ADMIN);
+        when(adminRepository.findByLoginId("admin.kim")).thenReturn(Optional.of(admin));
+
+        // when, then
+        assertThatThrownBy(() -> adminSessionService.create(
+                new AdminSessionCreateRequest("admin.kim", "wrong-password")))
+                .isInstanceOf(AdminException.class)
+                .extracting(e -> ((AdminException) e).getErrorCode())
+                .isEqualTo(AdminErrorCode.LOGIN_FAILED);
     }
 }
