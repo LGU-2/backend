@@ -82,13 +82,13 @@ public class AdminSessionService {
         }
 
         /*
-         * 비활성 계정은 여기서 걸린다. 상태/메시지가 LOGIN_FAILED 와 달라 계정 존재를 드러내는데,
-         * 이는 관리자(내부 직원) 대상이라 의도적으로 받아들인 트레이드오프다 — 팀 리뷰에서 공식
-         * 확인 예정 (SEC-6-04 의 두 번째 지적).
+         * 비활성 계정도 로그인 단계에서는 LOGIN_FAILED 로 통일한다 (SEC-6-04).
+         * 존재 여부나 계정 상태에 따라 응답 코드/메시지가 달라지면 인증 응답만으로
+         * 계정의 존재 또는 상태를 추측할 수 있기 때문이다.
          */
         Admin admin = found.get();
         if (!admin.isActive()) {
-            throw new AdminException(AdminErrorCode.ACCOUNT_INACTIVE);
+            throw new AdminException(AdminErrorCode.LOGIN_FAILED);
         }
 
         String accessToken = jwtTokenProvider.createToken(

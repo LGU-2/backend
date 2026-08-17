@@ -44,7 +44,12 @@ class AdminIntegrationTest {
     @Test
     void 관리자를_저장하고_아이디로_조회한다() {
         // given
-        Admin admin = Admin.register("integration.kim", "$2a$10$dummyHashForIntegrationTestOnly", "통합관리자", AdminRole.ADMIN);
+        Admin admin = Admin.register(
+                "integration.kim",
+                "$2a$10$dummyHashForIntegrationTestOnly",
+                "통합관리자",
+                AdminRole.ADMIN
+        );
 
         // when
         adminRepository.save(admin);
@@ -60,8 +65,10 @@ class AdminIntegrationTest {
 
     @Test
     void 존재하지_않는_아이디는_빈_값을_반환한다() {
+        // when
         Optional<Admin> found = adminRepository.findByLoginId("no-such-login-id");
 
+        // then
         assertThat(found).isEmpty();
     }
 
@@ -69,16 +76,25 @@ class AdminIntegrationTest {
     void 리프레시_토큰_발급이_실제로_영속화된다() {
         // given
         Admin admin = adminRepository.save(
-                Admin.register("integration.lee", "$2a$10$dummyHashForIntegrationTestOnly", "통합관리자2", AdminRole.SUPER_ADMIN));
+                Admin.register(
+                        "integration.lee",
+                        "$2a$10$dummyHashForIntegrationTestOnly",
+                        "통합관리자2",
+                        AdminRole.SUPER_ADMIN
+                )
+        );
         LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
 
         // when
         admin.issueRefreshToken("a".repeat(64), expiresAt);
         adminRepository.saveAndFlush(admin);
 
-        // then: 영속성 컨텍스트를 비우고 다시 읽어 실제로 DB 에 반영됐는지 확인한다
-        Optional<Admin> reloaded = adminRepository.findByLoginId("integration.lee");
+        // then
+        Optional<Admin> reloaded =
+                adminRepository.findByLoginId("integration.lee");
+
         assertThat(reloaded).isPresent();
-        assertThat(reloaded.get().getRefreshTokenHash()).isEqualTo("a".repeat(64));
+        assertThat(reloaded.get().getRefreshTokenHash())
+                .isEqualTo("a".repeat(64));
     }
 }

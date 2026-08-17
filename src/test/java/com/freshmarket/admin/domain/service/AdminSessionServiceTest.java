@@ -115,7 +115,7 @@ class AdminSessionServiceTest {
     }
 
     @Test
-    void 비활성_계정이고_비밀번호가_맞으면_비활성화_사실을_알려준다() {
+    void 비활성_계정이고_비밀번호가_맞아도_로그인에_실패한다() {
         // given
         Admin admin = AdminFixture.inactive(
                 "admin.kim",
@@ -133,16 +133,12 @@ class AdminSessionServiceTest {
         assertThatThrownBy(() -> adminSessionService.create(request))
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
-                .isEqualTo(AdminErrorCode.ACCOUNT_INACTIVE);
+                .isEqualTo(AdminErrorCode.LOGIN_FAILED);
     }
 
     /*
-     * 순서를 바꾼 이유(SEC-6-04)를 잠그는 테스트다.
-     * 예전 순서(상태 확인이 먼저)였다면 비밀번호를 몰라도
-     * 계정이 비활성이라는 사실이 드러났다.
-     *
-     * 지금은 비밀번호가 맞아야만 ACCOUNT_INACTIVE 에 도달하므로,
-     * 틀린 비밀번호로는 계정 상태를 알아낼 수 없다.
+     * 비활성 계정도 로그인 단계에서는 항상 LOGIN_FAILED 로 응답한다 (SEC-6-04).
+     * 비밀번호 일치 여부와 관계없이 외부 응답만으로 계정 상태를 구분할 수 없어야 한다.
      */
     @Test
     void 비활성_계정이어도_비밀번호가_틀리면_계정_상태를_알려주지_않는다() {

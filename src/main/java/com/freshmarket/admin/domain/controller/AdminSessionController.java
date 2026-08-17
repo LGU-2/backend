@@ -35,7 +35,6 @@ class AdminSessionController {
     )
     @ApiResponse(responseCode = "201", description = "로그인 성공, 토큰 발급")
     @ApiResponse(responseCode = "401", description = "아이디 또는 비밀번호가 올바르지 않음 (사유 미노출)")
-    @ApiResponse(responseCode = "403", description = "비활성화된 계정")
     @PostMapping
     ResponseEntity<ResponseEnvelope<AdminSessionResponse>> create(
             @Valid @RequestBody AdminSessionCreateRequest request) {
