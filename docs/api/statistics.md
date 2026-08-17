@@ -127,6 +127,65 @@ GET /v1/admin/statistics/disposal?from=&to=&categoryId=
 **`RETURNED` 는 가용 재고를 줄이지 않은 폐기다.** 회수품이 판매 재고로 돌아온 적이 없기 때문이다.
 그래서 `daily_sales.disposedQty` 에는 들어가지 않는다. 이 경로는 원장에서 직접 센다.
 
+## 주문 통계
+
+```
+GET /v1/admin/statistics/orders?from=&to=&categoryId=
+```
+
+```json
+{
+  "salesAmount": 128400000,
+  "orderCount": 4210,
+  "canceledCount": 128,
+  "cancelRate": 0.030,
+  "byCategory": [ { "categoryId": 4, "name": "과일", "salesAmount": 41200000 } ]
+}
+```
+
+취소율은 **취소와 반품 완료 건을 분자로** 센다. 교환은 결제 금액이 유지되므로 넣지 않는다.
+
+## 캠페인 대상 상품 조회
+
+```
+GET /v1/admin/statistics/campaign-candidates?withinDays=10&bottomRatio=0.2&minStock=30&limit=3
+```
+
+선착순 쿠폰 캠페인의 대상 상품과 **발급 가능 수량**을 함께 돌려준다.
+
+| 파라미터 | 기본 | 설명 |
+|---|---|---|
+| `withinDays` | 10 | 소비기한 잔여 일수 |
+| `bottomRatio` | 0.2 | 소진율 하위 비율 |
+| `minStock` | 30 | 최소 잔여 재고 |
+| `limit` | 3 | 소진율 오름차순 상위 건수 |
+
+```json
+{
+  "baseDate": "2026-08-17",
+  "candidates": [
+    {
+      "productOptionId": 31,
+      "productName": "제주 감귤 1kg",
+      "sellThroughRate": 0.18,
+      "expiringLotQty": 143,
+      "issuableQuantity": 143
+    }
+  ]
+}
+```
+
+`issuableQuantity` 는 **임박 로트의 잔량 기준**이다. 그보다 많이 발급하면 쿠폰을 쓸 재고가 없다.
+
+**같은 기준일로 다시 조회하면 항상 같은 결과가 나온다.** 캠페인 생성이 재현 가능해야 하기 때문이다.
+
+**캠페인 생성 배치에서만 부른다.** 쿠폰 발급 요청 경로에서 호출하면 안 된다. 선착순 발급은
+초당 수천 건이 들어오는데 이 조회는 집계와 로트를 훑어 무겁다.
+
+| 응답 | 언제 |
+|---|---|
+| `200` | 조건을 만족하는 상품이 없으면 **빈 목록을 준다** |
+
 ## 쿠폰 캠페인과의 연결
 
 소진율과 소비기한이 **선착순 쿠폰 캠페인의 대상 선정 기준**이다.

@@ -14,7 +14,7 @@
 | [stock.md](./stock.md) | 로트 입고, 재고 변동, 조정, 폐기 |
 | [order.md](./order.md) | 장바구니, 주문, 결제, 취소, 반품, 교환, 배송 |
 | [coupon.md](./coupon.md) | 쿠폰함, 선착순 발급, 쿠폰 관리 |
-| [statistics.md](./statistics.md) | 판매 집계, 소진율 |
+| [statistics.md](./statistics.md) | 판매 집계, 소진율, 주문 통계, 캠페인 대상 |
 
 ## 공통 규약
 
@@ -40,7 +40,7 @@ DELETE /v1/carts/items/{cartItemId}        삭제
 
 ```
 POST /v1/orders/{orderId}:cancel
-POST /v1/admin/orders/{orderId}:refund
+POST /v1/admin/claims/{claimId}:approve
 ```
 
 ### 인증
@@ -154,6 +154,7 @@ API 를 확정하기 전에 결정이 필요하다.
 | 등급별 할인율 | 주문서의 등급 할인 기준 데이터 | `member_grade` 에 할인율 컬럼 없음 |
 | 로그인 5회 실패 30분 잠금 | 관리자 인증 요구사항 | `admin` 에 실패 횟수, 잠금 컬럼 없음 |
 | 배송비 정책 | N원 이상 무료 등 규칙 정의 필요 | 정책 테이블 없음. `orders.shipping_fee` 만 있다 |
+| 알림 발송 | Q&A 답변, 주문 상태 변경, 배송 시작, 소비기한 임박 | `notification` 테이블이 주석 처리되어 있다 |
 
 **이 문서는 위 항목을 스키마에 있는 것만으로 기술한다.** 없는 것은 경로를 적지 않고 이 표에 남겼다.
 결정되면 추가만 하는 마이그레이션(V2)과 함께 해당 문서에 절을 더한다.
