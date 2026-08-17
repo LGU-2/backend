@@ -1,6 +1,7 @@
 package com.freshmarket.config;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -35,7 +36,7 @@ public class SecurityConfig {
      * 로그인은 그 자체가 인증 수단이라 인증 없이 열어야 한다.
      * POST 만 연다. 나중에 세션 목록 조회(GET) 가 생기면 그건 인증이 필요하다.
      */
-    private static final String ADMIN_LOGIN_PATH = "/v1/admin/sessions";
+    private final String adminLoginPath;
 
     /*
      * 헬스체크 경로는 아직 없다. actuator 를 의존성에 넣지 않았다.
@@ -49,25 +50,28 @@ public class SecurityConfig {
     private final HandlerExceptionResolver handlerExceptionResolver;
 
     public SecurityConfig(
-            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver handlerExceptionResolver) {
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver handlerExceptionResolver,
+            @Value("${app.security.admin-login-path}") String adminLoginPath) {
         this.handlerExceptionResolver = handlerExceptionResolver;
+        this.adminLoginPath = adminLoginPath;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 /*
-                 * 서버 세션을 두지 않으므로 CSRF 토큰을 보관할 곳이 없다.
-                 * 쿠키 기반 인증으로 바꾸면 이 두 줄을 함께 되돌려야 한다.
+                 * CSRF 보호 자체는 유지한다. 관리자 로그인은 아직 인증 쿠키가 없는 공개 POST 이므로
+                 * 이 엔드포인트만 검사 대상에서 제외한다. 이후 Bearer 토큰 기반 변경 API를 추가할 때는
+                 * 해당 API의 인증 방식에 맞춰 제외 범위를 명시적으로 추가한다.
                  */
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers(adminLoginPath))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
-                        .requestMatchers(HttpMethod.POST, ADMIN_LOGIN_PATH).permitAll()
+                        .requestMatchers(HttpMethod.POST, adminLoginPath).permitAll()
                         .anyRequest().authenticated())
                 /*
                  * 넘긴 예외는 GlobalExceptionHandler 의 @ExceptionHandler 가 받는다.

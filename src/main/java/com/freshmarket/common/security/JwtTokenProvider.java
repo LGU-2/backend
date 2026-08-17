@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
  * 검증(파싱) 책임은 아직 없다. 보호된 관리자 API가 생기는 PR에서 토큰을 검사하는 필터와 함께 파싱 메서드를 추가한다.
  */
 @Component
+@SuppressWarnings("java:S2143") // JJWT 0.12.6의 issuedAt/expiration API가 java.util.Date만 받는다. 내부 계산은 java.time을 사용한다.
 public class JwtTokenProvider {
 
     private final SecretKey key;

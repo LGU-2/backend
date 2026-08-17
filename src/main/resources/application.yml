@@ -28,6 +28,8 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  security:
+    admin-login-path: "${ADMIN_LOGIN_PATH:/v1/admin/sessions}"
   jwt:
     # 로컬 개발 편의를 위한 기본값이다. 운영에서는 반드시 환경변수/시크릿 매니저로 덮어쓴다.
     # 소스에 실키를 넣지 않는다 (비기능요구사항 보안 > 자격 증명 관리).
