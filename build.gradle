@@ -3,6 +3,8 @@ plugins {
     id 'org.springframework.boot' version '4.0.5'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'jacoco'
+    // integrationTest 를 IDE 가 테스트 소스로 보게 하려고 쓴다. 아래 idea 블록 참고
+    id 'idea'
     id 'org.sonarqube' version '7.4.0.8496'
 }
 
@@ -25,6 +27,18 @@ sourceSets {
     integrationTest {
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
+    }
+}
+
+/*
+ * IDE 가 integrationTest 를 테스트 소스로 인식하게 한다.
+ * Gradle 의 IDE 모델은 test 소스셋만 테스트로 표시하고 직접 만든 소스셋은 일반 소스로 넘긴다.
+ * 그대로 두면 실행 아이콘이 뜨지 않고 프로덕션 코드로 취급되어 검사 규칙이 다르게 걸린다.
+ */
+idea {
+    module {
+        testSources.from(sourceSets.integrationTest.java.srcDirs)
+        testResources.from(sourceSets.integrationTest.resources.srcDirs)
     }
 }
 
@@ -111,8 +125,9 @@ jacoco {
 }
 
 tasks.named('jacocoTestReport') {
-    dependsOn tasks.named('test'), tasks.named('integrationTest')
-    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    dependsOn tasks.named('test')
+    // 게이트와 같은 실행 데이터를 읽는다. 다르면 Sonar 수치와 차단 기준이 어긋나 어느 쪽이 진짜인지 헷갈린다
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('test.exec')
     reports {
         // SonarQube 가 읽는 형식이다
         xml.required = true
@@ -120,12 +135,19 @@ tasks.named('jacocoTestReport') {
 }
 
 tasks.named('jacocoTestCoverageVerification') {
-    dependsOn tasks.named('test'), tasks.named('integrationTest')
-    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    dependsOn tasks.named('test')
+    /*
+     * 단위 테스트의 .exec 만 읽는다 (BLD-1-04).
+     * 통합 테스트를 합산하면 서비스 로직을 단위 테스트 없이 통과시킬 수 있다.
+     * 통합 테스트는 계층을 가로질러 실행되므로 메서드를 지나가기만 해도 커버리지가 채워진다.
+     */
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('test.exec')
     violationRules {
         rule {
             /* includes 로 좁히므로 exclude 목록이 필요 없다.
-               config, dto, entity, Q클래스가 자동으로 빠진다 (BLD-1-01). */
+               config, dto, entity, Q클래스가 자동으로 빠진다 (BLD-1-01).
+               패키지 전체를 대상으로 삼는다. 그 안에 ~Service 만 두도록 ArchitectureTest 가
+               막으므로(DPB-4-10) 대상에서 빠지는 클래스가 생기지 않는다. */
             element = 'CLASS'
             includes = ['*.domain.service.*']
             limit {
@@ -146,13 +168,14 @@ tasks.named('jacocoTestCoverageVerification') {
 tasks.register('coverageDataCheck') {
     description = '커버리지 검증 대상이 있는데 실행 데이터가 없는 상태를 막는다'
     group = 'verification'
-    dependsOn tasks.named('test'), tasks.named('integrationTest')
+    dependsOn tasks.named('test')
 
     def targets = fileTree(layout.buildDirectory.dir('classes/java/main')) {
         include '**/domain/service/*.class'
     }
+    // 게이트가 읽는 것과 같은 파일을 본다
     def execFiles = fileTree(layout.buildDirectory.dir('jacoco')) {
-        include '*.exec'
+        include 'test.exec'
     }
 
     inputs.files(targets, execFiles)

@@ -14,11 +14,11 @@
 
 점검 항목
 * `BLD-1-01` JaCoCo 대상이 `*.domain.service.*`로 좁혀져 있는가
-  `includes`로 좁히므로 exclude 목록이 필요 없다. config, dto, entity, Q클래스가 자동으로 빠진다.
+  `includes`로 좁히므로 exclude 목록이 필요 없다. config, dto, entity, Q클래스가 자동으로 빠진다. 패키지 전체가 대상이며, 그 안에 `~Service`만 두도록 `DPB-4-10`이 막으므로 대상에서 빠지는 클래스가 생기지 않는다.
 * `BLD-1-02` 판정 단위가 클래스별(`element = 'CLASS'`), 카운터가 메서드(`counter = 'METHOD'`)인가
 * `BLD-1-03` 기준이 `minimum = 1.00`인가
-* `BLD-1-04` 단위 테스트와 통합 테스트의 `.exec`를 합산하는가
-  각각 따로 보면 어느 쪽도 100%를 못 넘지만 합치면 넘는 경우가 대부분이다.
+* `BLD-1-04` 커버리지 판정이 단위 테스트의 `.exec`만 읽는가
+  통합 테스트를 합산하면 계층을 가로질러 메서드를 지나가기만 해도 커버리지가 차서, 서비스 로직을 단위 테스트 없이 통과시킬 수 있다.
 * `BLD-1-05` `check`가 `integrationTest`와 `jacocoTestCoverageVerification`에 의존하는가
 * `BLD-1-06` `jacocoTestReport`가 `sonar` 태스크보다 먼저 도는가
   순서가 바뀌면 SonarQube에 커버리지가 0으로 표시된다.
@@ -37,8 +37,9 @@
   `Blocker`는 프로덕션에서 애플리케이션을 망가뜨릴 높은 확률의 버그를 뜻한다. 병합을 막을 근거가 되는 것은 이 등급뿐이다.
   그 아래 등급은 차단하지 않고 경고로만 표시한다.
   차단은 워크플로가 이슈 검색 API 로 신규 `Blocker` 수를 직접 세어 수행한다.
-* `BLD-2-03` 브랜치 보호의 필수 상태 검사에 두 게이트가 등록되어 있는가
-  이것이 두 게이트를 강제하는 유일한 수단이다.
+* `BLD-2-03` 브랜치 보호의 필수 상태 검사에 `G-BUILD`가 등록되어 있는가
+  커버리지와 정적 분석은 한 잡(`G-BUILD`) 안에서 함께 돌므로 등록되는 검사 이름은 하나다. 이것이 두 기준을 강제하는 유일한 수단이다.
+  `G-PR`(LLM 판정)은 일부러 등록하지 않는다. 재현율이 측정되지 않은 판정으로 병합을 막으면 오탐이 쌓여 우회 문화가 생긴다.
 
 ### 무료 플랜에서 차단하는 방법
 
@@ -58,7 +59,7 @@ Team 플랜으로 올리면 커스텀 게이트에서 커버리지 조건을 빼
 
 ```gradle
 jacocoTestCoverageVerification {
-    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('*.exec')
+    executionData.setFrom fileTree(layout.buildDirectory.dir('jacoco')).include('test.exec')
     violationRules {
         rule {
             element = 'CLASS'
@@ -75,7 +76,7 @@ jacocoTestCoverageVerification {
 check.dependsOn integrationTest, jacocoTestCoverageVerification
 ```
 
-### 10.1 100% 기준과 "커버리지를 목표로 삼지 말라"는 원칙의 관계
+### 2.1 100% 기준과 "커버리지를 목표로 삼지 말라"는 원칙의 관계
 
 backend `unit-testing-guideline.md`의 `UT-6-03`은 "커버리지 숫자 자체를 목표로 삼지 않는가"를 묻는다.
 표면상 100% 강제와 충돌해 보이지만 **재는 것이 다르다.**
@@ -100,7 +101,7 @@ public void placeOrder(OrderCommand cmd) {
 
 특히 **조건부 UPDATE의 `affected rows == 0` 분기는 정합성 최종 방어선(INF-1-05)이므로 반드시 실패 경로 테스트를 함께 작성한다.**
 
-### 10.2 로컬에서도 같은 게이트를 돌린다
+### 2.2 로컬에서도 같은 게이트를 돌린다
 
 push 전에 `./gradlew check`로 확인한다. CI에서 처음 알면 이미 PR을 연 뒤다.
 
