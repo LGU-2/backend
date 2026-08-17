@@ -84,6 +84,6 @@ public class AdminSessionService {
                 accessTokenValiditySeconds,
                 rawRefreshToken,
                 new AdminSessionResponse.AdminSummary(
-                        admin.getId(), admin.getLoginId(), admin.getName(), admin.getRole()));
+                        admin.getLoginId(), admin.getName(), admin.getRole()));
     }
 }

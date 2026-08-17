@@ -111,6 +111,9 @@ public class Admin extends BaseMutableTimeEntity {
         if (deactivatedAt == null) {
             throw new IllegalArgumentException("deactivatedAt 은 필수다");
         }
+        if (this.status == AdminStatus.DELETED) {
+            throw new IllegalStateException("이미 비활성화된 계정이다: " + this.loginId);
+        }
         this.status = AdminStatus.DELETED;
         this.deletedAt = deactivatedAt;
         this.refreshTokenHash = null;
