@@ -57,7 +57,16 @@ public class SecurityConfig {
         this.adminLoginPath = adminLoginPath;
     }
 
+    /*
+     * Sonar S4502:
+     * 관리자 로그인은 인증 전 공개 POST이며 세션 기반 인증이나 인증 쿠키를 사용하지 않는다.
+     * 애플리케이션은 STATELESS + Bearer JWT 인증 방식이므로 브라우저가 자동으로 전송하는
+     * 인증 정보를 악용하는 일반적인 CSRF 공격 조건에 해당하지 않는다.
+     *
+     * CSRF 보호 전체를 비활성화하는 것이 아니라 관리자 로그인 POST 경로만 검사에서 제외한다.
+     */
     @Bean
+    @SuppressWarnings("java:S4502")
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 /*
