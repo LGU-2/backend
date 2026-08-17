@@ -93,7 +93,10 @@ class ArchitectureTest {
         for (String d : new String[]{"member", "product", "admin"}) {
             arch = arch.whereLayer(d).mayOnlyBeAccessedByLayers(concat(L1, L2));
         }
-        // L1 은 L2 만 부를 수 있다. 같은 층인 L1 끼리는 목록에 없으므로 막힌다
+        /*
+         * L1 은 L2 만 부를 수 있다.
+         * 같은 층인 L1 끼리는 목록에 없으므로 막힌다.
+         */
         for (String d : L1) {
             arch = arch.whereLayer(d).mayOnlyBeAccessedByLayers(L2);
         }

@@ -44,7 +44,10 @@ class PlacementIntegrationTest {
         return c.getSource().map(s -> s.getUri().toString().contains(dir)).orElse(false);
     }
 
-    // 베이스 패키지는 아키텍처 테스트 자리다. 도메인에 속하지 않으므로 아래 규칙에서 뺀다
+    /*
+     * 베이스 패키지는 아키텍처 테스트 자리다.
+     * 도메인에 속하지 않으므로 아래 규칙에서 뺀다.
+     */
     private static List<JavaClass> own(JavaClasses classes) {
         return classes.stream()
                 .filter(c -> from(c, OWN))
