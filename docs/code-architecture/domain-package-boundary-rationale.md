@@ -33,7 +33,7 @@
 API가 없는 도메인에서 **빈 `api` 패키지를 만들지 말지가 애매해진다.**
 루트를 공개 영역으로 쓰면 공개할 것이 없을 때 아무것도 두지 않으면 된다.
 
-공개 DTO가 늘어 루트가 지저분해지면, 그때 `api` 하위 패키지로 묶고 ArchUnit 허용 패턴을 `com.example.backend.*.api..`로 바꾸면 된다.
+공개 DTO가 늘어 루트가 지저분해지면, 그때 `api` 하위 패키지로 묶고 ArchUnit 허용 패턴을 `com.freshmarket.*.api..`로 바꾸면 된다.
 
 ### 왜 API를 호출당하는 도메인만 만드는가
 
@@ -84,7 +84,7 @@ API가 없는 도메인에서 **빈 `api` 패키지를 만들지 말지가 애�
 
 ### 왜 client가 도메인 안에 있는가
 
-`com.example.backend.client`처럼 최상위에 두면 모든 도메인이 접근 가능해져서 **"결제 연동은 payment에만"이라는 경계가 무너진다.**
+`com.freshmarket.client`처럼 최상위에 두면 모든 도메인이 접근 가능해져서 **"결제 연동은 payment에만"이라는 경계가 무너진다.**
 도메인 안에 두면 `domainIsHidden` 규칙이 자동으로 막아주므로 새 규칙도 필요 없다.
 
 이름을 `external`이 아니라 `client`로 정한 것은 **나가는 호출**이라는 방향을 드러내기 위해서다.
@@ -208,10 +208,10 @@ ArchUnit은 테스트 실행 시점에만 잡지만, package-private는 다른 �
 
 핵심은 `ignoreDependency` 두 번째 인자의 패턴에 있다.
 
-| 패턴 | `com.example.backend.product` | `com.example.backend.product.domain` |
+| 패턴 | `com.freshmarket.product` | `com.freshmarket.product.domain` |
 |------|------|------|
-| `com.example.backend.*` | 매칭 O | 매칭 X |
-| `com.example.backend.*..` | 매칭 O | 매칭 O (이러면 안 됨) |
+| `com.freshmarket.*` | 매칭 O | 매칭 X |
+| `com.freshmarket.*..` | 매칭 O | 매칭 O (이러면 안 됨) |
 
 `*`는 패키지 세그먼트 하나만 매칭하므로 **도메인 루트만 골라낸다.**
 따라서 `order`가 `product.ProductApi`를 참조하면 허용되고, `product.domain.ProductService`를 참조하면 위반으로 잡힌다.
