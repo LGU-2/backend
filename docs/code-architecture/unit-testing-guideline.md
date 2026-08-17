@@ -92,6 +92,24 @@ assertThat(order.getMemberId()).isEqualTo(1L);
 
 ## 5. 통합 테스트와 의존성
 
+통합 테스트는 `src/integrationTest/java` 에 둔다. 단위 테스트(`src/test/java`)와 소스셋이 다르다.
+`build.gradle` 이 소스셋을 나눠 두었고 `integrationTest` 태스크가 이 디렉터리만 실행한다.
+커버리지는 두 소스셋의 `.exec` 를 합산해 판정한다 (`BLD-1-04`).
+
+**두 소스셋 모두 프로덕션 패키지를 그대로 미러링한다.**
+
+```
+src/main/java/com/freshmarket/order/domain/service/OrderService.java
+src/test/java/com/freshmarket/order/domain/service/OrderServiceTest.java
+src/integrationTest/java/com/freshmarket/order/domain/service/OrderServiceIntegrationTest.java
+```
+
+같은 패키지여야 package-private 클래스와 메서드에 닿는다.
+`~ApiImpl` 과 `Controller` 가 package-private 이므로(`DPB-6-01`) 패키지가 어긋나면 그 구현을 테스트할 수 없다.
+
+이름은 단위가 `~Test`, 통합이 `~IntegrationTest` 다. 소스셋이 이미 나뉘어 있어 강제되지는 않지만,
+파일명만 보고 종류를 알 수 있어야 리뷰에서 어느 기준을 적용할지 헷갈리지 않는다.
+
 외부 의존성은 종류에 따라 다르게 다뤄야 한다.
 
 점검 항목
