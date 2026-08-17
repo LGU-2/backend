@@ -3,6 +3,7 @@ package com.freshmarket.product.domain.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -206,5 +207,19 @@ class AdminCategoryServiceTest {
                 .isInstanceOf(ProductException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_NOT_FOUND);
         verify(categoryRepository, never()).delete(any());
+    }
+
+    @Test
+    void 하위_카테고리가_있으면_삭제할_수_없다() {
+        // given
+        Category category = Category.register("수산물");
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        doThrow(new DataIntegrityViolationException("fk violation"))
+                .when(categoryRepository).flush();
+
+        // when, then
+        assertThatThrownBy(() -> adminCategoryService.delete(1L))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_HAS_CHILDREN);
     }
 }

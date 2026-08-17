@@ -65,7 +65,12 @@ public class AdminCategoryService {
     public void delete(Long categoryId) {
         Category category = getCategoryOrThrow(categoryId);
         // TODO: 상품 도메인 완료 후 소속 상품 존재 검증 추가 — ProductErrorCode.CATEGORY_HAS_PRODUCTS
-        categoryRepository.delete(category);
+        try {
+            categoryRepository.delete(category);
+            categoryRepository.flush();   // DELETE를 지금 실행시켜서 FK 위반을 이 안에서 잡음
+        } catch (DataIntegrityViolationException e) {
+            throw new ProductException(ProductErrorCode.CATEGORY_HAS_CHILDREN, e);
+        }
     }
 
     private boolean existsDuplicateName(Long parentId, String name) {
