@@ -1,6 +1,7 @@
 package com.freshmarket.member.domain.entity;
 
 import com.freshmarket.common.entity.BaseMutableTimeEntity;
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -21,13 +22,14 @@ import lombok.NoArgsConstructor;
  * 생성은 @Builder(access=PRIVATE) + 이름 있는 정적 팩토리(register())로만 열어둔다 — public
  * builder()를 그대로 노출하면 필수값(name) 누락을 컴파일 타임에 못 막는다.
  *
- * (2026-08-18 10:49) membergrade는 domain-map.md 기준 member 도메인이 소유하는 테이블이라
- * 별도 최상위 도메인이 아니라 member.domain.entity 아래로 옮겼다 — com.freshmarket.membergrade.domain.entity
- * 에서 이동, 로직 변경 없음.
+ * PK 컬럼명은 스키마 전체 컨벤션(schema-design-rationale.md)대로 member_grade_id다 —
+ * BaseMutableTimeEntity의 id 필드는 컬럼명을 "id"로 매핑하므로, @AttributeOverride로
+ * 실제 DDL의 PK 컬럼명에 맞춰준다.
  */
 @Entity
 @Getter
 @Table(name = "member_grade")
+@AttributeOverride(name = "id", column = @Column(name = "member_grade_id"))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class MemberGrade extends BaseMutableTimeEntity {
 
@@ -40,9 +42,13 @@ public class MemberGrade extends BaseMutableTimeEntity {
     @Column(name = "is_default", nullable = false)
     private boolean isDefault;
 
+    // 필드 타입은 반드시 Byte여야 한다 — Hibernate는 스키마 validate 시 columnDefinition 문자열이
+    // 아니라 "Java 타입 -> 기본 JDBC 타입" 매핑으로 기대 타입을 계산한다. Integer는 INTEGER(32bit)로
+    // 매핑되어 실제 컬럼(TINYINT, 8bit)과 타입 category가 달라 validate에서 걸린다(Byte -> TINYINT가
+    // 정확히 일치). Address.isDefaultKey는 DDL이 BIGINT라서 Long으로 맞물려 있어 이 문제가 없었다.
     @Column(name = "is_default_key", insertable = false, updatable = false, unique = true,
             columnDefinition = "TINYINT GENERATED ALWAYS AS (CASE WHEN is_default THEN 1 ELSE NULL END)")
-    private Integer isDefaultKey;
+    private Byte isDefaultKey;
 
     @Builder(access = AccessLevel.PRIVATE)
     private MemberGrade(String name, String promotionRule, boolean isDefault) {

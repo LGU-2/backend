@@ -1,6 +1,7 @@
 package com.freshmarket.member.domain.entity;
 
 import com.freshmarket.common.entity.BaseMutableTimeEntity;
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -16,13 +17,14 @@ import lombok.NoArgsConstructor;
  * 강제한다 — isDefaultKey 참고. 생성은 @Builder(access=PRIVATE) + register() 정적 팩토리로만
  * 열어둔다.
  *
- * (2026-08-18 10:49) domain-map.md 기준 address는 member 도메인 소유 테이블이라 별도
- * 최상위 도메인이 아니라 member.domain.entity 아래로 옮겼다 — com.freshmarket.address.domain.entity
- * 에서 이동, 로직 변경 없음.
+ * PK 컬럼명은 스키마 전체 컨벤션(schema-design-rationale.md)대로 address_id다 —
+ * BaseMutableTimeEntity의 id 필드는 컬럼명을 "id"로 매핑하므로, @AttributeOverride로
+ * 실제 DDL의 PK 컬럼명에 맞춰준다.
  */
 @Entity
 @Getter
 @Table(name = "address")
+@AttributeOverride(name = "id", column = @Column(name = "address_id"))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Address extends BaseMutableTimeEntity {
 
