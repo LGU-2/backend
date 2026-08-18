@@ -1,5 +1,6 @@
 package com.freshmarket.admin.domain;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -12,6 +13,8 @@ import com.freshmarket.admin.domain.entity.Admin;
 import com.freshmarket.admin.domain.entity.AdminRole;
 import com.freshmarket.admin.domain.repository.AdminRepository;
 import jakarta.servlet.Filter;
+import java.time.LocalDateTime;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,18 +34,19 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /*
- * AdminAuthController 를 실제 HTTP 요청으로 검증한다 (G-LOCAL UT-1-01 지적 반영).
+ * admin 도메인의 통합 테스트를 한 파일에 모은다 (도메인당 통합 테스트 파일 하나 원칙).
  *
- * AdminAuthServiceTest(단위)는 서비스 로직만 본다. Set-Cookie 헤더의 실제 속성값이나
- * CSRF 필터가 정말 걸리는지는 SecurityConfig + 컨트롤러가 실제 필터 체인 위에서 맞물려야만
- * 드러난다 - mock 기반 단위 테스트로는 절대 검증할 수 없는 영역이다.
+ * 두 계층을 함께 검증한다.
+ *  1) 레포지토리 계층 - Admin 엔티티가 실제 admin 테이블(V1__init_schema.sql)과 어긋나지 않는지, DB CHECK 제약을 실제로 지키는지.
+ *     단위 테스트(AdminAuthServiceTest)는
+ *     AdminRepository 를 mock 으로 갈아끼우므로 이런 매핑/제약 위반을 잡지 못한다.
+ *  2) 웹 계층 - AdminAuthController + SecurityConfig 가 실제 필터 체인 위에서 맞물려
+ *     Set-Cookie 속성과 CSRF 동작을 의도대로 내는지 (G-LOCAL UT-1-01 지적 반영).
  *
  * @AutoConfigureMockMvc, SecurityMockMvcConfigurers 를 안 쓴다. 이 프로젝트의 Boot 4.0.5
- * 조합에서 둘 다 클래스패스에 없었다 (원인 미확인, @DataJpaTest 와 같은 부류). 대신
- * WebApplicationContext 로 MockMvc 를 직접 만들고, springSecurityFilterChain 빈을 손으로
- * 끼워 넣어 실제 보안 필터 체인을 태운다. 이 방식은 spring-security-test 의존성이 필요 없다.
- *
- * AdminIntegrationTest(레포지토리 계층)와는 검증 대상이 다르다. 이쪽은 웹 계층 + 보안 필터를 본다.
+ * 조합에서 둘 다 클래스패스에 없었다 (원인 미확인, @DataJpaTest 와 같은 부류).
+ * 대신 WebApplicationContext 로 MockMvc 를 직접 만들고, springSecurityFilterChain 빈을 손으로 끼워 넣어 실제 보안 필터 체인을 태운다.
+ * 이 방식은 spring-security-test 의존성이 필요 없다.
  */
 @Testcontainers
 @SpringBootTest
@@ -75,14 +79,104 @@ class AdminAuthIntegrationTest {
     @BeforeEach
     void setUpMockMvc() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
-                .addFilter(springSecurityFilterChain)
-                .build();
+                .addFilter(springSecurityFilterChain).build();
     }
 
     @AfterEach
     void cleanUp() {
         adminRepository.deleteAll();
     }
+
+    // ===== 레포지토리 계층 =====
+
+    @Test
+    void 관리자를_저장하고_아이디로_조회한다() {
+        // given
+        Admin admin = Admin.register(
+                "integration.kim",
+                "$2a$10$dummyHashForIntegrationTestOnly",
+                "통합관리자",
+                AdminRole.ADMIN
+        );
+
+        // when
+        adminRepository.save(admin);
+        Optional<Admin> found = adminRepository.findByLoginId("integration.kim");
+
+        // then
+        assertThat(found).isPresent();
+        assertThat(found.get().getId()).isNotNull();   // admin_id 로 실제 채번됐는지, 매핑이 맞다는 증거다
+        assertThat(found.get().getName()).isEqualTo("통합관리자");
+        assertThat(found.get().getRole()).isEqualTo(AdminRole.ADMIN);
+        assertThat(found.get().isActive()).isTrue();
+    }
+
+    @Test
+    void 존재하지_않는_아이디는_빈_값을_반환한다() {
+        // when
+        Optional<Admin> found = adminRepository.findByLoginId("no-such-login-id");
+
+        // then
+        assertThat(found).isEmpty();
+    }
+
+    @Test
+    void 리프레시_토큰_발급이_실제로_영속화된다() {
+        // given
+        Admin admin = adminRepository.save(
+                Admin.register(
+                        "integration.lee",
+                        "$2a$10$dummyHashForIntegrationTestOnly",
+                        "통합관리자2",
+                        AdminRole.SUPER_ADMIN
+                )
+        );
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
+
+        // when
+        admin.issueRefreshToken("a".repeat(64), expiresAt);
+        adminRepository.saveAndFlush(admin);
+
+        // then
+        Optional<Admin> reloaded = adminRepository.findByLoginId("integration.lee");
+
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().getRefreshTokenHash()).isEqualTo("a".repeat(64));
+    }
+
+    /*
+     * chk_admin_deleted 제약을 실제 DB로 검증한다: status=DELETED 는 deleted_at IS NOT NULL,
+     * refresh_token_hash IS NULL 과 항상 함께여야 한다. 세 컬럼 중 하나라도 어긋나면
+     * MySQL 이 저장 자체를 거부한다 - Admin.deactivate() 가 셋을 함께 처리하지 않으면
+     * 이 테스트가 SQL 예외로 실패한다. mock 기반 단위 테스트로는 이 제약을 검증할 수 없다.
+     */
+    @Test
+    void 비활성화하면_상태와_리프레시_토큰이_DB_제약대로_함께_반영된다() {
+        // given
+        Admin admin = adminRepository.save(
+                Admin.register(
+                        "integration.park",
+                        "$2a$10$dummyHashForIntegrationTestOnly",
+                        "통합관리자3",
+                        AdminRole.ADMIN
+                )
+        );
+        admin.issueRefreshToken("b".repeat(64), LocalDateTime.now().plusDays(1));
+        adminRepository.saveAndFlush(admin);
+
+        // when
+        admin.deactivate(LocalDateTime.now());
+        adminRepository.saveAndFlush(admin);   // CHECK 제약을 어기면 여기서 예외가 난다
+
+        // then
+        Optional<Admin> reloaded = adminRepository.findByLoginId("integration.park");
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().isActive()).isFalse();
+        assertThat(reloaded.get().getRefreshTokenHash()).isNull();
+        assertThat(reloaded.get().getRefreshTokenExpiresAt()).isNull();
+    }
+
+    // ===== 웹 계층 =====
 
     @Test
     void 로그인_성공_시_리프레시_토큰이_본문이_아니라_HttpOnly_쿠키로만_내려간다() throws Exception {
@@ -95,9 +189,7 @@ class AdminAuthIntegrationTest {
                 """.formatted(RAW_PASSWORD);
 
         // when, then
-        mockMvc.perform(post(adminAuthPath)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
+        mockMvc.perform(post(adminAuthPath).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Set-Cookie", allOf(
                         containsString("refreshToken="),
@@ -122,9 +214,7 @@ class AdminAuthIntegrationTest {
                 """.formatted(RAW_PASSWORD);
 
         // when, then
-        mockMvc.perform(post(adminAuthPath)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
+        mockMvc.perform(post(adminAuthPath).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated());
     }
 
@@ -136,7 +226,6 @@ class AdminAuthIntegrationTest {
      */
     @Test
     void 로그인이_아닌_상태_변경_요청은_CSRF_토큰이_없으면_거부된다() throws Exception {
-        mockMvc.perform(delete(adminAuthPath))
-                .andExpect(status().isForbidden());
+        mockMvc.perform(delete(adminAuthPath)).andExpect(status().isForbidden());
     }
 }
