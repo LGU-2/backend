@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 
+// product 도메인 전체(카테고리, 상품 등)가 함께 쓰는 오류 코드 모음
 @Getter
 @RequiredArgsConstructor
 public enum ProductErrorCode implements ErrorCode {

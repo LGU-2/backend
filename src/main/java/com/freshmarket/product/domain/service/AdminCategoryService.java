@@ -10,6 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+// 관리자 화면에서 카테고리를 등록/조회/수정/삭제하는 기능을 담당한다
 @Service
 @Transactional(readOnly = true)
 public class AdminCategoryService {
@@ -20,16 +21,19 @@ public class AdminCategoryService {
         this.categoryRepository = categoryRepository;
     }
 
+    // 카테고리 전체 목록을 반환한다
     public List<CategoryResponse> findAll() {
         return categoryRepository.findAll().stream()
                 .map(CategoryResponse::from)
                 .toList();
     }
 
+    // 카테고리 하나를 ID로 조회한다. 없으면 CATEGORY_NOT_FOUND
     public CategoryResponse findById(Long categoryId) {
         return CategoryResponse.from(getCategoryOrThrow(categoryId));
     }
 
+    // 카테고리를 새로 등록한다. 부모가 존재해야 하고, 같은 부모 아래 이름이 중복되면 안 된다
     @Transactional
     public CategoryResponse register(String name, Long parentId) {
         String trimmedName = name.trim();
@@ -41,11 +45,13 @@ public class AdminCategoryService {
         try {
             categoryRepository.save(category);
         } catch (DataIntegrityViolationException e) {
+            // 사전 중복 검사와 저장 사이의 동시 등록 경합을 DB 유니크 제약으로 다시 잡는다
             throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME, e);
         }
         return CategoryResponse.from(category);
     }
 
+    // 카테고리 이름을 바꾼다. 자기 자신과 같은 이름으로 바꾸는 것은 중복으로 보지 않는다
     @Transactional
     public CategoryResponse rename(Long categoryId, String newName) {
         String trimmedName = newName.trim();
@@ -63,6 +69,7 @@ public class AdminCategoryService {
         return CategoryResponse.from(category);
     }
 
+    // 카테고리를 삭제한다. 하위 카테고리가 있거나 소속 상품이 있으면 거부한다
     @Transactional
     public void delete(Long categoryId) {
         Category category = getCategoryOrThrow(categoryId);
@@ -78,18 +85,21 @@ public class AdminCategoryService {
         }
     }
 
+    // 같은 부모 아래(또는 최상위끼리) 이름이 이미 있는지 확인한다
     private boolean existsDuplicateName(Long parentId, String name) {
         return parentId == null
                 ? categoryRepository.existsByParentIdIsNullAndName(name)
                 : categoryRepository.existsByParentIdAndName(parentId, name);
     }
 
+    // 상위 카테고리로 지정한 ID가 실제로 존재하는지 확인한다. parentId가 null이면 최상위라 검사하지 않는다
     private void validateParentExists(Long parentId) {
         if (parentId != null && !categoryRepository.existsById(parentId)) {
             throw new ProductException(ProductErrorCode.CATEGORY_NOT_FOUND);
         }
     }
 
+    // ID로 카테고리를 찾고, 없으면 CATEGORY_NOT_FOUND를 던진다
     private Category getCategoryOrThrow(Long categoryId) {
         return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ProductException(ProductErrorCode.CATEGORY_NOT_FOUND));

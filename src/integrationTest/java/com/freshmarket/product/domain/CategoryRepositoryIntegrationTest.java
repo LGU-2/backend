@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * DB의 NOT NULL 제약을 위반한다 (BE-3-03).
  */
 @Import(JpaAuditingConfig.class)
+// CategoryRepository가 실제 MySQL 스키마의 유니크 제약과 FK 제약을 그대로 지키는지 검증한다
 @Testcontainers
 class CategoryRepositoryIntegrationTest {
 

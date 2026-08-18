@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// 관리자용 카테고리 목록/단건 조회, 등록, 이름 변경, 삭제 API
 @RestController
 @RequestMapping("/v1/admin/categories")
 class AdminCategoryController {

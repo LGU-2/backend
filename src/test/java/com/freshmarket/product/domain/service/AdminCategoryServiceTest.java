@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+// AdminCategoryService의 조회/등록/수정/삭제와 각 실패 케이스를 검증한다
 @ExtendWith(MockitoExtension.class)
 class AdminCategoryServiceTest {
 
