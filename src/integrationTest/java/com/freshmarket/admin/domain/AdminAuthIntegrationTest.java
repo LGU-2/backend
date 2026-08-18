@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.freshmarket.admin.domain.entity.Admin;
 import com.freshmarket.admin.domain.entity.AdminRole;
 import com.freshmarket.admin.domain.repository.AdminRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.Filter;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -37,16 +39,16 @@ import org.testcontainers.utility.DockerImageName;
  * admin 도메인의 통합 테스트를 한 파일에 모은다 (도메인당 통합 테스트 파일 하나 원칙).
  *
  * 두 계층을 함께 검증한다.
- *  1) 레포지토리 계층 - Admin 엔티티가 실제 admin 테이블(V1__init_schema.sql)과 어긋나지 않는지, DB CHECK 제약을 실제로 지키는지.
- *     단위 테스트(AdminAuthServiceTest)는
+ *  1) 레포지토리 계층 - Admin 엔티티가 실제 admin 테이블(V1__init_schema.sql)과 어긋나지
+ *     않는지, DB CHECK 제약을 실제로 지키는지. 단위 테스트(AdminAuthServiceTest)는
  *     AdminRepository 를 mock 으로 갈아끼우므로 이런 매핑/제약 위반을 잡지 못한다.
  *  2) 웹 계층 - AdminAuthController + SecurityConfig 가 실제 필터 체인 위에서 맞물려
  *     Set-Cookie 속성과 CSRF 동작을 의도대로 내는지 (G-LOCAL UT-1-01 지적 반영).
  *
  * @AutoConfigureMockMvc, SecurityMockMvcConfigurers 를 안 쓴다. 이 프로젝트의 Boot 4.0.5
- * 조합에서 둘 다 클래스패스에 없었다 (원인 미확인, @DataJpaTest 와 같은 부류).
- * 대신 WebApplicationContext 로 MockMvc 를 직접 만들고, springSecurityFilterChain 빈을 손으로 끼워 넣어 실제 보안 필터 체인을 태운다.
- * 이 방식은 spring-security-test 의존성이 필요 없다.
+ * 조합에서 둘 다 클래스패스에 없었다 (원인 미확인, @DataJpaTest 와 같은 부류). 대신
+ * WebApplicationContext 로 MockMvc 를 직접 만들고, springSecurityFilterChain 빈을 손으로
+ * 끼워 넣어 실제 보안 필터 체인을 태운다. 이 방식은 spring-security-test 의존성이 필요 없다.
  */
 @Testcontainers
 @SpringBootTest
@@ -57,6 +59,13 @@ class AdminAuthIntegrationTest {
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>(DockerImageName.parse("mysql:8.4"));
 
     private static final String RAW_PASSWORD = "Freahman!2026";
+
+    // DB 컬럼(refresh_token_hash CHAR(64))과 연결된 값이라 이름을 붙였다 (MNT-3-02)
+    private static final int REFRESH_TOKEN_HASH_LENGTH = 64;
+
+    // 테스트 데이터용 고정 시각. LocalDateTime.now() 를 직접 쓰면 실행 시각에 따라
+    // 입력이 매번 달라져 결정성이 떨어진다 (MNT-2-03)
+    private static final LocalDateTime FIXED_TEST_TIME = LocalDateTime.of(2026, 1, 1, 0, 0, 0);
 
     @Autowired
     private WebApplicationContext webApplicationContext;
@@ -71,6 +80,9 @@ class AdminAuthIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @Value("${app.security.admin-auth-path}")
     private String adminAuthPath;
 
@@ -79,7 +91,8 @@ class AdminAuthIntegrationTest {
     @BeforeEach
     void setUpMockMvc() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
-                .addFilter(springSecurityFilterChain).build();
+                .addFilter(springSecurityFilterChain)
+                .build();
     }
 
     @AfterEach
@@ -131,17 +144,20 @@ class AdminAuthIntegrationTest {
                         AdminRole.SUPER_ADMIN
                 )
         );
-        LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
+        LocalDateTime expiresAt = FIXED_TEST_TIME.plusDays(1);
+        String tokenHash = "a".repeat(REFRESH_TOKEN_HASH_LENGTH);
 
         // when
-        admin.issueRefreshToken("a".repeat(64), expiresAt);
+        admin.issueRefreshToken(tokenHash, expiresAt);
         adminRepository.saveAndFlush(admin);
+        entityManager.clear();   // 1차 캐시를 비워, 아래 조회가 실제로 DB 를 다시 읽게 한다 (UT-5-03)
 
         // then
         Optional<Admin> reloaded = adminRepository.findByLoginId("integration.lee");
 
         assertThat(reloaded).isPresent();
-        assertThat(reloaded.get().getRefreshTokenHash()).isEqualTo("a".repeat(64));
+        assertThat(reloaded.get().getRefreshTokenHash()).isEqualTo(tokenHash);
+        assertThat(reloaded.get().getRefreshTokenExpiresAt()).isEqualTo(expiresAt);   // 만료시각도 저장됐는지 확인 (UT-2-01)
     }
 
     /*
@@ -161,12 +177,13 @@ class AdminAuthIntegrationTest {
                         AdminRole.ADMIN
                 )
         );
-        admin.issueRefreshToken("b".repeat(64), LocalDateTime.now().plusDays(1));
+        admin.issueRefreshToken("b".repeat(REFRESH_TOKEN_HASH_LENGTH), FIXED_TEST_TIME.plusDays(1));
         adminRepository.saveAndFlush(admin);
 
         // when
-        admin.deactivate(LocalDateTime.now());
+        admin.deactivate(FIXED_TEST_TIME);
         adminRepository.saveAndFlush(admin);   // CHECK 제약을 어기면 여기서 예외가 난다
+        entityManager.clear();   // 1차 캐시를 비워, 아래 조회가 실제로 DB 를 다시 읽게 한다 (UT-5-03)
 
         // then
         Optional<Admin> reloaded = adminRepository.findByLoginId("integration.park");
@@ -189,7 +206,9 @@ class AdminAuthIntegrationTest {
                 """.formatted(RAW_PASSWORD);
 
         // when, then
-        mockMvc.perform(post(adminAuthPath).contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post(adminAuthPath)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Set-Cookie", allOf(
                         containsString("refreshToken="),
@@ -214,7 +233,9 @@ class AdminAuthIntegrationTest {
                 """.formatted(RAW_PASSWORD);
 
         // when, then
-        mockMvc.perform(post(adminAuthPath).contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post(adminAuthPath)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isCreated());
     }
 
@@ -226,6 +247,7 @@ class AdminAuthIntegrationTest {
      */
     @Test
     void 로그인이_아닌_상태_변경_요청은_CSRF_토큰이_없으면_거부된다() throws Exception {
-        mockMvc.perform(delete(adminAuthPath)).andExpect(status().isForbidden());
+        mockMvc.perform(delete(adminAuthPath))
+                .andExpect(status().isForbidden());
     }
 }
