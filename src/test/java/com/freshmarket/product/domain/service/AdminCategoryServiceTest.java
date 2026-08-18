@@ -214,12 +214,27 @@ class AdminCategoryServiceTest {
         // given
         Category category = Category.register("수산물");
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.existsByParentId(1L)).thenReturn(true);
+
+        // when, then
+        assertThatThrownBy(() -> adminCategoryService.delete(1L))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_HAS_CHILDREN);
+        verify(categoryRepository, never()).delete(any());
+    }
+
+    @Test
+    void 소속_상품이_있으면_삭제할_수_없다() {
+        // given
+        Category category = Category.register("수산물");
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.existsByParentId(1L)).thenReturn(false);
         doThrow(new DataIntegrityViolationException("fk violation"))
                 .when(categoryRepository).flush();
 
         // when, then
         assertThatThrownBy(() -> adminCategoryService.delete(1L))
                 .isInstanceOf(ProductException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_HAS_CHILDREN);
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_HAS_PRODUCTS);
     }
 }

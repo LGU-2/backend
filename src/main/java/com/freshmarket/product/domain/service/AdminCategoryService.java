@@ -32,11 +32,12 @@ public class AdminCategoryService {
 
     @Transactional
     public CategoryResponse register(String name, Long parentId) {
+        String trimmedName = name.trim();
         validateParentExists(parentId);
-        if (existsDuplicateName(parentId, name)) {
+        if (existsDuplicateName(parentId, trimmedName)) {
             throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME);
         }
-        Category category = Category.register(name, parentId);
+        Category category = Category.register(trimmedName, parentId);
         try {
             categoryRepository.save(category);
         } catch (DataIntegrityViolationException e) {
@@ -47,13 +48,14 @@ public class AdminCategoryService {
 
     @Transactional
     public CategoryResponse rename(Long categoryId, String newName) {
+        String trimmedName = newName.trim();
         Category category = getCategoryOrThrow(categoryId);
-        boolean nameChanged = !category.getName().equals(newName);
-        if (nameChanged && existsDuplicateName(category.getParentId(), newName)) {
+        boolean nameChanged = !category.getName().equals(trimmedName);
+        if (nameChanged && existsDuplicateName(category.getParentId(), trimmedName)) {
             throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME);
         }
         try {
-            category.rename(newName);
+            category.rename(trimmedName);
             categoryRepository.flush();   // UPDATE를 지금 실행시켜서 제약 위반을 이 안에서 잡음
         } catch (DataIntegrityViolationException e) {
             throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME, e);
@@ -64,12 +66,15 @@ public class AdminCategoryService {
     @Transactional
     public void delete(Long categoryId) {
         Category category = getCategoryOrThrow(categoryId);
-        // TODO: 상품 도메인 완료 후 소속 상품 존재 검증 추가 — ProductErrorCode.CATEGORY_HAS_PRODUCTS
+        if (categoryRepository.existsByParentId(categoryId)) {
+            throw new ProductException(ProductErrorCode.CATEGORY_HAS_CHILDREN);
+        }
         try {
             categoryRepository.delete(category);
             categoryRepository.flush();   // DELETE를 지금 실행시켜서 FK 위반을 이 안에서 잡음
         } catch (DataIntegrityViolationException e) {
-            throw new ProductException(ProductErrorCode.CATEGORY_HAS_CHILDREN, e);
+            // 하위 카테고리는 위에서 걸러졌으므로, 여기 남는 FK 위반은 소속 상품 때문이다
+            throw new ProductException(ProductErrorCode.CATEGORY_HAS_PRODUCTS, e);
         }
     }
 
