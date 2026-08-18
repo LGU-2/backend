@@ -16,12 +16,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-// (2026-08-18 11:05) com.example.freshdemo.common.auth.jwt에서 이식.
-// (2026-08-18 12:50) docs/api/auth.md 기준으로 accessToken을 쿠키로 안 내려주기로 하면서, 쿠키에서
-// accessToken을 읽던 폴백 분기를 없앴었다.
-// (2026-08-18 16:20) 사용자 요청으로 accessToken을 다시 쿠키로 내려주기로 하면서 쿠키 판독
-// 분기를 복원했다. Authorization 헤더가 있으면 그걸 우선하고(하위호환/디버깅용, 예: Swagger에서
-// 수동으로 Bearer 헤더를 실어 테스트하는 경우), 없으면 accessToken 쿠키를 본다.
+// accessToken은 기본적으로 HttpOnly 쿠키로 오간다(AuthCookieFactory 참고). Authorization
+// 헤더도 같이 지원하는 이유는 하위호환/디버깅용이다 — 예를 들어 Swagger에서 수동으로 Bearer
+// 헤더를 실어 테스트하는 경우. 헤더가 있으면 그걸 우선하고, 없으면 accessToken 쿠키를 본다.
 /**
  * 회원(MEMBER)·관리자(ADMIN) 토큰을 한 필터에서 같이 처리한다 — 별도 필터체인으로 쪼개지 않고,
  * type/role 클레임으로 구분해서 인가는 SecurityConfig의 requestMatchers가 담당하게 했다.

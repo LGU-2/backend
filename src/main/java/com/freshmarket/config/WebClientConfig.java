@@ -6,7 +6,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
 
-// (2026-08-18 11:05) com.example.freshdemo에서 이식.
 @Configuration
 public class WebClientConfig {
 

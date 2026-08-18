@@ -21,12 +21,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// (2026-08-18 11:10) com.example.freshdemo.member.domain.service에서 이식.
-// (2026-08-18 12:25) docs/api/auth.md 기준으로 accessToken을 더 이상 쿠키로 내려주지 않는다 —
-// 응답 본문에 담아 컨트롤러가 돌려주도록 issue()/reissue() 둘 다 accessToken(+수명)을 반환값에
-// 포함시켰다. refreshToken은 기존과 동일하게 쿠키로만 나간다. 재발급 실패 사유도
-// BadCredentialsException(스프링 시큐리티 제네릭 타입) 대신 AuthException(AUTH-004)으로 바꿔
-// 문서의 에러코드가 그대로 응답에 실리게 했다.
+// issue()/reissue() 둘 다 accessToken(+수명)을 반환값에 담아 컨트롤러가 응답 본문/쿠키를
+// 조립하는 데 쓸 수 있게 한다. 재발급 실패는 BadCredentialsException(스프링 시큐리티 제네릭
+// 타입) 대신 AuthException(AUTH-004)으로 던져 문서가 정한 에러코드가 그대로 응답에 실린다.
 /**
  * 회원 로그인/재발급/로그아웃 시 토큰(access/refresh) 발급·회전·폐기를 담당. common.auth.jwt의
  * RefreshTokenRepository(순수 Redis)를 1차 저장소로 쓰고, Member 행의
@@ -118,7 +115,8 @@ public class MemberTokenService {
 
     /**
      * 로그아웃/탈퇴 시 토큰 폐기. logoutExternalSession=true면 카카오 세션도 끊는다(일반
-     * /members/logout에서만 true — 탈퇴 흐름은 이번 이식 범위에서 제외했다).
+     * /members/logout에서만 true — 탈퇴 흐름은 카카오 unlink를 MemberWithdrawalEvent로 별도
+     * 처리하므로 여기서는 false로 호출한다).
      */
     @Transactional
     public void revoke(Long memberId, String role, boolean logoutExternalSession) {

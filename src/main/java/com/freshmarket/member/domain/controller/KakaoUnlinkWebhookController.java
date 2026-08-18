@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// (2026-08-18 11:45) com.example.freshdemo.member.domain.controller에서 이식, 로직 무변경.
 /** 카카오 연결 해제 웹훅 — 응답은 항상 200이어야 하는 카카오 스펙이라 ResponseEnvelope를 쓰지 않는다. */
 @Slf4j
 @RestController

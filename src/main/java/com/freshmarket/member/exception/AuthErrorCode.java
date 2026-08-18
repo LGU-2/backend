@@ -16,8 +16,7 @@ public enum AuthErrorCode implements ErrorCode {
     ID_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH-002", "id_token 검증에 실패했습니다."),
     KAKAO_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AUTH-003", "카카오 서버로부터 응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요."),
     REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH-004", "만료되었거나 이미 사용된 토큰입니다."),
-    // (2026-08-18 13:40) docs/api/member.md엔 번호가 없다("탈퇴 전 카카오 재인증" 요구사항만
-    // 서술하고 요청/응답 모양은 안 정해뒀음 — 사용자 확인 후 이 코드로 구현). 재인증에 성공은
+    // docs/api/member.md의 탈퇴 절이 지정한 번호(401 AUTH-005) 그대로다. 재인증에 성공은
     // 했지만(id_token 검증 통과) 그 카카오 계정이 탈퇴를 요청한 회원 본인이 아닌 경우.
     REAUTH_ACCOUNT_MISMATCH(HttpStatus.UNAUTHORIZED, "AUTH-005", "재인증한 카카오 계정이 본인 계정과 다릅니다."),
     ;

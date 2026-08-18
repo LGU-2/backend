@@ -21,11 +21,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// (2026-08-18 11:50) com.example.freshdemo.address.domain.controller에서 이식 — address가
-// member 도메인 하위로 재구성되면서(domain-map.md 기준) member.domain.controller로 옮겨왔다.
-// (2026-08-18 13:10) docs/api/member.md 기준으로 경로를 /v1/members/me/addresses로 옮기고,
-// 수정을 PUT에서 PATCH로 바꿨다(문서 표가 PATCH로 명시). 목록 응답은 배열이 아니라
-// {"addresses": [...]}로 감싸서 준다(AddressListResponse 참고).
+// domain-map.md 기준 address는 member 도메인이 소유하는 테이블이라 member.domain.controller
+// 아래에 둔다. docs/api/member.md가 경로를 /v1/members/me/addresses로, 수정 메서드를 PATCH로
+// 명시한다(부분 수정이라 PUT이 아니라 PATCH). 목록 응답은 배열이 아니라 {"addresses": [...]}로
+// 감싸서 준다(AddressListResponse 참고).
 /** 회원 배송지 API. */
 @RestController
 @RequestMapping("/v1/members/me/addresses")

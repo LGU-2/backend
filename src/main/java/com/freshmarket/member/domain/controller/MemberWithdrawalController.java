@@ -15,8 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// (2026-08-18 11:45) com.example.freshdemo.member.domain.controller에서 이식.
-// (2026-08-18 13:40) docs/api/member.md 기준 전면 재작성: DELETE /members/me ->
+// docs/api/member.md 기준: DELETE /members/me ->
 // POST /v1/members/me:withdraw로 경로/메서드 변경(탈퇴는 리소스 필드 교체가 아니라 서버가
 // 규칙대로 수행하는 동작이라 문서가 커스텀 메서드로 뒀다 — 재발급과 같은 이유, API-3-08).
 // (2026-08-18 16:20) accessToken이 다시 쿠키로 나가게 되면서 expiredAccessTokenCookie() 호출도

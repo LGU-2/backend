@@ -16,8 +16,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// (2026-08-18 11:45) com.example.freshdemo.member.domain.service에서 이식.
-// (2026-08-18 13:40) docs/api/member.md 기준으로 "탈퇴 전 카카오 재인증" 검증 단계를 추가했다.
+// docs/api/member.md 기준 "탈퇴 전 카카오 재인증" 요구사항을 검증 단계로 구현한다.
 /**
  * 회원탈퇴 유스케이스. 순서: 0) 카카오 재인증(id_token) 검증 — 본인 계정인지 확인
  * 1) DB 상태 변경(WITHDRAWN) 2) refreshToken 삭제 3) accessTokenValidAfter 커트라인 등록

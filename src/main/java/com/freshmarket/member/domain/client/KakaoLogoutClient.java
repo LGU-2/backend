@@ -10,7 +10,6 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 
-// (2026-08-18 11:10) com.example.freshdemo.member.domain.client에서 이식, 로직 무변경.
 /** 서버(Admin Key) 주도로 카카오 쪽 access token을 무효화한다(연결 자체는 유지). */
 @Slf4j
 @Component

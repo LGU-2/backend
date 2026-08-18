@@ -9,7 +9,6 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
-// (2026-08-18 11:05) com.example.freshdemo.common.auth.jwt에서 이식, 로직 무변경.
 /**
  * Refresh Token 저장소. key = "refreshToken:{role}:{id}". 순수 Redis 저장소 — Member/Admin을
  * 전혀 모른다. Redis 장애 시 DataAccessException을 그대로 던지며, DB 백업/폴백은 호출자(도메인

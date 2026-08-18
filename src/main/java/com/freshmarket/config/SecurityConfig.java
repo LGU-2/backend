@@ -25,20 +25,15 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  * 무엇을 열고 무엇을 막을지만 정한다.
  * 오류 응답의 구조는 GlobalExceptionHandler 가 혼자 소유한다.
  *
- * (2026-08-18 11:20) fresh-demo(feat/member-auth 이식)에서 회원 인증(JWT + 카카오 OAuth2)
- * 배선을 가져왔다. 관리자(admin) 인증은 다른 팀원이 별도로 진행 중이라 이 커밋에는 admin 경로
- * 매처를 넣지 않았다 — 나중에 admin 쪽 SecurityConfig 변경과 합칠 때 함께 정리한다.
+ * 회원 인증(JWT + 카카오 OAuth2) 배선만 담당한다. 관리자(admin) 인증은 다른 팀원이 별도로
+ * 진행 중이라 이 파일에는 admin 경로 매처를 넣지 않았다 — 나중에 admin 쪽 SecurityConfig
+ * 변경과 합칠 때 함께 정리한다.
  *
- * (2026-08-18 13:45) docs/api/auth.md·member.md 기준 프론트-콜백형 흐름으로 바뀌면서
- * .oauth2Login(...)과 그 앞에 달려있던 RememberMeRequestFilter를 없앴다 — redirect_uri가
- * 프론트를 가리키게 되면서 Spring Security의 OAuth2 콜백 처리 필터 체인이 아예 요청을 받지
- * 않는다(자세한 인과관계는 MemberLoginService 주석 참고). remember는 이제 로그인 요청 본문의
- * 필드(MemberLoginRequest.remember)라 별도 필터가 필요 없다. 대신 새 경로(/v1/auth/**,
- * /v1/members/**)에 맞춰 매처를 갈아 끼우고, 헤더 기반 accessToken 전달 + 프론트 분리 배포를
- * 위해 CORS 빈을 새로 추가했다.
- *
- * (2026-08-18 15:10) 브랜치 전환 중 커밋 안 된 상태로 이 파일 내용이 통째로 날아갔던 걸 복구함 —
- * 위 두 시점의 변경사항을 합친 최종본 그대로 다시 썼다. 로직 변경 없음.
+ * docs/api/auth.md·member.md 기준 카카오 로그인은 프론트가 콜백(redirect_uri)을 직접 받아
+ * code/state를 백엔드로 넘기는 구조라 Spring Security의 .oauth2Login(...) 필터 체인은 안 쓴다
+ * (자세한 인과관계는 MemberLoginService 주석 참고) — 그래서 그 필터가 처리하던 리다이렉트/
+ * 콜백 경로 매처가 없다. 대신 이 API가 쓰는 경로(/v1/auth/**, /v1/members/**)에 맞춰 매처를
+ * 두고, 프론트가 다른 오리진에서 쿠키를 주고받을 수 있도록 CORS 빈을 둔다.
  */
 @Configuration
 @EnableWebSecurity
@@ -126,10 +121,10 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // (2026-08-18 13:45) docs/api/auth.md: accessToken은 Authorization 헤더로, refreshToken은
-    // HttpOnly 쿠키로 오간다 — 프론트가 백엔드와 다른 오리진(예: localhost:5173)이라 브라우저가
-    // 커스텀 Authorization 헤더를 프리플라이트로 먼저 확인하고, 쿠키를 주고받으려면
-    // allowCredentials(true)가 필요하다. allowedOrigins는 app.cors.allowed-origins(콤마 구분)에서 읽는다.
+    // docs/api/auth.md: accessToken/refreshToken 둘 다 HttpOnly 쿠키로 오간다 — 프론트가
+    // 백엔드와 다른 오리진(예: localhost:5173)이라 쿠키를 주고받으려면 allowCredentials(true)와
+    // 프론트 오리진을 명시한 allowedOrigins가 필요하다(둘 다 없으면 브라우저가 쿠키를 안 보낸다).
+    // allowedOrigins는 app.cors.allowed-origins(콤마 구분)에서 읽는다.
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

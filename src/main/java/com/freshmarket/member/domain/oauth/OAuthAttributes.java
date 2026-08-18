@@ -5,7 +5,6 @@ import com.freshmarket.member.domain.entity.SocialType;
 import java.util.Map;
 import lombok.Builder;
 
-// (2026-08-18 11:10) com.example.freshdemo.member.domain.oauth에서 이식, 로직 무변경.
 /** 카카오 OIDC 응답에서 필요한 값(sub)만 뽑아내는 어댑터. */
 @Builder
 public record OAuthAttributes(

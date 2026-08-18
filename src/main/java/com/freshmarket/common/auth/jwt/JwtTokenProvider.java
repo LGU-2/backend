@@ -12,7 +12,6 @@ import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-// (2026-08-18 11:05) com.example.freshdemo.common.auth.jwt에서 이식, 로직 무변경.
 /**
  * Access/Refresh 토큰 생성·파싱·검증 담당. member/admin 공용 인증 인프라라 common.auth 소속.
  * role 클레임은 Spring Security 권한 문자열 그대로("ROLE_USER", "ROLE_ADMIN", "ROLE_SUPER_ADMIN")를

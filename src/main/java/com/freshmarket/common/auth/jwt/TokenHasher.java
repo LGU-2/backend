@@ -5,7 +5,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-// (2026-08-18 11:05) com.example.freshdemo.common.auth.jwt에서 이식, 로직 무변경.
 /**
  * refreshToken처럼 "저장은 해시로 해두고, 나중엔 비교만 하면 되는" 고엔트로피 랜덤 토큰을 해싱하는 유틸.
  * 비밀번호(PasswordEncoder/bcrypt)와 달리 SHA-256을 쓰는 이유: JWT 서명 자체가 이미 고엔트로피라

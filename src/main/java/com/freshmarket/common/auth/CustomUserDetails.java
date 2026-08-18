@@ -8,7 +8,6 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-// (2026-08-18 11:05) com.example.freshdemo.common.auth에서 이식, 로직 무변경.
 // member/admin 공용 — type으로 어느 쪽 토큰인지 구분한다.
 public class CustomUserDetails implements UserDetails {
 

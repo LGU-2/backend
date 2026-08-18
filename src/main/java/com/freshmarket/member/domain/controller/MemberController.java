@@ -15,10 +15,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// (2026-08-18 11:15) com.example.freshdemo.member.domain.controller에서 이식.
-// (2026-08-18 13:25) docs/api/member.md 기준 전면 재작성: 경로를 /v1/members로 옮기고, 문서에
-// 없던 PATCH /me/onboarding을 없앴다(온보딩 완료 로직은 MemberProfileUpdateService.updateProfile()
-// 로 흡수됨). 문서에만 있고 코드엔 없던 GET /v1/members/me(내 정보 조회)를 새로 추가했다.
+// docs/api/member.md 기준 경로는 /v1/members다. 온보딩 완료 로직은 별도 엔드포인트가 아니라
+// MemberProfileUpdateService.updateProfile()의 "필수 항목이 다 채워지면 자동 전환" 분기로
+// 흡수돼 있다(Member.updateProfile() 참고) — 문서가 PATCH /v1/members/me 하나만 정의한다.
 /** 회원 프로필 API. */
 @RestController
 @RequestMapping("/v1/members")

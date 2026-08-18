@@ -17,11 +17,11 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// (2026-08-18 12:30) docs/api/auth.md의 "POST /v1/auth/tokens"(회원 로그인 완료) 전체를
-// 오케스트레이션한다. com.example.freshdemo의 CustomOidcUserService가 하던 "검증된 사용자로
-// Member 조회/생성"과, OAuth2LoginSuccessHandler가 하던 "토큰 발급"을 여기 하나로 합쳤다 —
-// 예전엔 이 둘이 Spring Security 필터가 서로 다른 시점에 불러주는 별개의 콜백이었지만, 지금은
-// 필터가 없어서 그냥 한 서비스 메서드 안의 순서 있는 두 단계가 됐다.
+// docs/api/auth.md의 "POST /v1/auth/tokens"(회원 로그인 완료) 전체를 오케스트레이션한다.
+// Spring Security의 oauth2Login() 필터 체인을 쓰지 않기로 하면서 — 리다이렉트 콜백을 백엔드가
+// 아니라 프론트가 받는 구조라 그 필터가 원래 하던 역할이 자연스럽게 안 맞는다 — "검증된
+// 사용자로 Member 조회/생성"과 "토큰 발급"이 서로 다른 시점의 필터 콜백이 아니라 이 메서드
+// 안의 순서 있는 두 단계가 됐다.
 @Slf4j
 @Service
 @RequiredArgsConstructor

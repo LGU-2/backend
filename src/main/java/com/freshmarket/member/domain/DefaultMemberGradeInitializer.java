@@ -25,8 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 없었다. 로직 변경 없음, 패키지만 member.domain으로 옮김.
  *
  * (2026-08-18 16:40) 원래는 "Flyway는 테이블 구조만 정의하고 시드 데이터는 안 넣는다"는 전제로
- * 이 클래스가 기본 등급을 직접 만들었는데(이름은 "일반" — fresh-demo의 placeholder를 그대로
- * 옮겨온 거라 docs/api/member.md가 명시한 "브론즈/실버/골드"와 안 맞았다), 이제
+ * 이 클래스가 기본 등급을 직접 만들었는데(임시로 "일반"이라는 이름을 썼던 거라
+ * docs/api/member.md가 명시한 "브론즈/실버/골드"와 안 맞았다), 이제
  * V2__seed_member_grades.sql이 그 세 등급(브론즈를 기본값으로)을 직접 심는다 — 스키마와 초기
  * 데이터를 둘 다 Flyway가 소유하는 게 이 프로젝트 컨벤션(V1 참고)과 맞다. 그래서 이 클래스는
  * 평소엔 findByIsDefaultTrue()에서 바로 걸려 아무 일도 안 하고, 마이그레이션이 어떤 이유로든

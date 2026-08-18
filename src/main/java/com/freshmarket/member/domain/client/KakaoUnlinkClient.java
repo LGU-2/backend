@@ -13,7 +13,6 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-// (2026-08-18 11:45) com.example.freshdemo.member.domain.client에서 이식, 로직 무변경.
 /** 서버(Admin Key) 주도로 카카오 계정과의 연결을 끊는 클라이언트. */
 @Slf4j
 @Component

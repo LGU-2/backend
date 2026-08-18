@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-// (2026-08-18 11:05) com.example.freshdemo.common.auth.jwt에서 이식, 로직 무변경.
 /**
  * "이 시각 이전에 발급된 accessToken은 전부 무효"라는 계정 단위 커트라인을 Redis에 저장하는 저장소.
  * key 포맷은 RefreshTokenRepository와 맞춰 "accessTokenValidAfter:{role}:{id}".
