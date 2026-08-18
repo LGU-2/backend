@@ -112,8 +112,13 @@ POST /v1/auth/tokens
 ```
 
 ```json
-{ "authorizationCode": "...", "state": "..." }
+{ "authorizationCode": "...", "state": "...", "remember": false }
 ```
+
+`remember` 는 선택 필드다(기본값 `false`). Refresh 토큰 자체의 서버 쪽 유효기간(14일)에는
+영향이 없다 — 이 값은 오직 `refreshToken` 쿠키에 `Max-Age` 를 붙이느냐만 정한다.
+`true` 면 브라우저를 껐다 켜도 쿠키가 남아 자동 로그인되고, `false` 면 세션 쿠키로 나가
+브라우저 종료 시 삭제된다.
 
 서버가 하는 일은 넷이다.
 
