@@ -22,6 +22,9 @@ import org.hibernate.annotations.Check;
  * 생성은 @Builder(access=PRIVATE) + 이름 있는 정적 팩토리(register())로만 열어둔다 — public
  * builder()를 그대로 노출하면 필수값(provider/providerUserId/memberGradeId) 누락을 컴파일
  * 타임에 못 막는다.
+ *
+ * (2026-08-18 15:10) 브랜치 전환 중 커밋 안 된 상태로 이 파일이 통째로 날아갔던 걸 복구함 —
+ * 아래 updateProfile()/completeOnboarding() 부분을 포함해 내용 변경 없이 그대로 다시 썼다.
  */
 @Entity
 @Getter
@@ -50,7 +53,7 @@ public class Member extends BaseMutableTimeEntity {
                     + "(CASE WHEN deleted_at IS NULL THEN CONCAT(provider, ':', provider_user_id) ELSE NULL END)")
     private String activeProviderKey;
 
-    // 카카오에서 받지 않고 온보딩 폼 입력값을 저장한다(completeOnboarding() 참고).
+    // 카카오에서 받지 않고 온보딩 폼 입력값을 저장한다(updateProfile() 참고).
     @Column(length = 255)
     private String email;
 
@@ -125,30 +128,49 @@ public class Member extends BaseMutableTimeEntity {
         return this;
     }
 
-    public Member updateProfile(String name, String nickname, String email, String phone, String address) {
-        this.name = name;
-        assignNickname(nickname);
-        this.email = email;
+    // (2026-08-18 13:25) docs/api/member.md 기준 PATCH /v1/members/me는 하나뿐이고 "보낸
+    // 필드만 바뀐다"(부분 수정)고 명시한다 — 예전엔 온보딩(완료 시 ACTIVE 전환 + 약관동의 필수
+    // 체크)과 일반 수정(PATCH /members/me)이 별도 엔드포인트/메서드였는데, 문서엔 온보딩용
+    // 엔드포인트가 따로 없다. 사용자 확인 후 두 흐름을 이 메서드 하나로 합쳤다: name/nickname/email이
+    // (기존값+새값 합쳐) 전부 채워지면 PENDING_PROFILE -> ACTIVE로 자동 전환하고, 그 시점의
+    // termsAgreedAt을 서버가 채운다. 문서 필드 표에 termsAgreed 체크박스가 없어서 명시적 동의
+    // 플래그는 더 이상 받지 않는다(사용자 확인: "하나로 합치고 termsAgreed 제거"). address도
+    // 문서 필드 표에 없어 이 메서드에서 다루지 않는다 — 컬럼/필드 자체는 남겨둔다(사용자 확인:
+    // "API에서 제거, 컬럼은 유지").
+    // 예전 온보딩 전용 흐름(completeOnboarding)은 죽은 코드라 이 파일에서는 지웠다 — 아직
+    // 이걸 호출하는 MemberOnboardingService/MemberOnboardingServiceTest/MemberOnboardingRequest
+    // 세 파일이 로컬에 남아 있다면 함께 지운다(아래 "정리 안내" 참고).
+    public Member updateProfile(String name, String nickname, String email, String phone, Boolean marketingAgreed) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (nickname != null) {
+            assignNickname(nickname);
+        }
+        if (email != null) {
+            this.email = email;
+        }
         if (phone != null) {
             this.phone = phone.isBlank() ? null : phone;
         }
-        if (address != null) {
-            this.address = address.isBlank() ? null : address;
+        if (marketingAgreed != null) {
+            this.marketingAgreed = marketingAgreed;
+        }
+        if (this.status == MemberStatus.PENDING_PROFILE
+                && this.name != null && !this.name.isBlank()
+                && this.nickname != null && !this.nickname.isBlank()
+                && this.email != null && !this.email.isBlank()) {
+            this.status = MemberStatus.ACTIVE;
+            this.termsAgreedAt = LocalDateTime.now();
         }
         return this;
     }
 
-    public Member completeOnboarding(String name, String nickname, String email, LocalDateTime termsAgreedAt, boolean marketingAgreed) {
-        this.name = name;
-        assignNickname(nickname);
-        this.email = email;
-        this.termsAgreedAt = termsAgreedAt;
-        this.marketingAgreed = marketingAgreed;
-        if (this.status == MemberStatus.PENDING_PROFILE) {
-            this.status = MemberStatus.ACTIVE;
-        }
-        return this;
-    }
+    // (2026-08-18 17:52) 죽은 completeOnboarding()을 지웠다 — MemberOnboardingService로
+    // 흡수된 지 오래고, 위 updateProfile()이 그 역할을 대신한다. MemberOnboardingService/
+    // MemberOnboardingServiceTest/MemberOnboardingRequest는 이 메서드가 없으면 컴파일이
+    // 깨지므로 반드시 같이 지운다 — 아래 "정리 안내" 참고(샌드박스는 파일 삭제를 못 해 로컬에서
+    // 직접 지워야 한다).
 
     public boolean isPendingProfile() {
         return this.status == MemberStatus.PENDING_PROFILE;
