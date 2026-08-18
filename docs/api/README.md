@@ -10,6 +10,7 @@
 |---|---|
 | [auth.md](./auth.md) | 회원 카카오 로그인, 관리자 로그인, 토큰 |
 | [member.md](./member.md) | 회원 정보, 배송지, 등급, 관리자의 회원 관리 |
+| [admin.md](./admin.md) | 관리자 계정 발급과 비활성화 |
 | [product.md](./product.md) | 상품, 카테고리, 리뷰, Q&A |
 | [stock.md](./stock.md) | 로트 입고, 재고 변동, 조정, 폐기 |
 | [order.md](./order.md) | 장바구니, 주문, 결제, 취소, 반품, 교환, 배송 |
@@ -25,7 +26,7 @@
 | 도메인 | 문서 | 절 |
 |---|---|---|
 | `member` | [member.md](./member.md) | 회원 정보, 배송지 |
-| `admin` | [member.md](./member.md), [auth.md](./auth.md) | 관리자 계정, 인증 |
+| `admin` | [admin.md](./admin.md), [auth.md](./auth.md) | 관리자 계정, 인증 |
 | `product` | [product.md](./product.md) | 상품, 카테고리 |
 | `review` | [product.md](./product.md) | 리뷰 |
 | `qna` | [product.md](./product.md) | Q&A |
