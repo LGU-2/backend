@@ -12,6 +12,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /*
@@ -33,10 +35,10 @@ public class SecurityConfig {
     };
 
     /*
-     * 로그인은 그 자체가 인증 수단이라 인증 없이 열어야 한다.
-     * POST 만 연다. 나중에 세션 목록 조회(GET) 가 생기면 그건 인증이 필요하다.
+     * 관리자 인증 리소스 경로다 (auth.md: POST 로그인/재발급, DELETE 로그아웃이 이 하나를 공유한다).
+     * 로그인(POST)은 인증 그 자체라 공개해야 한다.
      */
-    private final String adminLoginPath;
+    private final String adminAuthPath;
 
     /*
      * 헬스체크 경로는 아직 없다. actuator 를 의존성에 넣지 않았다.
@@ -51,35 +53,36 @@ public class SecurityConfig {
 
     public SecurityConfig(
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver handlerExceptionResolver,
-            @Value("${app.security.admin-login-path}") String adminLoginPath) {
+            @Value("${app.security.admin-auth-path}") String adminAuthPath) {
         this.handlerExceptionResolver = handlerExceptionResolver;
-        this.adminLoginPath = adminLoginPath;
+        this.adminAuthPath = adminAuthPath;
     }
 
     /*
-     * Sonar S4502:
-     * 관리자 로그인은 인증 전 공개 POST이며 세션 기반 인증이나 인증 쿠키를 사용하지 않는다.
-     * 애플리케이션은 STATELESS + Bearer JWT 인증 방식이므로 브라우저가 자동으로 전송하는
-     * 인증 정보를 악용하는 일반적인 CSRF 공격 조건에 해당하지 않는다.
+     * 리프레시 토큰을 HttpOnly 쿠키로 내려주므로 CSRF 보호를 켠다 (리뷰 반영, auth.md "토큰을 어떻게 전달하나" 절).
+     * 브라우저가 쿠키를 요청마다 자동으로 실어 보내는 순간부터 그걸 노리는 위조 요청(CSRF)이 성립하는 공격 조건이 된다.
      *
-     * CSRF 보호 전체를 비활성화하는 것이 아니라 관리자 로그인 POST 경로만 검사에서 제외한다.
+     * 1차 방어는 쿠키의 SameSite=Strict 다(대부분의 크로스사이트 요청 자체가 막힌다).
+     * 그 위에 CSRF 토큰(더블 서브밋 쿠키, CookieCsrfTokenRepository)을 방어층으로 더 쌓는다 — 서버 세션이 없는 STATELESS 구성이라 기본 저장소(HttpSession)를 못 쓴다.
+     *
+     * 로그인(POST) 만 예외로 둔다. 로그인 시점에는 아직 리프레시 토큰 쿠키 자체가 없어서 위조할 인증 상태가 없다.
+     * 메서드까지 지정해서 예외를 좁힌 이유는, 재발급/로그아웃이 로그인과 같은 경로 문자열(adminAuthPath)을 쓰기 때문이다
+     * — 경로만으로 예외를 주면 나중에 추가할 로그아웃(DELETE, 쿠키를 실제로 소비하는 요청)까지 조용히 CSRF 검사에서 빠져 버린다.
      */
     @Bean
-    @SuppressWarnings("java:S4502")
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                /*
-                 * 서버 세션을 두지 않으므로 CSRF 토큰을 보관할 곳이 없다.
-                 * 쿠키 기반 인증으로 바꾸면 이 두 줄을 함께 되돌려야 한다.
-                 */
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .ignoringRequestMatchers(
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, adminAuthPath)))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
-                        .requestMatchers(HttpMethod.POST, adminLoginPath).permitAll()
+                        .requestMatchers(HttpMethod.POST, adminAuthPath).permitAll()
                         .anyRequest().authenticated())
                 /*
                  * 넘긴 예외는 GlobalExceptionHandler 의 @ExceptionHandler 가 받는다.
@@ -95,7 +98,5 @@ public class SecurityConfig {
 
     // 관리자 비밀번호 해싱 전용. 회원은 카카오에 인증을 위임하므로 비밀번호 자체가 없다
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
+    public PasswordEncoder passwordEncoder() { return PasswordEncoderFactories.createDelegatingPasswordEncoder(); }
 }

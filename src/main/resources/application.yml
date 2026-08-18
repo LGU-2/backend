@@ -29,7 +29,8 @@ springdoc:
 
 app:
   security:
-    admin-login-path: "${ADMIN_LOGIN_PATH:/v1/admin/sessions}"
+    # auth.md: 로그인(POST)/재발급(POST :refresh)/로그아웃(DELETE)이 이 경로 하나를 공유한다
+    admin-auth-path: "${ADMIN_AUTH_PATH:/v1/admin/auth/tokens}"
   jwt:
     # 로컬 개발 편의를 위한 기본값이다. 운영에서는 반드시 환경변수/시크릿 매니저로 덮어쓴다.
     # 소스에 실키를 넣지 않는다 (비기능요구사항 보안 > 자격 증명 관리).
@@ -38,3 +39,6 @@ app:
       # 관리자 Access 30분 / Refresh 1일, 자동 로그인 미제공 (인증(OIDC) 설계 시트 3항)
       access-token-validity-seconds: ${ADMIN_ACCESS_TOKEN_VALIDITY_SECONDS:1800}
       refresh-token-validity-seconds: ${ADMIN_REFRESH_TOKEN_VALIDITY_SECONDS:86400}
+      # 리프레시 토큰 쿠키의 Secure 속성. 운영은 HTTPS 라 true 가 기본이다.
+      # 로컬 개발은 보통 HTTP 라 true 로 두면 브라우저가 쿠키를 아예 안 보낸다 - 로컬에서는 환경변수로 false 를 덮어쓴다.
+      refresh-cookie-secure: ${ADMIN_REFRESH_COOKIE_SECURE:true}

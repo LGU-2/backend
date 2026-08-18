@@ -15,11 +15,13 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 /*
  * Admin 엔티티가 실제 admin 테이블(V1__init_schema.sql, Flyway 가 이 컨테이너에 그대로 적용한다)과
- * 어긋나지 않는지 검증한다. 단위 테스트(AdminSessionServiceTest)는 AdminRepository 를 mock 으로
- * 갈아끼우기 때문에 이런 매핑 오류(예: PK 컬럼명이 id 가 아니라 admin_id 인데 놓친 경우)를 잡지 못한다.
+ * 어긋나지 않는지 검증한다. 단위 테스트(AdminAuthServiceTest)는 AdminRepository 를 mock 으로
+ * 갈아끼우기 때문에 이런 매핑 오류(예: PK 컬럼명이 id 가 아니라 admin_id 인데 놓친 경우)나
+ * DB CHECK 제약 위반(예: 비활성화 시 관련 컬럼 세 개가 동시에 안 맞는 경우)을 잡지 못한다.
  *
  * @DataJpaTest 를 쓰지 않는다. 이 프로젝트의 Boot 4.0.5 조합에서 그 애너테이션이 클래스패스에
  * 없었다 (원인 미확인, 로컬에서 재현됨). @SpringBootTest 는 존재가 확실하므로 이걸로 대신하고,
@@ -31,7 +33,7 @@ class AdminIntegrationTest {
 
     @Container
     @ServiceConnection
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4");
+    static final MySQLContainer<?> MYSQL = new MySQLContainer<>(DockerImageName.parse("mysql:8.4"));
 
     @Autowired
     private AdminRepository adminRepository;
@@ -96,5 +98,37 @@ class AdminIntegrationTest {
         assertThat(reloaded).isPresent();
         assertThat(reloaded.get().getRefreshTokenHash())
                 .isEqualTo("a".repeat(64));
+    }
+
+    /*
+     * chk_admin_deleted 제약을 실제 DB로 검증한다: status=DELETED 는 deleted_at IS NOT NULL,
+     * refresh_token_hash IS NULL 과 항상 함께여야 한다. 세 컬럼 중 하나라도 어긋나면
+     * MySQL 이 저장 자체를 거부한다 - Admin.deactivate() 가 셋을 함께 처리하지 않으면
+     * 이 테스트가 SQL 예외로 실패한다. mock 기반 단위 테스트로는 이 제약을 검증할 수 없다.
+     */
+    @Test
+    void 비활성화하면_상태와_리프레시_토큰이_DB_제약대로_함께_반영된다() {
+        // given
+        Admin admin = adminRepository.save(
+                Admin.register(
+                        "integration.park",
+                        "$2a$10$dummyHashForIntegrationTestOnly",
+                        "통합관리자3",
+                        AdminRole.ADMIN
+                )
+        );
+        admin.issueRefreshToken("b".repeat(64), LocalDateTime.now().plusDays(1));
+        adminRepository.saveAndFlush(admin);
+
+        // when
+        admin.deactivate(LocalDateTime.now());
+        adminRepository.saveAndFlush(admin);   // CHECK 제약을 어기면 여기서 예외가 난다
+
+        // then
+        Optional<Admin> reloaded = adminRepository.findByLoginId("integration.park");
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().isActive()).isFalse();
+        assertThat(reloaded.get().getRefreshTokenHash()).isNull();
+        assertThat(reloaded.get().getRefreshTokenExpiresAt()).isNull();
     }
 }

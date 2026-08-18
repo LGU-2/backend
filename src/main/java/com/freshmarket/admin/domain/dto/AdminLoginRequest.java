@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 @Schema(description = "관리자 로그인 요청")
-public record AdminSessionCreateRequest(
+public record AdminLoginRequest(
 
         @Schema(description = "관리자 로그인 아이디", example = "admin.kim")
         @NotBlank(message = "아이디를 입력해 주세요.")
