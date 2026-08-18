@@ -15,6 +15,7 @@ cd backend
 |---|---|
 | [project-guideline.md](./docs/project-guideline.md) | 프로젝트 작업 가이드 라인 |
 | [git-convention.md](./docs/git-convention.md) | 브랜치와 커밋 규칙 |
+| [api/README.md](./docs/api/README.md) | API 명세 |
 | [configuration.md](./docs/configuration.md) | 설정 파일과 로컬 DB |
 | [code-architecture/domain-map.md](./docs/code-architecture/domain-map.md) | 13개 도메인과 층 |
 | [verification/verification-guide.md](./docs/verification/verification-guide.md) | 검증 도구 사용법 |
