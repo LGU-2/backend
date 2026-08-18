@@ -134,6 +134,23 @@ class AdminCategoryServiceTest {
     }
 
     @Test
+    void 등록_중_부모가_동시에_삭제되면_존재하지_않는_카테고리로_응답한다() {
+        // given — validateParentExists 통과 직후, save() 시점엔 부모가 이미 삭제된 경합 상황
+        when(categoryRepository.existsById(1L)).thenReturn(true);
+        when(categoryRepository.existsByParentIdAndName(1L, "손질생선")).thenReturn(false);
+        when(categoryRepository.save(any(Category.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "Cannot add or update a child row: a foreign key constraint fails "
+                                + "(`freshmarket`.`category`, CONSTRAINT `fk_category_parent` "
+                                + "FOREIGN KEY (`parent_id`) REFERENCES `category` (`category_id`))"));
+
+        // when, then
+        assertThatThrownBy(() -> adminCategoryService.register("손질생선", 1L))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_NOT_FOUND);
+    }
+
+    @Test
     void 카테고리_이름을_바꾼다() {
         // given
         Category category = Category.register("과일");
@@ -189,7 +206,7 @@ class AdminCategoryServiceTest {
     void 카테고리를_삭제한다() {
         // given
         Category category = Category.register("유제품");
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(category));
 
         // when
         adminCategoryService.delete(1L);
@@ -201,7 +218,7 @@ class AdminCategoryServiceTest {
     @Test
     void 존재하지_않는_카테고리는_삭제할_수_없다() {
         // given
-        when(categoryRepository.findById(999L)).thenReturn(Optional.empty());
+        when(categoryRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
         // when, then
         assertThatThrownBy(() -> adminCategoryService.delete(999L))
@@ -214,7 +231,7 @@ class AdminCategoryServiceTest {
     void 하위_카테고리가_있으면_삭제할_수_없다() {
         // given
         Category category = Category.register("수산물");
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(category));
         when(categoryRepository.existsByParentId(1L)).thenReturn(true);
 
         // when, then
@@ -228,7 +245,7 @@ class AdminCategoryServiceTest {
     void 소속_상품이_있으면_삭제할_수_없다() {
         // given
         Category category = Category.register("수산물");
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(category));
         when(categoryRepository.existsByParentId(1L)).thenReturn(false);
         doThrow(new DataIntegrityViolationException("fk violation"))
                 .when(categoryRepository).flush();

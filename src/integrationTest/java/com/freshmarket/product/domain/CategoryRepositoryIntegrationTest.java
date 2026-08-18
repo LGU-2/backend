@@ -92,6 +92,13 @@ class CategoryRepositoryIntegrationTest {
     }
 
     @Test
+    void findByIdForUpdate로_잠금을_걸고_카테고리를_조회한다() {
+        Category saved = categoryRepository.save(Category.register("테스트카테고리1"));
+
+        assertThat(categoryRepository.findByIdForUpdate(saved.getId())).isPresent();
+    }
+
+    @Test
     void 하위_카테고리가_있는_상위_카테고리를_삭제하면_DB가_거부한다() {
         Category parent = categoryRepository.save(Category.register("테스트카테고리1"));
         categoryRepository.saveAndFlush(Category.register("손질생선", parent.getId()));

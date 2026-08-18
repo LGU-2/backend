@@ -45,10 +45,21 @@ public class AdminCategoryService {
         try {
             categoryRepository.save(category);
         } catch (DataIntegrityViolationException e) {
-            // 사전 중복 검사와 저장 사이의 동시 등록 경합을 DB 유니크 제약으로 다시 잡는다
-            throw new ProductException(ProductErrorCode.CATEGORY_DUPLICATE_NAME, e);
+            // 사전 검사(존재 확인/중복 검사)와 저장 사이의 동시 요청 경합을 DB 제약으로 다시 잡는다.
+            // 그사이 부모가 삭제됐다면 fk_category_parent 위반이라 존재 확인 실패로,
+            // 아니면 이름 유니크 제약 위반이라 중복으로 본다
+            ProductErrorCode errorCode = isParentConstraintViolation(e)
+                    ? ProductErrorCode.CATEGORY_NOT_FOUND
+                    : ProductErrorCode.CATEGORY_DUPLICATE_NAME;
+            throw new ProductException(errorCode, e);
         }
         return CategoryResponse.from(category);
+    }
+
+    // DB 예외의 근본 원인 메시지에 부모 참조 제약 이름이 들어있는지로, 부모 소멸과 이름 중복을 구분한다
+    private boolean isParentConstraintViolation(DataIntegrityViolationException e) {
+        String message = e.getMostSpecificCause().getMessage();
+        return message != null && message.contains("fk_category_parent");
     }
 
     // 카테고리 이름을 바꾼다. 자기 자신과 같은 이름으로 바꾸는 것은 중복으로 보지 않는다
@@ -69,10 +80,19 @@ public class AdminCategoryService {
         return CategoryResponse.from(category);
     }
 
-    // 카테고리를 삭제한다. 하위 카테고리가 있거나 소속 상품이 있으면 거부한다
+    /*
+     * 카테고리를 삭제한다. 하위 카테고리가 있거나 소속 상품이 있으면 거부한다.
+     * 대상 행에 비관적 쓰기 락을 걸어 두 동시성 문제를 함께 막는다.
+     *   1) 같은 카테고리를 여러 요청이 동시에 삭제 — 뒤에 락을 잡는 쪽은 대기했다가
+     *      앞선 삭제가 끝난 뒤 빈 결과를 받아 CATEGORY_NOT_FOUND로 정리된다
+     *   2) 삭제 확인(하위 카테고리 등)과 실제 삭제 사이에 다른 트랜잭션이 이 카테고리를
+     *      참조하는 행(하위 카테고리, 상품)을 끼워 넣는 경우 — 락이 걸린 동안 그 INSERT가
+     *      FK 검사에서 막혀 대기하므로 확인과 삭제가 원자적으로 처리된다
+     */
     @Transactional
     public void delete(Long categoryId) {
-        Category category = getCategoryOrThrow(categoryId);
+        Category category = categoryRepository.findByIdForUpdate(categoryId)
+                .orElseThrow(() -> new ProductException(ProductErrorCode.CATEGORY_NOT_FOUND));
         if (categoryRepository.existsByParentId(categoryId)) {
             throw new ProductException(ProductErrorCode.CATEGORY_HAS_CHILDREN);
         }
