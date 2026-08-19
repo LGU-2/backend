@@ -27,7 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Import(JpaAuditingConfig.class)
 // CategoryRepository가 실제 MySQL 스키마의 유니크 제약과 FK 제약을 그대로 지키는지 검증한다
 @Testcontainers
-class CategoryRepositoryIntegrationTest {
+class CategoryIntegrationTest {
 
     @Container
     @ServiceConnection
