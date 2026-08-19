@@ -22,11 +22,12 @@ public class SecurityConfig {
      * 인증 없이 여는 경로다.
      * 여기 없는 것은 전부 인증을 요구한다. 기본값이 거부다 (SEC-1-04).
      */
-    private static final String[] PUBLIC_PATHS = {
-            "/v3/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html"
-    };
+	private static final String[] PUBLIC_PATHS = {
+	        "/v3/api-docs/**",
+	        "/swagger-ui/**",
+	        "/swagger-ui.html",
+	        "/v1/products",
+	};
 
     /*
      * 헬스체크 경로는 아직 없다. actuator 를 의존성에 넣지 않았다.
