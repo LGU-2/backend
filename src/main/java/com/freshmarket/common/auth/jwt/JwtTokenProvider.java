@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -20,6 +21,18 @@ import org.springframework.stereotype.Component;
  * (OpaqueTokenGenerator 참고, SEC-1-04 정리). refreshTokenValidityMs는 리프레시 토큰의 TTL
  * 정책값으로 계속 여기 남겨둔다 — JWT를 만들진 않지만 "액세스/리프레시 토큰 수명 정책을 한
  * 곳에서 들고 있는다"는 원래 역할은 그대로 유효하다.
+ *
+ * (2026-08-19 추가, 되돌림) 한때 이 클래스에도 Clock을 주입해서 발급(issuedAt/expiration)뿐
+ * 아니라 jjwt 파서의 만료 판정(io.jsonwebtoken.Clock 어댑터)까지 결정적으로 만든 적이 있다 —
+ * 그러면 "만료 1초 전엔 유효, 1초 후엔 무효" 같은 JWT 자체의 경계를 Clock.fixed(...)만으로 테스트가
+ * 재현할 수 있다(실제로 그렇게 짠 테스트가 한때 있었다). 근데 admin-login 브랜치의 동급 클래스
+ * (common.security.JwtTokenProvider)는 Clock을 안 받고 그냥 Instant.now()를 쓴다 — 그쪽은 Clock을
+ * 그 상위 서비스(AdminAuthService)에서 "DB에 영속되는 리프레시 토큰 만료 시각" 계산에만 쓰고,
+ * JWT 자체의 iat/exp에는 안 쓴다. 두 브랜치 합칠 때 충돌을 줄이려고 이 클래스는 admin-login
+ * 패턴(얕게 — 서비스 레이어에만 Clock)에 맞춰 되돌렸다. MemberTokenService의 LocalDateTime.now()
+ * 호출들에 Clock이 들어가 있는 게 그 자리다. 더 철저한 결정성이 필요해지면(위에서 설명한 JWT
+ * 경계 테스트) 여기 다시 Clock을 주입하고 Jwts.parser()에 .clock(() -> Date.from(Instant.now(clock)))
+ * 를 추가하면 된다 — 다만 그럴 거면 admin-login 쪽도 같이 맞추자고 팀에 먼저 얘기하는 게 좋다.
  */
 @Component
 public class JwtTokenProvider {
@@ -39,12 +52,13 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(Long id, TokenType type, String role) {
+        Instant now = Instant.now();
         return Jwts.builder()
                 .subject(String.valueOf(id))
                 .claim("type", type.name())
                 .claim("role", role)
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + accessTokenValidityMs))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusMillis(accessTokenValidityMs)))
                 .signWith(secretKey)
                 .compact();
     }

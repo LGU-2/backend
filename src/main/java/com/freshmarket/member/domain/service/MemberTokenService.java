@@ -3,16 +3,17 @@ package com.freshmarket.member.domain.service;
 import com.freshmarket.common.auth.AuthCookieFactory;
 import com.freshmarket.common.auth.jwt.AccessTokenValidAfterRepository;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
-import com.freshmarket.common.auth.jwt.OpaqueTokenGenerator;
 import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
-import com.freshmarket.common.auth.jwt.TokenHasher;
 import com.freshmarket.common.auth.jwt.TokenType;
+import com.freshmarket.common.auth.jwt.OpaqueTokenGenerator;
+import com.freshmarket.common.auth.jwt.TokenHasher;
 import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.repository.MemberRepository;
 import com.freshmarket.member.exception.AuthErrorCode;
 import com.freshmarket.member.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -45,6 +46,11 @@ import org.springframework.transaction.annotation.Transactional;
  *    reissueViaDbFallback()으로 넘어가 Member.refreshTokenHash(DB 백업)로 회원을 역조회하고
  *    DB 레벨 CAS(MemberRepository.compareAndSetRefreshToken)로 회전을 계속한다. 이 경로에서는
  *    remember 플래그를 DB에 저장해두지 않으므로 안전하게 false로 취급한다(세션 쿠키가 된다).
+ *
+ * (2026-08-19 추가) DB/Redis에 남는 만료 시각 계산은 System/LocalDateTime.now() 대신 주입받은
+ * Clock을 쓴다 — admin-login 브랜치의 AdminAuthService와 같은 패턴이다(Clock을 서비스 레이어에서
+ * "영속되는 시각" 계산에만 쓰고, JwtTokenProvider 자체는 Clock을 안 받는다). 두 브랜치를 합칠 때
+ * 충돌을 줄이려고 이 범위에 맞췄다 — JwtTokenProvider.java의 관련 주석 참고.
  */
 @Slf4j
 @Service
@@ -57,6 +63,7 @@ public class MemberTokenService {
     private final AuthCookieFactory authCookieFactory;
     private final MemberRepository memberRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     public record IssueResult(String accessToken, long expiresInSeconds) {
     }
@@ -75,7 +82,7 @@ public class MemberTokenService {
         String accessToken = jwtTokenProvider.createAccessToken(memberId, TokenType.MEMBER, role);
         String refreshToken = OpaqueTokenGenerator.generate();
 
-        trySaveDbBackup(memberId, TokenHasher.sha256(refreshToken), LocalDateTime.now().plus(ttl));
+        trySaveDbBackup(memberId, TokenHasher.sha256(refreshToken), LocalDateTime.now(clock).plus(ttl));
         try {
             refreshTokenRepository.save(refreshToken, memberId, role, TokenType.MEMBER, rememberMe, ttl);
         } catch (DataAccessException e) {
@@ -97,7 +104,7 @@ public class MemberTokenService {
     public ReissueResult reissue(String oldRefreshToken) {
         String newRefreshToken = OpaqueTokenGenerator.generate();
         Duration ttl = Duration.ofMillis(jwtTokenProvider.getRefreshTokenValidityMs());
-        LocalDateTime expiresAt = LocalDateTime.now().plus(ttl);
+        LocalDateTime expiresAt = LocalDateTime.now(clock).plus(ttl);
 
         RefreshTokenRepository.RotateOutcome outcome;
         try {
@@ -158,7 +165,7 @@ public class MemberTokenService {
         if (member.isWithdrawn()) {
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
         }
-        if (member.getRefreshTokenExpiresAt() == null || member.getRefreshTokenExpiresAt().isBefore(LocalDateTime.now())) {
+        if (member.getRefreshTokenExpiresAt() == null || member.getRefreshTokenExpiresAt().isBefore(LocalDateTime.now(clock))) {
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
         }
 
@@ -228,7 +235,7 @@ public class MemberTokenService {
             log.warn("event=REDIS_DELETE_FAILED role={} id={} — DB 백업만 반영됨", role, memberId, e);
         }
 
-        accessTokenValidAfterRepository.invalidateBefore(role, memberId, LocalDateTime.now(),
+        accessTokenValidAfterRepository.invalidateBefore(role, memberId, LocalDateTime.now(clock),
                 Duration.ofMillis(jwtTokenProvider.getAccessTokenValidityMs()));
 
         if (logoutExternalSession) {

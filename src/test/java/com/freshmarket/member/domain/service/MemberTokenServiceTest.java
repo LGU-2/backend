@@ -29,6 +29,7 @@ import com.freshmarket.member.exception.AuthErrorCode;
 import com.freshmarket.member.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -74,7 +75,7 @@ class MemberTokenServiceTest {
         authCookieFactory = new AuthCookieFactory(jwtTokenProvider);
 
         sut = new MemberTokenService(jwtTokenProvider, refreshTokenRepository, accessTokenValidAfterRepository,
-                authCookieFactory, memberRepository, eventPublisher);
+                authCookieFactory, memberRepository, eventPublisher, Clock.systemDefaultZone());
     }
 
     private static Member newMember(Long id) {
