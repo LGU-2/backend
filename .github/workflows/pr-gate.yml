@@ -111,6 +111,12 @@ jobs:
     name: G-PR
     needs: build
     if: github.base_ref == 'develop'
-    uses: fresh-market/.github/.github/workflows/llm-verify.yml@main
+    #
+    # 이 브랜치는 판정 도구 수정을 실제 호출까지 태워 보기 위한 시험용이다. 머지하지 않는다.
+    # uses 만 브랜치로 바꾸면 워크플로만 그쪽에서 오고 run.py 는 여전히 main 에서 오므로,
+    # 도구를 브랜치 판본으로 돌리려면 common_ref 까지 함께 준다.
+    uses: fresh-market/.github/.github/workflows/llm-verify.yml@fix/llm-verify-max-tokens
+    with:
+      common_ref: fix/llm-verify-max-tokens
     secrets:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
