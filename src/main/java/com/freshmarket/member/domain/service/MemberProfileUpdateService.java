@@ -31,15 +31,13 @@ public class MemberProfileUpdateService {
         return MemberResponse.from(member, findGrade(member.getMemberGradeId()));
     }
 
+    // 닉네임 중복 방지는 안 한다 — 팀 결정으로 닉네임 유일성 요구사항 자체를 없앴다(2026-08-19).
+    // 예전엔 existsByNickname() 선조회로 검사했는데, 이건 GET-then-CHECK 방식이라 동시 요청이
+    // 같은 닉네임을 함께 통과하는 레이스가 항상 있었다(DI-3-01) — DB UNIQUE 제약을 걸어 막는
+    // 방향도 있었지만, 애초에 닉네임이 안 겹쳐야 할 이유가 없다고 판단해 이 요구사항 자체를 뺐다.
     @Transactional
     public MemberResponse updateProfile(Long memberId, MemberProfileUpdateRequest request) {
         Member member = findActiveMember(memberId);
-
-        if (request.nickname() != null
-                && !request.nickname().equals(member.getNickname())
-                && memberRepository.existsByNickname(request.nickname())) {
-            throw new MemberException(MemberErrorCode.DUPLICATE_NICKNAME);
-        }
 
         member.updateProfile(request.name(), request.nickname(), request.email(), request.phone(), request.marketingAgreed());
 

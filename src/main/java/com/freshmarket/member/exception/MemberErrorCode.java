@@ -46,7 +46,9 @@ public enum MemberErrorCode implements ErrorCode {
     // 문서에 번호가 명시되지 않은 내부 코드 (006/007과의 충돌을 피해 011부터 매김)
     MEMBER_NOT_FOUND(HttpStatus.BAD_REQUEST, "MEMBER-011", "회원을 찾을 수 없습니다."),
     MEMBER_ALREADY_WITHDRAWN(HttpStatus.BAD_REQUEST, "MEMBER-012", "이미 탈퇴한 회원입니다."),
-    DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "MEMBER-013", "이미 사용 중인 닉네임입니다."),
+    // MEMBER-013(구 DUPLICATE_NICKNAME)은 팀 결정으로 닉네임 유일성 요구사항 자체가 없어지면서
+    // 지웠다(2026-08-19) — 재사용하지 않는다, 나중에 착각해서 다른 용도로 다시 쓰면 옛 로그의
+    // MEMBER-013과 뜻이 섞인다.
     KAKAO_UNLINK_FAILED(HttpStatus.BAD_GATEWAY, "MEMBER-014", "카카오 연결 해제 요청에 실패했습니다."),
     DEFAULT_MEMBER_GRADE_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "MEMBER-015", "기본 회원 등급이 설정되어 있지 않습니다."),
     ;

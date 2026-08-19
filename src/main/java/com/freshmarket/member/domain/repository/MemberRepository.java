@@ -14,10 +14,6 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     Optional<Member> findByActiveProviderKey(String activeProviderKey);
 
-    boolean existsByNickname(String nickname);
-
-    Optional<Member> findByNickname(String nickname);
-
     @Modifying
     @Query("update Member m set m.refreshTokenHash = :hash, m.refreshTokenExpiresAt = :expiresAt where m.id = :id")
     int updateRefreshToken(@Param("id") Long id, @Param("hash") String hash, @Param("expiresAt") LocalDateTime expiresAt);

@@ -2,9 +2,6 @@ package com.freshmarket.member.domain.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.freshmarket.member.domain.entity.Member;
@@ -132,18 +129,6 @@ class MemberProfileUpdateServiceTest {
     }
 
     @Test
-    void 이미_다른_회원이_쓰는_닉네임이면_예외() {
-        Member member = newMember();
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(memberRepository.existsByNickname("닉네임")).thenReturn(true);
-
-        assertThatThrownBy(() -> sut.updateProfile(1L, request("이름", "닉네임", "a@b.com", "010-1234-5678", null)))
-                .isInstanceOf(MemberException.class)
-                .extracting(e -> ((MemberException) e).getErrorCode())
-                .isEqualTo(MemberErrorCode.DUPLICATE_NICKNAME);
-    }
-
-    @Test
     void 보낸_필드만_반영되고_나머지는_그대로다() {
         Member member = newMember();
         member.updateProfile("기존이름", "기존닉네임", "old@b.com", "010-0000-0000", true);
@@ -161,22 +146,9 @@ class MemberProfileUpdateServiceTest {
     }
 
     @Test
-    void 닉네임이_기존과_같으면_중복검사를_하지_않는다() {
-        Member member = newMember();
-        member.assignNickname("닉네임");
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(memberGradeRepository.findById(1L)).thenReturn(Optional.of(newGrade()));
-
-        sut.updateProfile(1L, request("이름", "닉네임", "a@b.com", "010-1234-5678", null));
-
-        verify(memberRepository, never()).existsByNickname(any());
-    }
-
-    @Test
     void 필수항목이_다_채워지면_PENDING_PROFILE에서_ACTIVE로_전환된다() {
         Member member = newMember();
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(memberRepository.existsByNickname("닉네임")).thenReturn(false);
         when(memberGradeRepository.findById(1L)).thenReturn(Optional.of(newGrade()));
 
         MemberResponse result = sut.updateProfile(1L, request("이름", "닉네임", "a@b.com", null, null));

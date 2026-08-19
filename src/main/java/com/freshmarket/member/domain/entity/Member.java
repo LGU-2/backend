@@ -60,9 +60,11 @@ public class Member extends BaseMutableTimeEntity {
     @Column(length = 255)
     private String email;
 
-    // DDL: VARCHAR(50). unique=true는 DDL엔 없는 애플리케이션 자체 제약 — existsByNickname
-    // 선조회 방식의 동시성 레이스가 알려진 채 남아있다.
-    @Column(unique = true, length = 50)
+    // DDL: VARCHAR(50). 닉네임 유일성은 요구사항이 아니다 — 팀 결정으로 중복 방지 로직/제약을
+    // 전부 뺐다(2026-08-19). 예전엔 existsByNickname() 선조회로 검사했는데 그 방식 자체가
+    // 동시성 레이스에 취약했다(DI-3-01) — 그걸 DB UNIQUE로 막는 대신, 애초에 안 겹쳐야 할
+    // 이유가 없다고 보고 요구사항을 없앴다.
+    @Column(length = 50)
     private String nickname;
 
     // DDL의 member.name(폼 입력 실명) — 카카오 nickname과 별개 필드.
