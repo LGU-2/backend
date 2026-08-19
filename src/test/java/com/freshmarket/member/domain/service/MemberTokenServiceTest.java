@@ -19,6 +19,7 @@ import com.freshmarket.common.auth.jwt.AccessTokenValidAfterRepository;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
 import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
 import com.freshmarket.common.auth.jwt.RefreshTokenRepository.RefreshTokenData;
+import com.freshmarket.common.auth.jwt.RefreshTokenRepository.RotateOutcome;
 import com.freshmarket.common.auth.jwt.TokenType;
 import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
@@ -28,6 +29,7 @@ import com.freshmarket.member.exception.AuthErrorCode;
 import com.freshmarket.member.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Field;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,6 +93,16 @@ class MemberTokenServiceTest {
         }
     }
 
+    private static void setRefreshTokenExpiresAt(Member member, LocalDateTime expiresAt) {
+        try {
+            Field field = Member.class.getDeclaredField("refreshTokenExpiresAt");
+            field.setAccessible(true);
+            field.set(member, expiresAt);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     // ---- issue() ----
 
     @Test
@@ -144,23 +156,46 @@ class MemberTokenServiceTest {
 
     // ---- reissue() ----
     // (2026-08-19) opaque 전환 이후 reissue(String)만 받는다 — 컨트롤러가 미리 클레임을 안 읽고
-    // 그대로 넘기므로, 여기서 refreshTokenRepository.compareAndRotate()의 결과로만 소유자를 안다.
+    // 그대로 넘기므로, 여기서 refreshTokenRepository.compareAndRotate()의 결과(RotateOutcome)로만
+    // 소유자를 안다. NOT_FOUND(정말 모르는 토큰)와 REUSE_DETECTED(한 번 회전되고 죽은 토큰의
+    // 재사용, tombstone 덕에 소유자는 앎)를 구분한다.
 
     @Test
-    void redis에_없는_토큰이면_재사용_의심으로_예외() {
-        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any())).thenReturn(Optional.empty());
+    void 전혀_모르는_토큰이면_재사용_의심_없이_예외() {
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenReturn(RotateOutcome.notFound());
 
         assertThatThrownBy(() -> sut.reissue("old-rt"))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
         verify(memberRepository, never()).findById(any());
+        // 소유자를 아예 모르니 강제 종료할 세션도 없다 — revoke 관련 저장소 호출이 없어야 한다
+        verify(refreshTokenRepository, never()).findActiveHash(any(), any());
+    }
+
+    @Test
+    void 이미_회전되고_죽은_토큰이_재사용되면_그_회원의_세션을_강제종료하고_예외() {
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenReturn(RotateOutcome.reuseDetected(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
+
+        assertThatThrownBy(() -> sut.reissue("old-rt"))
+                .isInstanceOf(AuthException.class)
+                .extracting(e -> ((AuthException) e).getErrorCode())
+                .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
+
+        // revoke(1L, "ROLE_USER", false)가 실제로 호출돼 현재 세션(activeKey가 가리키는 해시)을 지웠는지
+        verify(memberRepository).clearRefreshToken(1L);
+        verify(refreshTokenRepository).deleteByHash("current-hash");
+        verify(refreshTokenRepository).deleteActiveKey("ROLE_USER", 1L);
+        verify(accessTokenValidAfterRepository).invalidateBefore(eq("ROLE_USER"), eq(1L), any(), any());
     }
 
     @Test
     void 존재하지_않는_회원의_리프레시면_예외() {
         when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
-                .thenReturn(Optional.of(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
+                .thenReturn(RotateOutcome.success(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
         when(memberRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> sut.reissue("old-rt"))
@@ -174,22 +209,23 @@ class MemberTokenServiceTest {
         Member withdrawn = newMember(1L);
         withdrawn.withdraw();
         when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
-                .thenReturn(Optional.of(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
+                .thenReturn(RotateOutcome.success(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
         when(memberRepository.findById(1L)).thenReturn(Optional.of(withdrawn));
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
 
         assertThatThrownBy(() -> sut.reissue("old-rt"))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
         verify(memberRepository).clearRefreshToken(1L);
-        verify(refreshTokenRepository).delete("ROLE_USER", 1L);
+        verify(refreshTokenRepository).deleteByHash("current-hash");
     }
 
     @Test
     void 회전에_성공하면_새_토큰을_돌려준다() {
         Member member = newMember(1L);
         when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
-                .thenReturn(Optional.of(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, true)));
+                .thenReturn(RotateOutcome.success(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, true)));
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 
         MemberTokenService.ReissueResult result = sut.reissue("old-rt");
@@ -202,51 +238,110 @@ class MemberTokenServiceTest {
     }
 
     @Test
-    void redis_CAS가_장애나면_재로그인을_요구하고_DB로는_폴백하지_않는다() {
-        // opaque 토큰은 Redis 없이는 이 토큰이 누구 건지 알 방법이 없다 — memberId를 못 구하니
-        // DB 폴백(예전의 compareAndSetRefreshToken) 자체가 불가능해졌다.
+    void redis_CAS가_장애나면_DB_백업으로_폴백해서_재발급을_계속한다() {
         when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
                 .thenThrow(new DataAccessResourceFailureException("redis down"));
+
+        Member member = newMember(1L);
+        setRefreshTokenExpiresAt(member, LocalDateTime.now().plusDays(1));
+        when(memberRepository.findByRefreshTokenHash(anyString())).thenReturn(Optional.of(member));
+        when(memberRepository.compareAndSetRefreshToken(eq(1L), anyString(), anyString(), any())).thenReturn(1);
+
+        MemberTokenService.ReissueResult result = sut.reissue("old-rt");
+
+        assertThat(jwtTokenProvider.validateToken(result.accessToken())).isTrue();
+        assertThat(jwtTokenProvider.getId(result.accessToken())).isEqualTo(1L);
+        assertThat(result.refreshToken()).isNotBlank().isNotEqualTo("old-rt");
+        // DB 폴백 경로에서는 remember를 DB가 모르니 안전한 쪽(false)으로 저하시킨다
+        assertThat(result.remember()).isFalse();
+    }
+
+    @Test
+    void redis_CAS가_장애나고_DB에도_해당_토큰이_없으면_예외() {
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenThrow(new DataAccessResourceFailureException("redis down"));
+        when(memberRepository.findByRefreshTokenHash(anyString())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> sut.reissue("old-rt"))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
-        verify(memberRepository, never()).findById(any());
+    }
+
+    @Test
+    void redis_CAS가_장애나고_DB_CAS도_경합에서_지면_예외() {
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenThrow(new DataAccessResourceFailureException("redis down"));
+
+        Member member = newMember(1L);
+        setRefreshTokenExpiresAt(member, LocalDateTime.now().plusDays(1));
+        when(memberRepository.findByRefreshTokenHash(anyString())).thenReturn(Optional.of(member));
+        when(memberRepository.compareAndSetRefreshToken(eq(1L), anyString(), anyString(), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> sut.reissue("old-rt"))
+                .isInstanceOf(AuthException.class)
+                .extracting(e -> ((AuthException) e).getErrorCode())
+                .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
     }
 
     // ---- revoke() ----
 
     @Test
     void 로그아웃하면_저장소_세_곳을_모두_정리한다() {
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
+
         sut.revoke(1L, "ROLE_USER", false);
 
         verify(memberRepository).clearRefreshToken(1L);
-        verify(refreshTokenRepository).delete("ROLE_USER", 1L);
+        verify(refreshTokenRepository).deleteByHash("current-hash");
+        verify(refreshTokenRepository).deleteActiveKey("ROLE_USER", 1L);
         verify(accessTokenValidAfterRepository).invalidateBefore(eq("ROLE_USER"), eq(1L), any(), any());
+    }
+
+    @Test
+    void activeKey가_유실되면_db_백업_해시로_대신_지운다() {
+        Member member = newMember(1L);
+        try {
+            Field field = Member.class.getDeclaredField("refreshTokenHash");
+            field.setAccessible(true);
+            field.set(member, "db-backed-up-hash");
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.empty());
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+        sut.revoke(1L, "ROLE_USER", false);
+
+        verify(refreshTokenRepository).deleteByHash("db-backed-up-hash");
+        verify(refreshTokenRepository).deleteActiveKey("ROLE_USER", 1L);
     }
 
     @Test
     void db_삭제가_실패해도_나머지_정리는_계속된다() {
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
         doThrow(new DataAccessResourceFailureException("db down")).when(memberRepository).clearRefreshToken(1L);
 
         sut.revoke(1L, "ROLE_USER", false);
 
-        verify(refreshTokenRepository).delete("ROLE_USER", 1L);
+        verify(refreshTokenRepository).deleteByHash("current-hash");
         verify(accessTokenValidAfterRepository).invalidateBefore(eq("ROLE_USER"), eq(1L), any(), any());
     }
 
     @Test
-    void redis_삭제가_실패해도_나머지_정리는_계속된다() {
-        doThrow(new DataAccessResourceFailureException("redis down")).when(refreshTokenRepository).delete("ROLE_USER", 1L);
+    void redis_조회가_실패해도_나머지_정리는_계속된다() {
+        doThrow(new DataAccessResourceFailureException("redis down"))
+                .when(refreshTokenRepository).findActiveHash("ROLE_USER", 1L);
 
         sut.revoke(1L, "ROLE_USER", false);
 
+        verify(memberRepository).clearRefreshToken(1L);
         verify(accessTokenValidAfterRepository).invalidateBefore(eq("ROLE_USER"), eq(1L), any(), any());
     }
 
     @Test
     void 외부세션_로그아웃_플래그가_true면_카카오_로그아웃_이벤트를_발행한다() {
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
         Member member = newMember(1L);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 
@@ -259,6 +354,8 @@ class MemberTokenServiceTest {
 
     @Test
     void 외부세션_로그아웃_플래그가_false면_카카오_로그아웃_이벤트를_발행하지_않는다() {
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
+
         sut.revoke(1L, "ROLE_USER", false);
 
         verify(eventPublisher, never()).publishEvent(any());

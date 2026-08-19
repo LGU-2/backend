@@ -15,6 +15,7 @@ import com.freshmarket.member.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -34,11 +35,16 @@ import org.springframework.transaction.annotation.Transactional;
  * (2026-08-19) opaque 토큰 전환(SEC-1-04): 리프레시 토큰은 더 이상 JWT가 아니라
  * OpaqueTokenGenerator가 만든 무작위 문자열이다 — 클라이언트가 보낸 토큰만 봐서는 누구 건지
  * 전혀 알 수 없어서, reissue()가 "토큰에서 클레임을 먼저 읽고 조회"가 아니라 "Redis 조회부터
- * 하고 나서 알아내는" 순서로 뒤집혔다. 이 때문에 예전에 있던 "Redis 장애 시 DB CAS로 폴백"은
- * 더 이상 못 한다 — DB 백업(Member.refreshTokenHash)은 memberId로 찾는 컬럼인데, Redis가
- * 죽으면 애초에 이 토큰이 누구 건지 알 방법이 없어서 그 컬럼을 조회할 memberId 자체를 못 구한다.
- * 지금은 이 경우 REFRESH_TOKEN_INVALID로 재로그인을 요구한다 — Redis 가용성이 리프레시
- * 재발급의 하드 디펜던시가 됐다는 뜻이라, 별도로 팀 공유가 필요하다.
+ * 하고 나서 알아내는" 순서로 뒤집혔다.
+ *
+ * (2026-08-19 추가) 위 문제를 두 갈래로 보강했다:
+ * 1. 재사용 탐지(REUSE_DETECTED) — RefreshTokenRepository가 회전된 옛 토큰을 곧바로 지우지 않고
+ *    tombstone으로 짧게 남겨두므로(refresh_token_rotate.lua 참고), 죽은 토큰이 재생되면 그
+ *    소유자를 알아내 revoke()로 현재 세션을 강제 종료한다(도난 대응 복원).
+ * 2. Redis 완전 장애 — compareAndRotate()가 DataAccessException을 던지면
+ *    reissueViaDbFallback()으로 넘어가 Member.refreshTokenHash(DB 백업)로 회원을 역조회하고
+ *    DB 레벨 CAS(MemberRepository.compareAndSetRefreshToken)로 회전을 계속한다. 이 경로에서는
+ *    remember 플래그를 DB에 저장해두지 않으므로 안전하게 false로 취급한다(세션 쿠키가 된다).
  */
 @Slf4j
 @Service
@@ -93,26 +99,31 @@ public class MemberTokenService {
         Duration ttl = Duration.ofMillis(jwtTokenProvider.getRefreshTokenValidityMs());
         LocalDateTime expiresAt = LocalDateTime.now().plus(ttl);
 
-        RefreshTokenRepository.RefreshTokenData rotated;
+        RefreshTokenRepository.RotateOutcome outcome;
         try {
-            rotated = refreshTokenRepository.compareAndRotate(oldRefreshToken, newRefreshToken, ttl).orElse(null);
+            outcome = refreshTokenRepository.compareAndRotate(oldRefreshToken, newRefreshToken, ttl);
         } catch (DataAccessException e) {
-            // Redis가 죽으면 이 토큰이 누구 건지 알 방법 자체가 없다 — DB CAS 폴백이 불가능한
-            // 이유는 클래스 주석 참고. 재로그인을 요구하는 것 말고 할 수 있는 게 없다.
-            log.warn("event=REDIS_CAS_FAILED — Redis 장애로 재발급 불가(재로그인 필요)", e);
+            log.warn("event=REDIS_CAS_FAILED — Redis 장애, DB 백업으로 재발급 폴백 시도", e);
+            return reissueViaDbFallback(oldRefreshToken, newRefreshToken, expiresAt);
+        }
+
+        if (outcome.isReuseDetected()) {
+            // (2026-08-19) 이미 tombstone된(=한 번 회전되고 죽은) 토큰이 다시 들어옴 — 도난된 토큰이
+            // 재생됐을 가능성이 높다. tombstone 덕에 소유자를 알아냈으니, 그 회원의 현재 세션(도둑이
+            // 들고 있을 수도 있는 최신 토큰)까지 강제로 끊는다. 이 요청 자체는 그대로 거부한다 —
+            // 죽은 토큰을 들고 있다는 사실 자체는 신원 증명이 아니라서 새 토큰을 내주면 안 된다.
+            RefreshTokenRepository.RefreshTokenData reused = outcome.data();
+            log.warn("event=REFRESH_TOKEN_REUSE_SUSPECTED memberId={} role={} — 세션을 강제 종료한다",
+                    reused.memberId(), reused.role());
+            revoke(reused.memberId(), reused.role(), false);
+            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
+        }
+        if (!outcome.isSuccess()) {
+            log.warn("event=REFRESH_TOKEN_NOT_FOUND tokenHash={}", TokenHasher.sha256(oldRefreshToken));
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
         }
 
-        if (rotated == null) {
-            // (2026-08-19) opaque 전환 이후: 이 old 토큰이 누구 것이었는지 자체를 모르니, 예전처럼
-            // "그 회원의 세션 전체를 강제로 끊는" 조치는 이제 이 자리에서 못 한다 — Redis에 이미
-            // 없는 토큰이라 소유자 정보를 못 얻는다. 이 요청 자체를 거부하는 것으로 그친다.
-            // (재사용 탐지의 "다시 쓰인 옛 토큰을 걸러낸다"는 목적 자체는 그대로 살아있다 — 못
-            // 하게 된 건 "탐지 시 그 회원의 현재 유효 토큰까지 같이 죽이는" 부가 조치뿐이다.)
-            log.warn("event=REFRESH_TOKEN_REUSE_SUSPECTED tokenHash={}", TokenHasher.sha256(oldRefreshToken));
-            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
-        }
-
+        RefreshTokenRepository.RefreshTokenData rotated = outcome.data();
         Long memberId = rotated.memberId();
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID));
@@ -130,6 +141,51 @@ public class MemberTokenService {
     }
 
     /**
+     * (2026-08-19) Redis가 완전히 죽었을 때만 타는 경로. opaque 토큰은 문자열 자체로는 누구 건지
+     * 알 수 없어서, DB 백업(Member.refreshTokenHash)으로 역조회하는 것 말고는 신원을 확인할 방법이
+     * 없다 — 그래서 findByRefreshTokenHash()가 유일한 진입점이다. 동시 요청 경합은 DB 레벨 조건부
+     * UPDATE(compareAndSetRefreshToken, rows-affected 확인)로 막는다 — Redis의 Lua CAS와 같은
+     * 역할을 DB 트랜잭션/WHERE 절이 대신한다.
+     *
+     * remember는 이 폴백 경로에서 DB에 남아있지 않다(Redis 기본 레코드에만 저장하던 값) — false로
+     * 처리해 refreshToken 쿠키가 세션 쿠키가 되게 한다(더 안전한 쪽으로 저하시킨다).
+     */
+    private ReissueResult reissueViaDbFallback(String oldRefreshToken, String newRefreshToken, LocalDateTime expiresAt) {
+        String oldHash = TokenHasher.sha256(oldRefreshToken);
+        Member member = memberRepository.findByRefreshTokenHash(oldHash)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+
+        if (member.isWithdrawn()) {
+            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
+        }
+        if (member.getRefreshTokenExpiresAt() == null || member.getRefreshTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
+        }
+
+        String newHash = TokenHasher.sha256(newRefreshToken);
+        int updated = memberRepository.compareAndSetRefreshToken(member.getId(), oldHash, newHash, expiresAt);
+        if (updated == 0) {
+            // 동시에 다른 요청이 먼저 회전시켰다(또는 이미 다른 값으로 바뀌었다) — 재사용 의심과
+            // 같은 결로 취급해 거부한다. Redis가 죽은 상태라 여기서 세션을 강제 종료할 방법까진
+            // 없다(revoke()도 결국 Redis를 건드리니까) — 재로그인을 요구하는 것으로 그친다.
+            log.warn("event=DB_FALLBACK_CAS_LOST memberId={}", member.getId());
+            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
+        }
+
+        String role = member.getRole().name();
+        String newAccessToken = jwtTokenProvider.createAccessToken(member.getId(), TokenType.MEMBER, role);
+
+        try {
+            refreshTokenRepository.save(newRefreshToken, member.getId(), role, TokenType.MEMBER, false,
+                    Duration.ofMillis(jwtTokenProvider.getRefreshTokenValidityMs()));
+        } catch (DataAccessException e) {
+            log.warn("event=REDIS_SAVE_FAILED_DURING_DB_FALLBACK memberId={} — DB만 반영됨", member.getId(), e);
+        }
+
+        return new ReissueResult(newAccessToken, jwtTokenProvider.getAccessTokenValidityMs() / 1000, newRefreshToken, false);
+    }
+
+    /**
      * 로그아웃/탈퇴 시 토큰 폐기. logoutExternalSession=true면 카카오 세션도 끊는다(일반
      * /members/logout에서만 true — 탈퇴 흐름은 카카오 unlink를 MemberWithdrawalEvent로 별도
      * 처리하므로 여기서는 false로 호출한다). 카카오 로그아웃 자체는 MemberLogoutEvent로 커밋
@@ -137,22 +193,41 @@ public class MemberTokenService {
      * 같은 이유(DI-4-02): @Transactional 안에서 동기로 부르면 카카오 응답 대기 동안 DB 커넥션이
      * 묶인다.
      *
-     * refreshTokenRepository.delete(role, memberId)는 opaque 전환 이후에도 시그니처가 그대로다 —
-     * 보조 인덱스(회원 → 현재 토큰)로 찾아서 지우므로, 호출부가 실제 토큰 문자열을 몰라도(탈퇴/
-     * 웹훅 경로) 그대로 쓸 수 있다.
+     * (2026-08-19 추가) 보조 인덱스(findActiveHash)가 Redis 축출/재시작으로 유실됐으면 DB 백업
+     * (Member.refreshTokenHash)에서 해시를 구해 대신 지운다 — 그래야 그 해시가 자기 TTL로 자연
+     * 만료될 때까지 Redis에 남아 로그아웃 후에도 재발급에 쓰이는 걸 막는다. 이 폴백을 쓰려면
+     * clearRefreshToken()으로 그 컬럼을 비우기 **전에** 먼저 읽어야 한다 — 순서를 바꾸면 폴백이
+     * 항상 빈 값이 된다. findById()는 이 폴백이 실제로 필요할 때(activeKey 미스)와
+     * logoutExternalSession=true일 때만 부른다 — 평소(Redis 정상, 내부 로그아웃)엔 여기서
+     * DB 조회가 추가로 생기지 않는다.
      */
     @Transactional
     public void revoke(Long memberId, String role, boolean logoutExternalSession) {
+        Optional<String> hash;
+        try {
+            hash = refreshTokenRepository.findActiveHash(role, memberId);
+            if (hash.isEmpty()) {
+                hash = memberRepository.findById(memberId).map(Member::getRefreshTokenHash);
+                hash.ifPresent(h -> log.warn("event=ACTIVE_KEY_MISSING_DB_FALLBACK_USED role={} id={}", role, memberId));
+            }
+        } catch (DataAccessException e) {
+            log.warn("event=REDIS_LOOKUP_FAILED role={} id={} — 지울 해시를 못 구함", role, memberId, e);
+            hash = Optional.empty();
+        }
+
         try {
             memberRepository.clearRefreshToken(memberId);
         } catch (DataAccessException e) {
             log.warn("event=DB_BACKUP_DELETE_FAILED memberId={} — DB 백업 삭제 실패(계속 진행)", memberId, e);
         }
+
         try {
-            refreshTokenRepository.delete(role, memberId);
+            hash.ifPresent(refreshTokenRepository::deleteByHash);
+            refreshTokenRepository.deleteActiveKey(role, memberId);
         } catch (DataAccessException e) {
             log.warn("event=REDIS_DELETE_FAILED role={} id={} — DB 백업만 반영됨", role, memberId, e);
         }
+
         accessTokenValidAfterRepository.invalidateBefore(role, memberId, LocalDateTime.now(),
                 Duration.ofMillis(jwtTokenProvider.getAccessTokenValidityMs()));
 

@@ -23,6 +23,19 @@ import org.springframework.stereotype.Repository;
  * 현재 토큰 해시를 가리키는 보조 인덱스를 하나 더 둔다. 보조 인덱스는 원자적 CAS의 대상이
  * 아니라 조회 편의를 위한 포인터일 뿐이다 — 실제 회전(rotate)의 원자성은 기본 레코드에 대한
  * Lua 스크립트가 보장한다.
+ *
+ * (2026-08-19 추가) 회전 성공 시 옛 기본 레코드를 곧바로 DEL 하면, 그 죽은 토큰이 재생(replay)
+ * 됐을 때 소유자를 알 방법이 없어 "재사용 탐지"는 되지만 "그 회원의 다른 세션을 강제 종료"하는
+ * 부가 조치가 불가능했다. 그래서 DEL 대신 tombstone("|REVOKED" 마커를 붙여 남겨두기)을 쓴다 —
+ * 마커의 유효기간은 옛 키에 원래 남아있던 TTL을 그대로 재사용한다(refresh_token_rotate.lua의
+ * PTTL 참고) — 1회용 토큰이 원래 유효했을 남은 시간만큼은 재사용 탐지도 살아있어야 하기 때문이다.
+ * compareAndRotate()의 반환값이 그래서 Optional 하나가 아니라 SUCCESS/NOT_FOUND/REUSE_DETECTED
+ * 셋을 구분하는 RotateOutcome이다.
+ *
+ * (2026-08-19 추가) 보조 인덱스(activeKey)가 Redis 축출/재시작 등으로 유실되면 findActiveHash()가
+ * 빈 값을 반환한다 — 이 경우 호출부가 DB 백업(Member.refreshTokenHash)에서 해시를 구해
+ * deleteByHash()를 직접 불러야 한다. 이 클래스는 그 폴백을 스스로 하지 않는다(Member를 몰라야
+ * 하므로) — MemberTokenService.revoke() 참고.
  */
 @Repository
 @RequiredArgsConstructor
@@ -31,6 +44,7 @@ public class RefreshTokenRepository {
     private static final String KEY_PREFIX = "refreshToken:";
     private static final String ACTIVE_KEY_PREFIX = "activeRefreshToken:";
     private static final String FIELD_DELIMITER = "\\|";
+    private static final String REVOKED_SUFFIX = "|REVOKED";
 
     private static final RedisScript<String> ROTATE_SCRIPT = loadRotateScript();
 
@@ -58,13 +72,16 @@ public class RefreshTokenRepository {
 
     /**
      * 원자적 회전(로테이션). oldRefreshToken 자리의 레코드를 newRefreshToken 자리로 옮기고
-     * old는 지운다(기본 레코드는 Lua로 원자적으로 처리). 보조 인덱스(회원 → 현재 토큰)는 그
-     * 원자적 연산의 대상이 아니라 바로 이어서 갱신한다 — 동시에 같은 값을 두고 경쟁하는 다른
-     * 요청이 없어서(기본 레코드 CAS가 이미 승자를 하나로 정한 뒤라) 원자성이 없어도 안전하다.
-     * @return 회전에 성공했으면 그 소유자 정보(=재발급 계속 진행), old 토큰이 없었으면(이미 한 번
-     *         쓰였거나 우리 게 아니면) empty(=재사용 의심).
+     * old는 tombstone(짧게 |REVOKED로 표시)으로 남긴다(기본 레코드는 Lua로 원자적으로 처리).
+     * 보조 인덱스(회원 → 현재 토큰)는 그 원자적 연산의 대상이 아니라 회전 성공 시에만 바로 이어서
+     * 갱신한다 — 동시에 같은 값을 두고 경쟁하는 다른 요청이 없어서(기본 레코드 CAS가 이미 승자를
+     * 하나로 정한 뒤라) 원자성이 없어도 안전하다.
+     *
+     * @return SUCCESS(정상 회전, data는 새 소유자 정보) / NOT_FOUND(우리가 발급한 적 없거나
+     *         tombstone까지 지나 완전히 사라짐) / REUSE_DETECTED(이미 tombstone된 토큰의 재사용
+     *         — data에 소유자 정보가 있으니 호출부가 그 회원의 세션을 강제 종료해야 한다)
      */
-    public Optional<RefreshTokenData> compareAndRotate(String oldRefreshToken, String newRefreshToken, Duration ttl) {
+    public RotateOutcome compareAndRotate(String oldRefreshToken, String newRefreshToken, Duration ttl) {
         String oldHash = TokenHasher.sha256(oldRefreshToken);
         String newHash = TokenHasher.sha256(newRefreshToken);
 
@@ -74,22 +91,35 @@ public class RefreshTokenRepository {
                 String.valueOf(ttl.toMillis())
         );
         if (value == null) {
-            return Optional.empty();
+            return RotateOutcome.notFound();
+        }
+        if (value.endsWith(REVOKED_SUFFIX)) {
+            RefreshTokenData data = parse(value.substring(0, value.length() - REVOKED_SUFFIX.length()));
+            return RotateOutcome.reuseDetected(data);
         }
 
         RefreshTokenData data = parse(value);
         redisTemplate.opsForValue().set(activeKey(data.role(), data.memberId()), newHash, ttl);
-        return Optional.of(data);
+        return RotateOutcome.success(data);
     }
 
-    /** 이 회원의 현재 리프레시 토큰을 찾아서 지운다(로그아웃/탈퇴/웹훅 공용 — 예전 인터페이스와 동일). */
-    public void delete(String role, Long id) {
-        String activeKey = activeKey(role, id);
-        String hash = redisTemplate.opsForValue().get(activeKey);
-        if (hash != null) {
-            redisTemplate.delete(primaryKey(hash));
-        }
-        redisTemplate.delete(activeKey);
+    /**
+     * 이 회원의 현재 리프레시 토큰 해시(보조 인덱스 기준). 로그아웃/탈퇴/웹훅/재사용 탐지 후
+     * 세션 강제 종료 때 "뭘 지워야 하는지" 알아내는 데 쓴다. 보조 인덱스가 유실됐으면(Redis
+     * 축출/재시작) empty — 이 경우 호출부가 DB 백업으로 폴백해야 한다.
+     */
+    public Optional<String> findActiveHash(String role, Long id) {
+        return Optional.ofNullable(redisTemplate.opsForValue().get(activeKey(role, id)));
+    }
+
+    /** 해시를 이미 알 때(보조 인덱스에서 구했든, 호출부가 DB 백업에서 구했든) 그 진짜 레코드를 지운다. */
+    public void deleteByHash(String tokenHash) {
+        redisTemplate.delete(primaryKey(tokenHash));
+    }
+
+    /** 보조 인덱스 자체를 지운다. */
+    public void deleteActiveKey(String role, Long id) {
+        redisTemplate.delete(activeKey(role, id));
     }
 
     private String primaryKey(String tokenHash) {
@@ -110,5 +140,31 @@ public class RefreshTokenRepository {
     }
 
     public record RefreshTokenData(Long memberId, String role, TokenType type, boolean remember) {
+    }
+
+    /** compareAndRotate()의 3단 결과. Optional 하나로는 "없음"과 "재사용 의심(소유자는 앎)"을 구분 못 해서 뺐다. */
+    public record RotateOutcome(Status status, RefreshTokenData data) {
+
+        public enum Status { SUCCESS, NOT_FOUND, REUSE_DETECTED }
+
+        public static RotateOutcome success(RefreshTokenData data) {
+            return new RotateOutcome(Status.SUCCESS, data);
+        }
+
+        public static RotateOutcome notFound() {
+            return new RotateOutcome(Status.NOT_FOUND, null);
+        }
+
+        public static RotateOutcome reuseDetected(RefreshTokenData data) {
+            return new RotateOutcome(Status.REUSE_DETECTED, data);
+        }
+
+        public boolean isSuccess() {
+            return status == Status.SUCCESS;
+        }
+
+        public boolean isReuseDetected() {
+            return status == Status.REUSE_DETECTED;
+        }
     }
 }
