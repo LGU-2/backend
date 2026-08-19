@@ -51,12 +51,15 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
     // "password":"1234", "refreshToken": "eyJ..." 같은 키-값 쌍의 값을 통째로 마스킹.
     // phone/address류(recipient/zipcode/roadAddress/detailAddress)도 자유 형식 텍스트라 이메일처럼
     // 부분 마스킹하기 애매해서 password/token과 똑같이 통째로 REDACTED 처리한다.
+    // authorizationCode/state/nonce/code(카카오 로그인·탈퇴 재인증 요청 바디)도 같은 이유로 넣는다 —
+    // 로그인 실패는 흔한 4xx 경로라 이 필드들이 없으면 WARN 로그에 카카오 인가 코드가 상시 평문으로 남는다.
     // 값 부분을 별도 캡처 그룹(3번)으로 빼서 PiiMasker.redact()에 그대로 넘긴다 — REDACTED 리터럴을
     // 여기 직접 하드코딩하면 마스킹 문자열이 필요할 때마다 여러 곳에서 따로 관리돼서, 나중에
     // 마스킹 표기를 바꾸거나 정책을 통일할 때 여기만 고치고 끝나지 않는다.
     private static final Pattern SENSITIVE_JSON_FIELD = Pattern.compile(
             "(?i)(\"(password|accessToken|refreshToken|token|secret|authorization|idToken|clientSecret"
-                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress)\"\\s*:\\s*\")([^\"]*)(\")");
+                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress"
+                    + "|authorizationCode|state|nonce|code)\"\\s*:\\s*\")([^\"]*)(\")");
 
     // 위 키-값 패턴에 안 걸린 이메일/전화번호도 한 번 더 잡아서 부분 마스킹(키 이름이 다르거나
     // 문자열 안에 섞여 나오는 경우 대비 catch-all).
