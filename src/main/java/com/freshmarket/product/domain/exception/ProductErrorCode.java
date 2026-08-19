@@ -13,7 +13,8 @@ public enum ProductErrorCode implements ErrorCode {
     CATEGORY_HAS_PRODUCTS(HttpStatus.CONFLICT, "CATEGORY-001", "소속된 상품이 있어 삭제할 수 없습니다."),
     CATEGORY_DUPLICATE_NAME(HttpStatus.CONFLICT, "CATEGORY-002", "이미 같은 이름의 카테고리가 있습니다."),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "CATEGORY-003", "카테고리를 찾을 수 없습니다."),
-    CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "CATEGORY-004", "하위 카테고리가 있어 삭제할 수 없습니다.");
+    CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "CATEGORY-004", "하위 카테고리가 있어 삭제할 수 없습니다."),
+    SUPPLIER_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT-005", "공급처를 찾을 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
