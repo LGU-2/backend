@@ -2,8 +2,6 @@ package com.freshmarket.member.domain.controller;
 
 import com.freshmarket.common.auth.AuthCookieFactory;
 import com.freshmarket.common.auth.CustomUserDetails;
-import com.freshmarket.common.auth.jwt.JwtTokenProvider;
-import com.freshmarket.common.auth.jwt.TokenType;
 import com.freshmarket.common.response.ResponseEnvelope;
 import com.freshmarket.member.domain.service.MemberLoginService;
 import com.freshmarket.member.domain.service.MemberTokenService;
@@ -38,7 +36,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 class MemberAuthController {
 
-    private final JwtTokenProvider jwtTokenProvider;
     private final MemberLoginService memberLoginService;
     private final MemberTokenService memberTokenService;
     private final AuthCookieFactory authCookieFactory;
@@ -65,24 +62,18 @@ class MemberAuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ResponseEnvelope.success(body));
     }
 
+    // (2026-08-19) opaque 토큰 전환 이후: 리프레시 토큰이 더 이상 JWT가 아니라 여기서 서명/클레임을
+    // 미리 검증할 게 없다 — 쿠키에서 꺼낸 문자열을 그대로 넘기면 memberTokenService.reissue()가
+    // Redis 조회부터 시작해서 유효성/소유자를 판단한다(누구 건지도 그 조회 결과로만 안다).
     @PostMapping("/tokens:refresh")
     public ResponseEntity<ResponseEnvelope<MemberTokenResponse>> reissue(
             HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = resolveRefreshTokenFromCookie(request);
-        if (refreshToken == null || !jwtTokenProvider.validateToken(refreshToken)) {
+        if (refreshToken == null) {
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
         }
 
-        TokenType type = jwtTokenProvider.getType(refreshToken);
-        String claimedRole = jwtTokenProvider.getRole(refreshToken);
-        if (type != TokenType.MEMBER || claimedRole == null) {
-            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
-        }
-
-        Long memberId = jwtTokenProvider.getId(refreshToken);
-        boolean remember = jwtTokenProvider.getRemember(refreshToken);
-
-        MemberTokenService.ReissueResult result = memberTokenService.reissue(memberId, claimedRole, refreshToken, remember);
+        MemberTokenService.ReissueResult result = memberTokenService.reissue(refreshToken);
 
         response.addHeader(HttpHeaders.SET_COOKIE,
                 authCookieFactory.refreshTokenCookie(result.refreshToken(), result.remember()).toString());

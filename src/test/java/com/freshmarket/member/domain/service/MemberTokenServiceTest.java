@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -17,6 +18,7 @@ import com.freshmarket.common.auth.AuthCookieFactory;
 import com.freshmarket.common.auth.jwt.AccessTokenValidAfterRepository;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
 import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
+import com.freshmarket.common.auth.jwt.RefreshTokenRepository.RefreshTokenData;
 import com.freshmarket.common.auth.jwt.TokenType;
 import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
@@ -26,7 +28,6 @@ import com.freshmarket.member.exception.AuthErrorCode;
 import com.freshmarket.member.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,7 +99,8 @@ class MemberTokenServiceTest {
 
         MemberTokenService.IssueResult result = sut.issue(member, true, response);
 
-        // 실제 JwtTokenProvider가 서명한 진짜 토큰인지, 클레임이 맞는지 검증
+        // 실제 JwtTokenProvider가 서명한 진짜 토큰인지, 클레임이 맞는지 검증(accessToken만 —
+        // refreshToken은 opaque라 더 이상 JWT가 아니다)
         assertThat(jwtTokenProvider.validateToken(result.accessToken())).isTrue();
         assertThat(jwtTokenProvider.getId(result.accessToken())).isEqualTo(1L);
         assertThat(jwtTokenProvider.getType(result.accessToken())).isEqualTo(TokenType.MEMBER);
@@ -126,7 +128,7 @@ class MemberTokenServiceTest {
     void redis_저장이_실패해도_발급_자체는_끝난다() {
         Member member = newMember(1L);
         doThrow(new DataAccessResourceFailureException("redis down"))
-                .when(refreshTokenRepository).save(any(), any(), any(), any());
+                .when(refreshTokenRepository).save(any(), any(), any(), any(), anyBoolean(), any());
 
         assertThatCode(() -> sut.issue(member, false, response)).doesNotThrowAnyException();
     }
@@ -141,12 +143,27 @@ class MemberTokenServiceTest {
     }
 
     // ---- reissue() ----
+    // (2026-08-19) opaque 전환 이후 reissue(String)만 받는다 — 컨트롤러가 미리 클레임을 안 읽고
+    // 그대로 넘기므로, 여기서 refreshTokenRepository.compareAndRotate()의 결과로만 소유자를 안다.
+
+    @Test
+    void redis에_없는_토큰이면_재사용_의심으로_예외() {
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sut.reissue("old-rt"))
+                .isInstanceOf(AuthException.class)
+                .extracting(e -> ((AuthException) e).getErrorCode())
+                .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
+        verify(memberRepository, never()).findById(any());
+    }
 
     @Test
     void 존재하지_않는_회원의_리프레시면_예외() {
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenReturn(Optional.of(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
         when(memberRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> sut.reissue(1L, "ROLE_USER", "old-rt", false))
+        assertThatThrownBy(() -> sut.reissue("old-rt"))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
@@ -156,9 +173,11 @@ class MemberTokenServiceTest {
     void 탈퇴한_회원의_리프레시면_토큰을_비우고_예외() {
         Member withdrawn = newMember(1L);
         withdrawn.withdraw();
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenReturn(Optional.of(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, false)));
         when(memberRepository.findById(1L)).thenReturn(Optional.of(withdrawn));
 
-        assertThatThrownBy(() -> sut.reissue(1L, "ROLE_USER", "old-rt", false))
+        assertThatThrownBy(() -> sut.reissue("old-rt"))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
@@ -167,50 +186,33 @@ class MemberTokenServiceTest {
     }
 
     @Test
-    void CAS가_성공하면_새_토큰을_돌려준다() {
+    void 회전에_성공하면_새_토큰을_돌려준다() {
         Member member = newMember(1L);
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenReturn(Optional.of(new RefreshTokenData(1L, "ROLE_USER", TokenType.MEMBER, true)));
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(refreshTokenRepository.compareAndSave(eq("ROLE_USER"), eq(1L), eq("old-rt"), anyString(), any()))
-                .thenReturn(true);
 
-        MemberTokenService.ReissueResult result = sut.reissue(1L, "ROLE_USER", "old-rt", false);
+        MemberTokenService.ReissueResult result = sut.reissue("old-rt");
 
         assertThat(jwtTokenProvider.validateToken(result.accessToken())).isTrue();
         assertThat(jwtTokenProvider.getId(result.accessToken())).isEqualTo(1L);
-        assertThat(jwtTokenProvider.validateToken(result.refreshToken())).isTrue();
-        assertThat(jwtTokenProvider.getType(result.refreshToken())).isEqualTo(TokenType.MEMBER);
         assertThat(result.expiresInSeconds()).isEqualTo(1800L);
+        assertThat(result.refreshToken()).isNotBlank().isNotEqualTo("old-rt");
+        assertThat(result.remember()).isTrue();
     }
 
     @Test
-    void CAS가_실패하면_재사용_의심으로_토큰을_비우고_예외() {
-        Member member = newMember(1L);
-        // revoke() 실패 로그가 이 값을 getJti()로 파싱하므로, 실제 서명된 토큰이어야 한다
-        // ("old-rt" 같은 임의 문자열은 JwtException을 던져 테스트가 의도와 다르게 깨진다).
-        String oldRefreshToken = jwtTokenProvider.createRefreshToken(1L, TokenType.MEMBER, "ROLE_USER", false);
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(refreshTokenRepository.compareAndSave(any(), any(), any(), any(), any())).thenReturn(false);
+    void redis_CAS가_장애나면_재로그인을_요구하고_DB로는_폴백하지_않는다() {
+        // opaque 토큰은 Redis 없이는 이 토큰이 누구 건지 알 방법이 없다 — memberId를 못 구하니
+        // DB 폴백(예전의 compareAndSetRefreshToken) 자체가 불가능해졌다.
+        when(refreshTokenRepository.compareAndRotate(eq("old-rt"), anyString(), any()))
+                .thenThrow(new DataAccessResourceFailureException("redis down"));
 
-        assertThatThrownBy(() -> sut.reissue(1L, "ROLE_USER", oldRefreshToken, false))
+        assertThatThrownBy(() -> sut.reissue("old-rt"))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
-        verify(memberRepository).clearRefreshToken(1L);
-    }
-
-    @Test
-    void redis_CAS가_장애나면_DB_CAS로_폴백해서_성공할_수_있다() {
-        Member member = newMember(1L);
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(refreshTokenRepository.compareAndSave(any(), any(), any(), any(), any()))
-                .thenThrow(new DataAccessResourceFailureException("redis down"));
-        when(memberRepository.compareAndSetRefreshToken(eq(1L), anyString(), anyString(), any(LocalDateTime.class)))
-                .thenReturn(1);
-
-        MemberTokenService.ReissueResult result = sut.reissue(1L, "ROLE_USER", "old-rt", false);
-
-        assertThat(jwtTokenProvider.validateToken(result.refreshToken())).isTrue();
-        assertThat(jwtTokenProvider.getId(result.refreshToken())).isEqualTo(1L);
+        verify(memberRepository, never()).findById(any());
     }
 
     // ---- revoke() ----

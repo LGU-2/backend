@@ -22,11 +22,10 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Query("update Member m set m.refreshTokenHash = null, m.refreshTokenExpiresAt = null where m.id = :id")
     int clearRefreshToken(@Param("id") Long id);
 
-    @Modifying
-    @Query("update Member m set m.refreshTokenHash = :newHash, m.refreshTokenExpiresAt = :expiresAt "
-            + "where m.id = :id and m.refreshTokenHash = :oldHash")
-    int compareAndSetRefreshToken(@Param("id") Long id, @Param("oldHash") String oldHash,
-                                   @Param("newHash") String newHash, @Param("expiresAt") LocalDateTime expiresAt);
+    // (2026-08-19) opaque 토큰 전환으로 compareAndSetRefreshToken(예전 reissue()의 "Redis 장애 시
+    // DB CAS로 폴백" 경로 전용)을 제거했다 — opaque 토큰은 Redis가 없으면 이 토큰이 누구 건지
+    // 자체를 알 수 없어(memberId를 못 구해서) 이 메서드를 호출할 방법이 없어졌다. 이유는
+    // MemberTokenService 클래스 주석 참고.
 
     // (2026-08-19) MemberWithdrawalService.withdraw()가 카카오 재인증(동기 호출)을 트랜잭션 밖으로
     // 빼면서, 그 뒤의 DB 쓰기가 더 이상 findById()로 로드해둔 엔티티의 dirty checking에 기댈 수
