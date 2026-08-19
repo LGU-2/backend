@@ -34,7 +34,13 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // Member.withdraw()로 엔티티를 바꾸는 대신 이 명시적 UPDATE로 직접 반영한다. status <>
     // WITHDRAWN 조건은 이미 위(MemberWithdrawalCompletionService 호출 전)에서 한 번 걸렀지만,
     // 방어적으로 한 번 더 둔다.
-    @Modifying
+    // clearAutomatically=true: 벌크 UPDATE는 영속성 컨텍스트(1차 캐시)를 안 거치고 DB에 바로
+    // 반영된다 — 이 값 없이 같은 트랜잭션에서 findById()로 다시 읽으면 방금 update한 값이 아니라
+    // 캐시에 남은 이전 상태(예: status=PENDING_PROFILE)가 그대로 보일 수 있다(Hibernate가
+    // 영속성 컨텍스트에 이미 있는 엔티티는 재조회 없이 그대로 반환하기 때문). 이 프로젝트의
+    // 다른 @Modifying 메서드(updateRefreshToken 등)엔 이 옵션이 없는데, 그것들은 지금까지 호출부가
+    // 같은 트랜잭션에서 그 엔티티를 다시 읽지 않아 드러나지 않았을 뿐이라 별개로 점검이 필요하다.
+    @Modifying(clearAutomatically = true)
     @Query("update Member m set m.status = com.freshmarket.member.domain.entity.MemberStatus.WITHDRAWN, "
             + "m.deletedAt = :deletedAt where m.id = :id and m.status <> com.freshmarket.member.domain.entity.MemberStatus.WITHDRAWN")
     int markWithdrawn(@Param("id") Long id, @Param("deletedAt") LocalDateTime deletedAt);
