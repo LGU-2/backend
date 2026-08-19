@@ -4,11 +4,8 @@ import static com.freshmarket.product.domain.entity.QCategory.category;
 import static com.freshmarket.product.domain.entity.QProduct.product;
 import static com.freshmarket.product.domain.entity.QProductOption.productOption;
 
-import java.util.List;
-
-import org.springframework.stereotype.Repository;
-
 import com.freshmarket.product.domain.dto.ProductSearchCondition;
+import com.freshmarket.product.domain.dto.ProductSortType;
 import com.freshmarket.product.domain.dto.ProductWithMinPrice;
 import com.freshmarket.product.domain.dto.QProductWithMinPrice;
 import com.freshmarket.product.domain.entity.SaleStatus;
@@ -16,16 +13,10 @@ import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
 
-/*
- * QueryDSL 로 짜는 상품 동적 조회 전용 컴포넌트.
- *
- * Spring Data 의 <Repository 인터페이스명>+Impl 자동 결합 관례를 쓰지 않는다.
- * 그 관례를 쓰면 Impl 접미사가 붙어 이 팀의 레포지토리 이름 규칙(DPB-4-10,
- * ArchitectureTest 의 레포지토리_이름)과 충돌한다. 그냥 일반 빈으로 등록해 우회한다.
- */
 @Repository
 @RequiredArgsConstructor
 public class ProductQueryRepository {
@@ -35,10 +26,6 @@ public class ProductQueryRepository {
 
     private final JPAQueryFactory queryFactory;
 
-    /*
-     * 조건에 맞는 상품을 옵션 최저가와 함께 조회한다.
-     * pageSize + 1 건을 가져와 다음 페이지 존재 여부를 판단할 수 있게 한다.
-     */
     public List<ProductWithMinPrice> search(ProductSearchCondition condition) {
         return queryFactory
                 .select(new QProductWithMinPrice(
@@ -56,11 +43,10 @@ public class ProductQueryRepository {
                 .where(
                         product.deletedAt.isNull(),
                         categoryIdEq(condition.categoryId()),
-                        cursorLt(condition.cursorId()))
+                        cursorLt(condition.cursorId()),
+                        priceGoe(condition.minPrice()),
+                        priceLoe(condition.maxPrice()))
                 .groupBy(product.id, product.name, category.id, category.name, product.saleStatus)
-                .having(
-                        minPriceGoe(condition.minPrice()),
-                        minPriceLoe(condition.maxPrice()))
                 .orderBy(orderOf(condition))
                 .limit(condition.pageSize() + 1L)
                 .fetch();
@@ -77,22 +63,21 @@ public class ProductQueryRepository {
     }
 
     /*
-     * 가격 하한. 집계 결과를 거르는 것이라 where 가 아니라 having 에 둔다.
-     * where 에 두면 조건에 맞는 옵션만 남긴 뒤 최저가를 내 다른 값이 나온다.
+     * 가격 하한. 옵션 단위로 거른다 — "이 가격대 옵션이 있는 상품"을 찾는 필터다.
+     * where 에 두므로, 조건에 안 맞는 옵션은 이 상품의 그룹에서 제외된 채 최저가가 계산된다.
+     * 즉 응답의 minPrice 는 "조건을 만족하는 옵션들 중 최저가"이며, 상품의 절대 최저가와
+     * 다를 수 있다. (예: 4만원 이상 필터 시, 1kg=12900원 옵션이 있어도 상품 자체는 노출되고
+     * minPrice 는 조건을 만족하는 옵션 중 최저값으로 계산된다)
      */
-    private BooleanExpression minPriceGoe(Integer minPrice) {
-        return minPrice != null ? MIN_PRICE.goe(minPrice) : null;
+    private BooleanExpression priceGoe(Integer minPrice) {
+        return minPrice != null ? productOption.price.goe(minPrice) : null;
     }
 
     // 가격 상한. 이유는 위와 같다
-    private BooleanExpression minPriceLoe(Integer maxPrice) {
-        return maxPrice != null ? MIN_PRICE.loe(maxPrice) : null;
+    private BooleanExpression priceLoe(Integer maxPrice) {
+        return maxPrice != null ? productOption.price.loe(maxPrice) : null;
     }
 
-    /*
-     * 정렬 기준. id 내림차순을 항상 마지막에 붙인다.
-     * SALES_DESC 는 daily_sales 가 필요해 statistics 도메인 도입 전까지 CREATED_DESC 로 처리한다.
-     */
     private OrderSpecifier<?>[] orderOf(ProductSearchCondition condition) {
         return switch (condition.sort()) {
             case PRICE_ASC -> new OrderSpecifier<?>[]{MIN_PRICE.asc(), product.id.desc()};

@@ -163,20 +163,39 @@ class ProductApiIntegrationTest {
     }
 
     @Test
-    void 최저가_기준으로_가격_범위를_거른다() throws Exception {
-        // given
+    void 가격_범위_안의_옵션이_있으면_상품이_노출된다() throws Exception {
+        // given — 감귤은 1kg=12900원(범위 밖) 이지만 5kg=48000원(범위 안) 옵션도 갖는다
         Long categoryId = fruitCategoryId();
-        saveProductWithOptions(categoryId, "저가상품", 5000);
-        saveProductWithOptions(categoryId, "고가상품", 50000);
+        saveProductWithOptions(categoryId, "감귤", 12900, 48000);
 
-        // when, then — minPrice~maxPrice 는 고가상품(50000)만 포함하는 범위
+        // when, then — 40000~60000 범위. where 필터라 48000원 옵션 때문에 노출된다
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
-                        .param("minPrice", "10000")
+                        .param("minPrice", "40000")
                         .param("maxPrice", "60000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.products", hasSize(1)))
-                .andExpect(jsonPath("$.products[0].name").value("고가상품"));
+                .andExpect(jsonPath("$.products[0].name").value("감귤"))
+                /*
+                 * where 로 옵션을 먼저 거르므로, 응답 minPrice 는 상품의 절대 최저가(12900)가
+                 * 아니라 조건을 만족하는 옵션 중 최저가(48000)다. 의도된 동작이다.
+                 */
+                .andExpect(jsonPath("$.products[0].minPrice").value(48000));
+    }
+
+    @Test
+    void 범위_안의_옵션이_전혀_없으면_상품이_제외된다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        saveProductWithOptions(categoryId, "저가상품", 5000);
+
+        // when, then — 5000원은 40000~60000 범위 밖. 어떤 옵션도 안 걸리므로 제외된다
+        mockMvc.perform(get("/v1/products")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("minPrice", "40000")
+                        .param("maxPrice", "60000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.products", hasSize(0)));
     }
 
     @Test
