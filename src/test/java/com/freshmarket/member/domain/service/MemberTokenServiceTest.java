@@ -18,7 +18,7 @@ import com.freshmarket.common.auth.jwt.AccessTokenValidAfterRepository;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
 import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
 import com.freshmarket.common.auth.jwt.TokenType;
-import com.freshmarket.member.domain.client.KakaoLogoutClient;
+import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.entity.SocialType;
 import com.freshmarket.member.domain.repository.MemberRepository;
@@ -35,6 +35,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 
@@ -57,7 +58,7 @@ class MemberTokenServiceTest {
     private MemberRepository memberRepository;
 
     @Mock
-    private KakaoLogoutClient kakaoLogoutClient;
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private HttpServletResponse response;
@@ -70,7 +71,7 @@ class MemberTokenServiceTest {
         authCookieFactory = new AuthCookieFactory(jwtTokenProvider);
 
         sut = new MemberTokenService(jwtTokenProvider, refreshTokenRepository, accessTokenValidAfterRepository,
-                authCookieFactory, memberRepository, kakaoLogoutClient);
+                authCookieFactory, memberRepository, eventPublisher);
     }
 
     private static Member newMember(Long id) {
@@ -110,7 +111,7 @@ class MemberTokenServiceTest {
 
         assertThat(cookies).anySatisfy(c -> {
             assertThat(c).startsWith("refreshToken=");
-            assertThat(c).contains("Path=/v1/auth/tokens");
+            assertThat(c).contains("Path=/v1/auth/");
             assertThat(c).contains("HttpOnly");
             assertThat(c).contains("SameSite=Strict");
         });
@@ -243,20 +244,22 @@ class MemberTokenServiceTest {
     }
 
     @Test
-    void 외부세션_로그아웃_플래그가_true면_카카오_로그아웃을_호출한다() {
+    void 외부세션_로그아웃_플래그가_true면_카카오_로그아웃_이벤트를_발행한다() {
         Member member = newMember(1L);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 
         sut.revoke(1L, "ROLE_USER", true);
 
-        verify(kakaoLogoutClient).logout("kakao-1");
+        // 카카오 호출 자체는 @Transactional 밖(KakaoLogoutEventListener, AFTER_COMMIT)에서 일어난다 —
+        // 여기서는 이벤트가 올바른 값으로 발행됐는지만 확인한다.
+        verify(eventPublisher).publishEvent(new MemberLogoutEvent(1L, "kakao-1"));
     }
 
     @Test
-    void 외부세션_로그아웃_플래그가_false면_카카오_로그아웃을_호출하지_않는다() {
+    void 외부세션_로그아웃_플래그가_false면_카카오_로그아웃_이벤트를_발행하지_않는다() {
         sut.revoke(1L, "ROLE_USER", false);
 
-        verify(kakaoLogoutClient, never()).logout(anyString());
+        verify(eventPublisher, never()).publishEvent(any());
         verify(memberRepository, never()).findById(anyLong());
     }
 }

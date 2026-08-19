@@ -6,7 +6,7 @@ import com.freshmarket.common.auth.jwt.JwtTokenProvider;
 import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
 import com.freshmarket.common.auth.jwt.TokenHasher;
 import com.freshmarket.common.auth.jwt.TokenType;
-import com.freshmarket.member.domain.client.KakaoLogoutClient;
+import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.repository.MemberRepository;
 import com.freshmarket.member.exception.AuthErrorCode;
@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
@@ -40,7 +41,7 @@ public class MemberTokenService {
     private final AccessTokenValidAfterRepository accessTokenValidAfterRepository;
     private final AuthCookieFactory authCookieFactory;
     private final MemberRepository memberRepository;
-    private final KakaoLogoutClient kakaoLogoutClient;
+    private final ApplicationEventPublisher eventPublisher;
 
     public record IssueResult(String accessToken, long expiresInSeconds) {
     }
@@ -116,7 +117,10 @@ public class MemberTokenService {
     /**
      * 로그아웃/탈퇴 시 토큰 폐기. logoutExternalSession=true면 카카오 세션도 끊는다(일반
      * /members/logout에서만 true — 탈퇴 흐름은 카카오 unlink를 MemberWithdrawalEvent로 별도
-     * 처리하므로 여기서는 false로 호출한다).
+     * 처리하므로 여기서는 false로 호출한다). 카카오 로그아웃 자체는 MemberLogoutEvent로 커밋
+     * 이후에 호출한다(KakaoLogoutEventListener) — MemberWithdrawalEvent/KakaoUnlinkEventListener와
+     * 같은 이유(DI-4-02): @Transactional 안에서 동기로 부르면 카카오 응답 대기 동안 DB 커넥션이
+     * 묶인다.
      */
     @Transactional
     public void revoke(Long memberId, String role, boolean logoutExternalSession) {
@@ -136,7 +140,7 @@ public class MemberTokenService {
         if (logoutExternalSession) {
             memberRepository.findById(memberId)
                     .map(Member::getProviderUserId)
-                    .ifPresent(kakaoLogoutClient::logout);
+                    .ifPresent(providerUserId -> eventPublisher.publishEvent(new MemberLogoutEvent(memberId, providerUserId)));
         }
     }
 
