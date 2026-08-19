@@ -20,10 +20,17 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AuthCookieFactory {
 
-    // MemberAuthController가 실제로 매핑된 경로(/v1/auth/tokens, /v1/auth/tokens:refresh)와
-    // 반드시 같아야 한다 — 여기가 어긋나면 브라우저가 이 쿠키를 그 요청에 자동으로 실어 보내지
-    // 않아서 재발급/로그아웃이 항상 "리프레시 토큰 없음"으로 실패한다.
-    private static final String REFRESH_TOKEN_COOKIE_PATH = "/v1/auth/tokens";
+    // RFC 6265 §5.1.4의 path-match는 "경로가 같거나, 쿠키 path가 '/'로 끝나거나, 요청 path의
+    // 다음 글자가 '/'여야" 성립한다. 재발급 경로가 /v1/auth/tokens:refresh(콜론 커스텀 메서드,
+    // AIP-136)라 다음 글자가 ':'라서 셋 다 성립하지 않는다 — /v1/auth/tokens로 좁혀두면
+    // POST/DELETE /v1/auth/tokens에는 실려도 :refresh에는 절대 안 실린다. 콜론 뒤는 구조적으로
+    // '/'가 아니라서 이보다 좁게 잡을 방법이 없다 — /v1/auth/ 로 넓혀야 세 요청(POST/DELETE
+    // /v1/auth/tokens, POST /v1/auth/tokens:refresh) 전부를 커버한다. GET /v1/auth/kakao/authorize
+    // 같은 다른 /v1/auth/* 요청에도 같이 실리지만, HttpOnly+SameSite=Strict라 CSRF 노출은 안
+    // 늘어나고 XSS는 애초에 Path 스코프로 막던 게 아니었다(같은 오리진 스크립트는 좁은 Path였어도
+    // 정확한 URL로 직접 호출 가능) — 남는 비용은 앞으로 /v1/auth/ 아래 추가되는 엔드포인트가
+    // 의식하지 않아도 이 쿠키를 자동으로 받게 된다는 것뿐이다.
+    private static final String REFRESH_TOKEN_COOKIE_PATH = "/v1/auth/";
     // accessToken은 재발급/로그아웃 경로만이 아니라 인증이 필요한 모든 API 요청에 실려야 한다.
     private static final String ACCESS_TOKEN_COOKIE_PATH = "/";
 
