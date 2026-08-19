@@ -61,6 +61,16 @@ public class GlobalExceptionHandler {
     }
 
     /*
+     * 도메인 엔티티가 자기 불변식을 스스로 지키려고 던지는 방어적 검증 실패다 (예: Category.validateName).
+     * @Valid 가 먼저 걸러내는 경로가 대부분이지만, 그걸 우회해 여기까지 오는 경우를 위한 두 번째 방어선이다.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ResponseEnvelope<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("invalid argument. detail={}", e.getMessage());
+        return toResponse(CommonErrorCode.INVALID_INPUT);
+    }
+
+    /*
      * 요청을 읽는 단계에서 깨진 것이라 검증까지 가지 못한 경우다.
      * 본문이 JSON 이 아니거나, 타입이 맞지 않거나, 필수 파라미터가 빠졌다.
      */
