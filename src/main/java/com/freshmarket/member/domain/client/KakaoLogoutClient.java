@@ -38,7 +38,7 @@ public class KakaoLogoutClient {
                     .toBodilessEntity()
                     .block();
         } catch (Exception e) {
-            log.warn("event=KAKAO_LOGOUT_FAILED kakaoUserId={} err={}", PiiMasker.maskProviderId(kakaoUserId), e.toString());
+            log.warn("event=KAKAO_LOGOUT_FAILED kakaoUserId={}", PiiMasker.maskProviderId(kakaoUserId), e);
         }
     }
 }
