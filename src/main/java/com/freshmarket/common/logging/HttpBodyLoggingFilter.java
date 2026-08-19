@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -146,7 +147,7 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
         return masked;
     }
 
-    private String maskPattern(String body, Pattern pattern, java.util.function.UnaryOperator<String> masker) {
+    private String maskPattern(String body, Pattern pattern, UnaryOperator<String> masker) {
         Matcher matcher = pattern.matcher(body);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
