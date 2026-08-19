@@ -17,6 +17,7 @@ public record AdminProductResponse(
         @Schema(description = "판매 옵션 목록") List<AdminProductOptionResponse> options
 ) {
 
+    // Product 엔티티와 옵션 응답 목록을 합쳐 등록 응답을 만든다
     public static AdminProductResponse of(Product product, List<AdminProductOptionResponse> options) {
         return new AdminProductResponse(
                 product.getId(), product.getProductCode(), product.getName(), product.getCategoryId(),
