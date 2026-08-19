@@ -36,7 +36,7 @@ public final class PiiMasker {
         if (phone == null || phone.isBlank()) {
             return phone;
         }
-        String digits = phone.replaceAll("[^0-9]", "");
+        String digits = phone.replaceAll("\\D", "");
         if (digits.length() < 7) {
             return maskGeneric(phone, 0, 0);
         }
