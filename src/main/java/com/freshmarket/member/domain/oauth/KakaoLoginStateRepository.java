@@ -30,13 +30,13 @@ public class KakaoLoginStateRepository {
         redisTemplate.opsForValue().set(KEY_PREFIX + state, nonce, TTL);
     }
 
+    // (2026-08-19) GET 후 DELETE로 나눠 부르면 그 사이가 원자적이지 않아, 같은 state로 동시에
+    // 들어온 두 요청이 모두 같은 nonce를 읽어갈 수 있었다(DI-2-01) — "한 번 쓰고 버린다"는 클래스
+    // 설명과 어긋남. Redis의 GETDEL(단일 명령이라 서버 쪽에서 원자적으로 처리됨)로 교체해
+    // 조회와 삭제를 하나의 원자적 연산으로 묶는다. 리프레시 토큰 로테이션에 쓴 Lua CAS와 같은
+    // 목적(원자적 read-and-invalidate)을 더 가벼운 방식으로 만족시킨다.
     /** @return 저장돼 있던 nonce. 이미 소비됐거나 만료됐으면(=state가 우리 것이 아니면) null. */
     public String consume(String state) {
-        String key = KEY_PREFIX + state;
-        String nonce = redisTemplate.opsForValue().get(key);
-        if (nonce != null) {
-            redisTemplate.delete(key);
-        }
-        return nonce;
+        return redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + state);
     }
 }
