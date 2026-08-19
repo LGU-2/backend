@@ -146,7 +146,7 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
         return masked;
     }
 
-    private String maskPattern(String body, Pattern pattern, java.util.function.Function<String, String> masker) {
+    private String maskPattern(String body, Pattern pattern, java.util.function.UnaryOperator<String> masker) {
         Matcher matcher = pattern.matcher(body);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
