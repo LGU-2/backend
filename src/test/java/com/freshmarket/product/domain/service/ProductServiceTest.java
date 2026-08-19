@@ -3,8 +3,9 @@ package com.freshmarket.product.domain.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.freshmarket.common.response.CursorPageResponse;
 import com.freshmarket.product.domain.dto.PageTokens;
-import com.freshmarket.product.domain.dto.ProductListResponse;
+import com.freshmarket.product.domain.dto.ProductListItem;
 import com.freshmarket.product.domain.dto.ProductSearchCondition;
 import com.freshmarket.product.domain.dto.ProductSortType;
 import com.freshmarket.product.domain.dto.ProductWithMinPrice;
@@ -36,12 +37,12 @@ class ProductServiceTest {
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE)));
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then
-        assertThat(result.products()).hasSize(1);
-        assertThat(result.products().get(0).name()).isEqualTo("감귤");
-        assertThat(result.products().get(0).minPrice()).isEqualTo(12900);
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).name()).isEqualTo("감귤");
+        assertThat(result.items().get(0).minPrice()).isEqualTo(12900);
     }
 
     @Test
@@ -55,10 +56,10 @@ class ProductServiceTest {
                 new ProductWithMinPrice(1L, "상품1", 1L, "카테고리", 3000, SaleStatus.ON_SALE)));
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then — 초과분(1건)은 잘리고, 페이지의 마지막 행(id=2) 기준으로 토큰이 만들어진다
-        assertThat(result.products()).hasSize(2);
+        assertThat(result.items()).hasSize(2);
         assertThat(result.nextPageToken()).isNotNull();
         assertThat(PageTokens.decode(result.nextPageToken())).isEqualTo(2L);
     }
@@ -72,7 +73,7 @@ class ProductServiceTest {
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE)));
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then
         assertThat(result.nextPageToken()).isNull();
@@ -86,10 +87,10 @@ class ProductServiceTest {
         when(productQueryRepository.search(condition)).thenReturn(List.of());
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then
-        assertThat(result.products()).isEmpty();
+        assertThat(result.items()).isEmpty();
         assertThat(result.nextPageToken()).isNull();
     }
 
@@ -102,10 +103,10 @@ class ProductServiceTest {
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.SOLD_OUT)));
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then
-        assertThat(result.products().get(0).soldOut()).isTrue();
+        assertThat(result.items().get(0).soldOut()).isTrue();
     }
 
     @Test
@@ -117,10 +118,10 @@ class ProductServiceTest {
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE)));
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then
-        assertThat(result.products().get(0).soldOut()).isFalse();
+        assertThat(result.items().get(0).soldOut()).isFalse();
     }
 
     @Test
@@ -132,10 +133,10 @@ class ProductServiceTest {
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE)));
 
         // when
-        ProductListResponse result = productService.getProducts(condition);
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
 
         // then
-        assertThat(result.products().get(0).category().categoryId()).isEqualTo(4L);
-        assertThat(result.products().get(0).category().name()).isEqualTo("과일");
+        assertThat(result.items().get(0).category().categoryId()).isEqualTo(4L);
+        assertThat(result.items().get(0).category().name()).isEqualTo("과일");
     }
 }

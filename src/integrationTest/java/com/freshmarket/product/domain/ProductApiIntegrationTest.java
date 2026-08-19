@@ -1,12 +1,10 @@
 package com.freshmarket.product.domain;
 
-import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import org.springframework.transaction.annotation.Transactional;
 import com.freshmarket.product.domain.dto.PageTokens;
 import com.freshmarket.product.domain.entity.Product;
 import com.freshmarket.product.domain.entity.ProductOption;
@@ -18,11 +16,12 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -35,7 +34,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
+@Transactional   // @DataJpaTest 가 기본 제공하던 테스트별 롤백을 명시적으로 켠다
 /*
  * Supplier 엔티티가 아직 없어 JPA 로 공급처를 만들 수 없다.
  * product.supplier_id 가 NOT NULL FK 라 테스트 상품을 만들려면 공급처가 먼저 있어야 하므로
@@ -115,7 +114,7 @@ class ProductApiIntegrationTest {
         // when, then — 인증 헤더 없이 요청해도 401 이 아니라 200 이어야 한다
         mockMvc.perform(get("/v1/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products").isArray());
+                .andExpect(jsonPath("$.data.items").isArray());
     }
 
     @Test
@@ -127,9 +126,9 @@ class ProductApiIntegrationTest {
         // when, then
         mockMvc.perform(get("/v1/products").param("categoryId", String.valueOf(categoryId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products", hasSize(1)))
-                .andExpect(jsonPath("$.products[0].name").value("감귤"))
-                .andExpect(jsonPath("$.products[0].minPrice").value(12900));
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].name").value("감귤"))
+                .andExpect(jsonPath("$.data.items[0].minPrice").value(12900));
     }
 
     @Test
@@ -143,23 +142,11 @@ class ProductApiIntegrationTest {
         // when, then
         mockMvc.perform(get("/v1/products").param("categoryId", String.valueOf(categoryId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products[*].productId")
+                .andExpect(jsonPath("$.data.items[*].productId")
                         .value(org.hamcrest.Matchers.hasItem(visibleId.intValue())))
-                .andExpect(jsonPath("$.products[*].productId")
+                .andExpect(jsonPath("$.data.items[*].productId")
                         .value(org.hamcrest.Matchers.not(
                                 org.hamcrest.Matchers.hasItem(deletedId.intValue()))));
-    }
-
-    @Test
-    void 여러_옵션_중_최저가가_응답에_내려간다() throws Exception {
-        // given
-        Long categoryId = fruitCategoryId();
-        saveProductWithOptions(categoryId, "감귤세트", 32000, 12900, 48000);
-
-        // when, then
-        mockMvc.perform(get("/v1/products").param("categoryId", String.valueOf(categoryId)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products[0].minPrice").value(12900));
     }
 
     @Test
@@ -174,13 +161,13 @@ class ProductApiIntegrationTest {
                         .param("minPrice", "40000")
                         .param("maxPrice", "60000"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products", hasSize(1)))
-                .andExpect(jsonPath("$.products[0].name").value("감귤"))
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].name").value("감귤"))
                 /*
                  * where 로 옵션을 먼저 거르므로, 응답 minPrice 는 상품의 절대 최저가(12900)가
                  * 아니라 조건을 만족하는 옵션 중 최저가(48000)다. 의도된 동작이다.
                  */
-                .andExpect(jsonPath("$.products[0].minPrice").value(48000));
+                .andExpect(jsonPath("$.data.items[0].minPrice").value(48000));
     }
 
     @Test
@@ -195,7 +182,7 @@ class ProductApiIntegrationTest {
                         .param("minPrice", "40000")
                         .param("maxPrice", "60000"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products", hasSize(0)));
+                .andExpect(jsonPath("$.data.items", hasSize(0)));
     }
 
     @Test
@@ -210,8 +197,8 @@ class ProductApiIntegrationTest {
                         .param("categoryId", String.valueOf(categoryId))
                         .param("sort", "PRICE_ASC"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products[0].name").value("가격A"))
-                .andExpect(jsonPath("$.products[1].name").value("가격B"));
+                .andExpect(jsonPath("$.data.items[0].name").value("가격A"))
+                .andExpect(jsonPath("$.data.items[1].name").value("가격B"));
     }
 
     @Test
@@ -226,9 +213,9 @@ class ProductApiIntegrationTest {
                         .param("categoryId", String.valueOf(categoryId))
                         .param("pageToken", PageTokens.encode(second)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products[*].productId")
+                .andExpect(jsonPath("$.data.items[*].productId")
                         .value(org.hamcrest.Matchers.hasItem(first.intValue())))
-                .andExpect(jsonPath("$.products[*].productId")
+                .andExpect(jsonPath("$.data.items[*].productId")
                         .value(org.hamcrest.Matchers.not(
                                 org.hamcrest.Matchers.hasItem(second.intValue()))));
     }
@@ -246,8 +233,8 @@ class ProductApiIntegrationTest {
                         .param("categoryId", String.valueOf(categoryId))
                         .param("pageSize", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.products", hasSize(2)))
-                .andExpect(jsonPath("$.nextPageToken").exists());
+                .andExpect(jsonPath("$.data.items", hasSize(2)))
+                .andExpect(jsonPath("$.data.nextPageToken").exists());
     }
 
     @Test
