@@ -1,6 +1,5 @@
 package com.freshmarket.member.domain.service;
 
-import com.freshmarket.member.domain.MemberWithdrawalEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.entity.SocialType;
 import com.freshmarket.member.domain.oauth.KakaoIdTokenExchanger;
@@ -11,7 +10,6 @@ import com.freshmarket.member.exception.MemberErrorCode;
 import com.freshmarket.member.exception.MemberException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,9 +30,15 @@ public class MemberWithdrawalService {
     private final MemberRepository memberRepository;
     private final MemberTokenService memberTokenService;
     private final KakaoIdTokenExchanger kakaoIdTokenExchanger;
-    private final ApplicationEventPublisher eventPublisher;
+    private final MemberWithdrawalCompletionService memberWithdrawalCompletionService;
 
-    @Transactional
+    // (2026-08-19) 예전엔 이 메서드 전체가 @Transactional이었다 — 카카오 재인증(동기 네트워크
+    // 호출)까지 DB 트랜잭션 안에서 일어나 응답 대기 동안 커넥션이 묶였다(DI-4-02). login()과
+    // 달리 여기는 verifyReauth() 뒤에 member.withdraw()로 이미 로드한 엔티티를 직접 바꾸는
+    // dirty-checking 방식이라 "@Transactional만 떼기"가 안 통했다 — 그래서 그 쓰기 부분
+    // (Member.withdraw() 대신 MemberRepository.markWithdrawn()으로 명시적 UPDATE) 자체를
+    // MemberWithdrawalCompletionService로 옮기고, 이 메서드는 카카오 호출까지만 담당하는
+    // 비트랜잭션 진입점이 됐다. 상세 이유는 MemberWithdrawalCompletionService의 클래스 주석 참고.
     public void withdraw(Long memberId, String reason, String authorizationCode, String state) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
@@ -48,17 +52,7 @@ public class MemberWithdrawalService {
 
         verifyReauth(member, authorizationCode, state);
 
-        // reason을 담을 컬럼이 스키마에 없다(V1__init_schema.sql 기준) — 우선 로그로만 남긴다.
-        // 감사(audit) 목적으로 영구 보관이 필요해지면 별도 이력 테이블/마이그레이션이 필요하다.
-        log.info("event=MEMBER_WITHDRAWN memberId={} reason={}", memberId, reason);
-
-        String kakaoUserId = member.getProviderUserId();
-
-        member.withdraw();
-
-        memberTokenService.revoke(memberId, member.getRole().name(), false);
-
-        eventPublisher.publishEvent(new MemberWithdrawalEvent(memberId, kakaoUserId));
+        memberWithdrawalCompletionService.complete(memberId, member.getProviderUserId(), member.getRole().name(), reason);
     }
 
     // GET /v1/auth/kakao/authorize?reauth=true 로 받은 code/state를 로그인 때와 같은 방식으로

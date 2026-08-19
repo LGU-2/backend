@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.freshmarket.member.domain.MemberWithdrawalEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.entity.SocialType;
 import com.freshmarket.member.domain.oauth.KakaoIdTokenExchanger;
@@ -27,7 +26,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 // (2026-08-18 19:10) API 점검 중 발견한 커버리지 게이트 갭(0개)을 메운다. 탈퇴 전 카카오
@@ -45,13 +43,13 @@ class MemberWithdrawalServiceTest {
     private KakaoIdTokenExchanger kakaoIdTokenExchanger;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private MemberWithdrawalCompletionService memberWithdrawalCompletionService;
 
     private MemberWithdrawalService sut;
 
     @BeforeEach
     void setUp() {
-        sut = new MemberWithdrawalService(memberRepository, memberTokenService, kakaoIdTokenExchanger, eventPublisher);
+        sut = new MemberWithdrawalService(memberRepository, memberTokenService, kakaoIdTokenExchanger, memberWithdrawalCompletionService);
     }
 
     private static Member newMember(Long id) {
@@ -114,17 +112,19 @@ class MemberWithdrawalServiceTest {
         assertThat(member.isWithdrawn()).isFalse();
     }
 
+    // (2026-08-19) DI-4-02 정리로 카카오 재인증 이후의 실제 쓰기(탈퇴 처리/토큰 폐기/이벤트 발행)가
+    // MemberWithdrawalCompletionService(별도 트랜잭션 빈)로 옮겨갔다 — 여기서는 withdraw()가
+    // 재인증까지 통과했을 때 그 위임을 올바른 인자로 호출하는지만 본다. 실제 쓰기 로직 자체는
+    // MemberWithdrawalCompletionServiceTest가 검증한다.
     @Test
-    void 재인증까지_통과하면_탈퇴_처리하고_토큰을_비우고_이벤트를_발행한다() {
+    void 재인증까지_통과하면_탈퇴_완료_처리를_위임한다() {
         Member member = newMember(1L);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(kakaoIdTokenExchanger.exchange("code", "state")).thenReturn(idTokenWithSub("kakao-1"));
 
         sut.withdraw(1L, "이유", "code", "state");
 
-        assertThat(member.isWithdrawn()).isTrue();
-        verify(memberTokenService).revoke(1L, "ROLE_USER", false);
-        verify(eventPublisher).publishEvent(new MemberWithdrawalEvent(1L, "kakao-1"));
+        verify(memberWithdrawalCompletionService).complete(1L, "kakao-1", "ROLE_USER", "이유");
     }
 
     @Test
