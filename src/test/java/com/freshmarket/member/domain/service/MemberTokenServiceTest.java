@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,22 +27,22 @@ import com.freshmarket.member.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 
-// (2026-08-18 19:10) API 점검 중 발견한 커버리지 게이트 갭(0개)을 메운다. 이 클래스가 이번
-// 세션 내내 다룬 쿠키 방식 전환·CAS 회전·부분 장애 시 계속 진행하는 로직의 핵심이라 꼼꼼히 본다.
 @ExtendWith(MockitoExtension.class)
 class MemberTokenServiceTest {
 
-    @Mock
+    private static final String TEST_JWT_SECRET = "test-jwt-secret-key-must-be-at-least-32-bytes-long";
+
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
@@ -50,7 +51,6 @@ class MemberTokenServiceTest {
     @Mock
     private AccessTokenValidAfterRepository accessTokenValidAfterRepository;
 
-    @Mock
     private AuthCookieFactory authCookieFactory;
 
     @Mock
@@ -66,6 +66,9 @@ class MemberTokenServiceTest {
 
     @BeforeEach
     void setUp() {
+        jwtTokenProvider = new JwtTokenProvider(TEST_JWT_SECRET, 1_800_000L, 1_209_600_000L);
+        authCookieFactory = new AuthCookieFactory(jwtTokenProvider);
+
         sut = new MemberTokenService(jwtTokenProvider, refreshTokenRepository, accessTokenValidAfterRepository,
                 authCookieFactory, memberRepository, kakaoLogoutClient);
     }
@@ -91,34 +94,36 @@ class MemberTokenServiceTest {
     @Test
     void 발급하면_accessToken과_refreshToken_쿠키가_둘_다_실린다() {
         Member member = newMember(1L);
-        when(jwtTokenProvider.createAccessToken(1L, TokenType.MEMBER, "ROLE_USER")).thenReturn("at");
-        when(jwtTokenProvider.createRefreshToken(1L, TokenType.MEMBER, "ROLE_USER", true)).thenReturn("rt");
-        when(jwtTokenProvider.getRefreshTokenValidityMs()).thenReturn(1_209_600_000L);
-        when(jwtTokenProvider.getAccessTokenValidityMs()).thenReturn(1_800_000L);
-        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", "rt").build();
-        ResponseCookie accessCookie = ResponseCookie.from("accessToken", "at").build();
-        when(authCookieFactory.refreshTokenCookie("rt", true)).thenReturn(refreshCookie);
-        when(authCookieFactory.accessTokenCookie("at")).thenReturn(accessCookie);
 
         MemberTokenService.IssueResult result = sut.issue(member, true, response);
 
-        assertThat(result.accessToken()).isEqualTo("at");
+        // 실제 JwtTokenProvider가 서명한 진짜 토큰인지, 클레임이 맞는지 검증
+        assertThat(jwtTokenProvider.validateToken(result.accessToken())).isTrue();
+        assertThat(jwtTokenProvider.getId(result.accessToken())).isEqualTo(1L);
+        assertThat(jwtTokenProvider.getType(result.accessToken())).isEqualTo(TokenType.MEMBER);
         assertThat(result.expiresInSeconds()).isEqualTo(1800L);
-        verify(response).addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
-        verify(response).addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
+
+        // 응답에 실제로 실린 Set-Cookie 헤더를 캡처해서 AuthCookieFactory가 만든 속성을 직접 확인
+        ArgumentCaptor<String> cookieCaptor = ArgumentCaptor.forClass(String.class);
+        verify(response, times(2)).addHeader(eq(HttpHeaders.SET_COOKIE), cookieCaptor.capture());
+        List<String> cookies = cookieCaptor.getAllValues();
+
+        assertThat(cookies).anySatisfy(c -> {
+            assertThat(c).startsWith("refreshToken=");
+            assertThat(c).contains("Path=/v1/auth/tokens");
+            assertThat(c).contains("HttpOnly");
+            assertThat(c).contains("SameSite=Strict");
+        });
+        assertThat(cookies).anySatisfy(c -> {
+            assertThat(c).startsWith("accessToken=");
+            assertThat(c).contains("Path=/");
+            assertThat(c).contains("HttpOnly");
+        });
     }
 
     @Test
     void redis_저장이_실패해도_발급_자체는_끝난다() {
         Member member = newMember(1L);
-        when(jwtTokenProvider.createAccessToken(any(), any(), any())).thenReturn("at");
-        when(jwtTokenProvider.createRefreshToken(any(), any(), any(), eq(false))).thenReturn("rt");
-        when(jwtTokenProvider.getRefreshTokenValidityMs()).thenReturn(1_209_600_000L);
-        when(jwtTokenProvider.getAccessTokenValidityMs()).thenReturn(1_800_000L);
-        when(authCookieFactory.refreshTokenCookie(anyString(), eq(false)))
-                .thenReturn(ResponseCookie.from("refreshToken", "rt").build());
-        when(authCookieFactory.accessTokenCookie(anyString()))
-                .thenReturn(ResponseCookie.from("accessToken", "at").build());
         doThrow(new DataAccessResourceFailureException("redis down"))
                 .when(refreshTokenRepository).save(any(), any(), any(), any());
 
@@ -128,14 +133,6 @@ class MemberTokenServiceTest {
     @Test
     void db_백업_저장이_실패해도_발급_자체는_끝난다() {
         Member member = newMember(1L);
-        when(jwtTokenProvider.createAccessToken(any(), any(), any())).thenReturn("at");
-        when(jwtTokenProvider.createRefreshToken(any(), any(), any(), eq(false))).thenReturn("rt");
-        when(jwtTokenProvider.getRefreshTokenValidityMs()).thenReturn(1_209_600_000L);
-        when(jwtTokenProvider.getAccessTokenValidityMs()).thenReturn(1_800_000L);
-        when(authCookieFactory.refreshTokenCookie(anyString(), eq(false)))
-                .thenReturn(ResponseCookie.from("refreshToken", "rt").build());
-        when(authCookieFactory.accessTokenCookie(anyString()))
-                .thenReturn(ResponseCookie.from("accessToken", "at").build());
         when(memberRepository.updateRefreshToken(any(), any(), any()))
                 .thenThrow(new DataAccessResourceFailureException("db down"));
 
@@ -172,30 +169,28 @@ class MemberTokenServiceTest {
     void CAS가_성공하면_새_토큰을_돌려준다() {
         Member member = newMember(1L);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(jwtTokenProvider.createAccessToken(1L, TokenType.MEMBER, "ROLE_USER")).thenReturn("new-at");
-        when(jwtTokenProvider.createRefreshToken(1L, TokenType.MEMBER, "ROLE_USER", false)).thenReturn("new-rt");
-        when(jwtTokenProvider.getRefreshTokenValidityMs()).thenReturn(1_209_600_000L);
-        when(jwtTokenProvider.getAccessTokenValidityMs()).thenReturn(1_800_000L);
-        when(refreshTokenRepository.compareAndSave(eq("ROLE_USER"), eq(1L), eq("old-rt"), eq("new-rt"), any()))
+        when(refreshTokenRepository.compareAndSave(eq("ROLE_USER"), eq(1L), eq("old-rt"), anyString(), any()))
                 .thenReturn(true);
 
         MemberTokenService.ReissueResult result = sut.reissue(1L, "ROLE_USER", "old-rt", false);
 
-        assertThat(result.accessToken()).isEqualTo("new-at");
-        assertThat(result.refreshToken()).isEqualTo("new-rt");
+        assertThat(jwtTokenProvider.validateToken(result.accessToken())).isTrue();
+        assertThat(jwtTokenProvider.getId(result.accessToken())).isEqualTo(1L);
+        assertThat(jwtTokenProvider.validateToken(result.refreshToken())).isTrue();
+        assertThat(jwtTokenProvider.getType(result.refreshToken())).isEqualTo(TokenType.MEMBER);
         assertThat(result.expiresInSeconds()).isEqualTo(1800L);
     }
 
     @Test
     void CAS가_실패하면_재사용_의심으로_토큰을_비우고_예외() {
         Member member = newMember(1L);
+        // revoke() 실패 로그가 이 값을 getJti()로 파싱하므로, 실제 서명된 토큰이어야 한다
+        // ("old-rt" 같은 임의 문자열은 JwtException을 던져 테스트가 의도와 다르게 깨진다).
+        String oldRefreshToken = jwtTokenProvider.createRefreshToken(1L, TokenType.MEMBER, "ROLE_USER", false);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(jwtTokenProvider.createAccessToken(any(), any(), any())).thenReturn("new-at");
-        when(jwtTokenProvider.createRefreshToken(any(), any(), any(), eq(false))).thenReturn("new-rt");
-        when(jwtTokenProvider.getRefreshTokenValidityMs()).thenReturn(1_209_600_000L);
         when(refreshTokenRepository.compareAndSave(any(), any(), any(), any(), any())).thenReturn(false);
 
-        assertThatThrownBy(() -> sut.reissue(1L, "ROLE_USER", "old-rt", false))
+        assertThatThrownBy(() -> sut.reissue(1L, "ROLE_USER", oldRefreshToken, false))
                 .isInstanceOf(AuthException.class)
                 .extracting(e -> ((AuthException) e).getErrorCode())
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
@@ -206,10 +201,6 @@ class MemberTokenServiceTest {
     void redis_CAS가_장애나면_DB_CAS로_폴백해서_성공할_수_있다() {
         Member member = newMember(1L);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(jwtTokenProvider.createAccessToken(any(), any(), any())).thenReturn("new-at");
-        when(jwtTokenProvider.createRefreshToken(any(), any(), any(), eq(false))).thenReturn("new-rt");
-        when(jwtTokenProvider.getRefreshTokenValidityMs()).thenReturn(1_209_600_000L);
-        when(jwtTokenProvider.getAccessTokenValidityMs()).thenReturn(1_800_000L);
         when(refreshTokenRepository.compareAndSave(any(), any(), any(), any(), any()))
                 .thenThrow(new DataAccessResourceFailureException("redis down"));
         when(memberRepository.compareAndSetRefreshToken(eq(1L), anyString(), anyString(), any(LocalDateTime.class)))
@@ -217,7 +208,8 @@ class MemberTokenServiceTest {
 
         MemberTokenService.ReissueResult result = sut.reissue(1L, "ROLE_USER", "old-rt", false);
 
-        assertThat(result.refreshToken()).isEqualTo("new-rt");
+        assertThat(jwtTokenProvider.validateToken(result.refreshToken())).isTrue();
+        assertThat(jwtTokenProvider.getId(result.refreshToken())).isEqualTo(1L);
     }
 
     // ---- revoke() ----
