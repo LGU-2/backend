@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.freshmarket.product.domain.dto.PageCursor;
 import com.freshmarket.product.domain.dto.PageTokens;
 import com.freshmarket.product.domain.entity.Product;
 import com.freshmarket.product.domain.entity.ProductOption;
@@ -26,20 +27,9 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/*
- * 상품 목록 조회를 HTTP 요청부터 DB 까지 전체 경로로 검증한다.
- * SecurityConfig, ProductController, ProductService, ProductQueryRepository 를
- * 실제 스프링 컨텍스트로 띄워 하나로 묶어서 확인한다 (팀 방침: Repository 단위 테스트 대신
- * @SpringBootTest + @AutoConfigureMockMvc 로 작성).
- */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional   // @DataJpaTest 가 기본 제공하던 테스트별 롤백을 명시적으로 켠다
-/*
- * Supplier 엔티티가 아직 없어 JPA 로 공급처를 만들 수 없다.
- * product.supplier_id 가 NOT NULL FK 라 테스트 상품을 만들려면 공급처가 먼저 있어야 하므로
- * SQL 스크립트로 직접 하나 심는다. Supplier 엔티티가 생기면 이 스크립트 대신 정식으로 등록한다.
- */
+@Transactional
 @Sql("/sql/product-test-supplier.sql")
 @Testcontainers
 class ProductApiIntegrationTest {
@@ -63,11 +53,8 @@ class ProductApiIntegrationTest {
     @PersistenceContext
     private EntityManager entityManager;
 
-    // product-test-supplier.sql 이 심어둔 공급처를 그대로 쓴다.
-    // auto_increment 드리프트에 흔들리지 않도록 SQL 에서 supplier_id 를 명시적으로 고정했다.
     private static final Long SUPPLIER_ID = 999999L;
 
-    // V2__seed_category.sql 이 심어둔 최상위 카테고리 중 하나를 그대로 쓴다
     private Long fruitCategoryId() {
         return categoryRepository.findAll().stream()
                 .filter(c -> c.getName().equals("과일"))
@@ -76,7 +63,6 @@ class ProductApiIntegrationTest {
                 .getId();
     }
 
-    // 상품 하나와 옵션들을 저장하고 id 를 돌려준다
     private Long saveProductWithOptions(Long categoryId, String name, int... prices) {
         Product product = productRepository.save(
                 Product.register("P-" + name, name, categoryId, SUPPLIER_ID,
@@ -88,13 +74,6 @@ class ProductApiIntegrationTest {
         return product.getId();
     }
 
-    /*
-     * Product 에 소프트딜리트 도메인 메서드가 아직 없다.
-     * product_option 이 product 를 FK 로 참조해 하드 삭제는 제약 위반을 일으키고,
-     * chk_product_deleted 제약도 deleted_at 이 채워지는 방식을 전제한다.
-     * 그래서 하드 삭제 대신 상태만 직접 갱신해 "삭제된 상품"을 재현한다.
-     * Product.delete() 같은 도메인 메서드가 생기면 이 메서드 대신 그것을 호출해야 한다.
-     */
     private void softDelete(Long productId) {
         entityManager.flush();
         entityManager.createNativeQuery(
@@ -107,11 +86,9 @@ class ProductApiIntegrationTest {
 
     @Test
     void 비로그인_상태에서도_상품_목록을_조회할_수_있다() throws Exception {
-        // given
         Long categoryId = fruitCategoryId();
         saveProductWithOptions(categoryId, "감귤", 12900);
 
-        // when, then — 인증 헤더 없이 요청해도 401 이 아니라 200 이어야 한다
         mockMvc.perform(get("/v1/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray());
@@ -119,11 +96,9 @@ class ProductApiIntegrationTest {
 
     @Test
     void 카테고리로_필터링해_응답한다() throws Exception {
-        // given
         Long categoryId = fruitCategoryId();
         saveProductWithOptions(categoryId, "감귤", 12900);
 
-        // when, then
         mockMvc.perform(get("/v1/products").param("categoryId", String.valueOf(categoryId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items", hasSize(1)))
@@ -133,13 +108,11 @@ class ProductApiIntegrationTest {
 
     @Test
     void 삭제된_상품은_응답에서_제외된다() throws Exception {
-        // given
         Long categoryId = fruitCategoryId();
         Long visibleId = saveProductWithOptions(categoryId, "감귤", 12900);
         Long deletedId = saveProductWithOptions(categoryId, "복숭아", 9900);
         softDelete(deletedId);
 
-        // when, then
         mockMvc.perform(get("/v1/products").param("categoryId", String.valueOf(categoryId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[*].productId")
@@ -151,11 +124,9 @@ class ProductApiIntegrationTest {
 
     @Test
     void 가격_범위_안의_옵션이_있으면_상품이_노출된다() throws Exception {
-        // given — 감귤은 1kg=12900원(범위 밖) 이지만 5kg=48000원(범위 안) 옵션도 갖는다
         Long categoryId = fruitCategoryId();
         saveProductWithOptions(categoryId, "감귤", 12900, 48000);
 
-        // when, then — 40000~60000 범위. where 필터라 48000원 옵션 때문에 노출된다
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
                         .param("minPrice", "40000")
@@ -163,20 +134,14 @@ class ProductApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items", hasSize(1)))
                 .andExpect(jsonPath("$.data.items[0].name").value("감귤"))
-                /*
-                 * where 로 옵션을 먼저 거르므로, 응답 minPrice 는 상품의 절대 최저가(12900)가
-                 * 아니라 조건을 만족하는 옵션 중 최저가(48000)다. 의도된 동작이다.
-                 */
                 .andExpect(jsonPath("$.data.items[0].minPrice").value(48000));
     }
 
     @Test
     void 범위_안의_옵션이_전혀_없으면_상품이_제외된다() throws Exception {
-        // given
         Long categoryId = fruitCategoryId();
         saveProductWithOptions(categoryId, "저가상품", 5000);
 
-        // when, then — 5000원은 40000~60000 범위 밖. 어떤 옵션도 안 걸리므로 제외된다
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
                         .param("minPrice", "40000")
@@ -187,12 +152,10 @@ class ProductApiIntegrationTest {
 
     @Test
     void 가격_오름차순으로_정렬한다() throws Exception {
-        // given
         Long categoryId = fruitCategoryId();
         saveProductWithOptions(categoryId, "가격A", 5000);
         saveProductWithOptions(categoryId, "가격B", 50000);
 
-        // when, then
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
                         .param("sort", "PRICE_ASC"))
@@ -202,33 +165,69 @@ class ProductApiIntegrationTest {
     }
 
     @Test
-    void 커서_이후의_상품만_응답한다() throws Exception {
-        // given
+    void 최신순_커서_이후의_상품만_응답한다() throws Exception {
         Long categoryId = fruitCategoryId();
         Long first = saveProductWithOptions(categoryId, "커서첫상품", 1000);
         Long second = saveProductWithOptions(categoryId, "커서둘째상품", 2000);
 
-        // when, then — second 를 커서로 주면 그보다 먼저 만들어진 first 만 남는다
+        String token = firstPageToken(categoryId, "CREATED_DESC");
+
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
-                        .param("pageToken", PageTokens.encode(second)))
+                        .param("sort", "CREATED_DESC")
+                        .param("pageToken", token)
+                        .param("pageSize", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[*].productId")
-                        .value(org.hamcrest.Matchers.hasItem(first.intValue())))
                 .andExpect(jsonPath("$.data.items[*].productId")
                         .value(org.hamcrest.Matchers.not(
                                 org.hamcrest.Matchers.hasItem(second.intValue()))));
     }
 
+    /*
+     * API-3-04 / UT-1-01 회귀 테스트.
+     * 가격 정렬 상태에서 커서로 다음 페이지를 넘겼을 때, 정렬 축(가격)과 커서 축이
+     * 일치해야 행이 건너뛰거나 중복되지 않는다. 이전에는 커서가 id 만 봐서
+     * 가격 정렬 2페이지부터 결과가 깨졌었다.
+     */
+    @Test
+    void 가격_정렬_상태에서_커서로_다음_페이지를_넘겨도_행이_빠지거나_겹치지_않는다() throws Exception {
+        // given — 가격 오름차순 정렬 시 1000, 2000, 3000 순으로 나와야 한다
+        Long categoryId = fruitCategoryId();
+        Long first = saveProductWithOptions(categoryId, "가격1000", 1000);
+        Long second = saveProductWithOptions(categoryId, "가격2000", 2000);
+        Long third = saveProductWithOptions(categoryId, "가격3000", 3000);
+
+        // when — 1페이지(가격 오름차순, 크기 1)를 요청해 커서를 얻는다
+        String firstPageJson = mockMvc.perform(get("/v1/products")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("sort", "PRICE_ASC")
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].productId").value(first.intValue()))
+                .andReturn().getResponse().getContentAsString();
+
+        String nextToken = com.jayway.jsonpath.JsonPath.read(firstPageJson, "$.data.nextPageToken");
+
+        // then — 그 토큰으로 2페이지를 요청하면 1페이지에서 이미 받은 first 는 다시 안 나오고,
+        // 정확히 second 부터 이어져야 한다 (id 기준 커서였다면 정렬 축 불일치로 여기서 깨졌다)
+        mockMvc.perform(get("/v1/products")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("sort", "PRICE_ASC")
+                        .param("pageSize", "1")
+                        .param("pageToken", nextToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].productId").value(second.intValue()));
+    }
+
     @Test
     void 페이지_크기만큼만_응답하고_다음_페이지_토큰을_준다() throws Exception {
-        // given
         Long categoryId = fruitCategoryId();
         for (int i = 0; i < 3; i++) {
             saveProductWithOptions(categoryId, "페이지상품" + i, 1000 + i);
         }
 
-        // when, then
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
                         .param("pageSize", "2"))
@@ -239,17 +238,26 @@ class ProductApiIntegrationTest {
 
     @Test
     void 잘못된_정렬값이_오면_400을_응답한다() throws Exception {
-        // when, then — 화이트리스트에 없는 sort 값. enum 변환 실패가 COMMON-003 으로 처리된다
         mockMvc.perform(get("/v1/products").param("sort", "INVALID_SORT"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void 가격_범위가_뒤집히면_400을_응답한다() throws Exception {
-        // when, then — minPrice > maxPrice. ProductSearchCondition 생성자 검증이 예외를 던진다
         mockMvc.perform(get("/v1/products")
                         .param("minPrice", "50000")
                         .param("maxPrice", "10000"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // 1페이지 요청 후 응답의 nextPageToken 을 그대로 꺼낸다. 커서 테스트용 헬퍼
+    private String firstPageToken(Long categoryId, String sort) throws Exception {
+        String json = mockMvc.perform(get("/v1/products")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("sort", sort)
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return com.jayway.jsonpath.JsonPath.read(json, "$.data.nextPageToken");
     }
 }

@@ -9,9 +9,11 @@ class PageTokensTest {
 
     @Test
     void 커서를_인코딩하고_디코딩하면_원래_값으로_돌아온다() {
-        String token = PageTokens.encode(12L);
+        PageCursor cursor = new PageCursor(12L, "2026-08-19T10:00:00");
 
-        assertThat(PageTokens.decode(token)).isEqualTo(12L);
+        String token = PageTokens.encode(cursor);
+
+        assertThat(PageTokens.decode(token)).isEqualTo(cursor);
     }
 
     @Test
@@ -36,10 +38,17 @@ class PageTokensTest {
 
     @Test
     void 접두사가_다른_토큰을_디코딩하면_null이다() {
-        // 같은 Base64 URL 인코딩이지만 우리 접두사("p:")가 아닌 값
         String other = java.util.Base64.getUrlEncoder().withoutPadding()
-                .encodeToString("x:12".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                .encodeToString("x:12|abc".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         assertThat(PageTokens.decode(other)).isNull();
+    }
+
+    @Test
+    void 구분자가_없는_토큰을_디코딩하면_null이다() {
+        String malformed = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("p:12".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        assertThat(PageTokens.decode(malformed)).isNull();
     }
 }

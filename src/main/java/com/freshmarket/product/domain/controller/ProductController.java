@@ -2,6 +2,7 @@ package com.freshmarket.product.domain.controller;
 
 import com.freshmarket.common.response.CursorPageResponse;
 import com.freshmarket.common.response.ResponseEnvelope;
+import com.freshmarket.product.domain.dto.PageCursor;
 import com.freshmarket.product.domain.dto.PageTokens;
 import com.freshmarket.product.domain.dto.ProductListItem;
 import com.freshmarket.product.domain.dto.ProductSearchCondition;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// 회원에게 상품 목록을 노출한다
+//회원에게 상품 목록을 노출한다
 @RestController
 @RequiredArgsConstructor
 class ProductController {
@@ -33,8 +34,9 @@ class ProductController {
             @RequestParam(required = false) String pageToken,
             @RequestParam(required = false, defaultValue = "20") int pageSize) {
 
+        PageCursor cursor = PageTokens.decode(pageToken);
         ProductSearchCondition condition = new ProductSearchCondition(
-                categoryId, minPrice, maxPrice, sort, PageTokens.decode(pageToken), pageSize);
+                categoryId, minPrice, maxPrice, sort, cursor, pageSize);
 
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
     }

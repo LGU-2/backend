@@ -27,7 +27,6 @@ public class SecurityConfig {
 	        "/swagger-ui/**",
 	        "/swagger-ui.html",
 	        "/v1/products",
-	        "/v1/products/**"
 	};
 
     /*
