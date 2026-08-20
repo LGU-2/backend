@@ -1,5 +1,7 @@
 package com.freshmarket.common.logging;
 
+import java.util.function.Function;
+
 /**
  * 응답 DTO / 로그에서 개인정보를 부분 마스킹하기 위한 유틸.
  *
@@ -78,5 +80,16 @@ public final class PiiMasker {
     /** 카카오 회원번호(provider_user_id) 등 외부 식별자 로깅용. 1234567890 -> 12******90 */
     public static String maskProviderId(String providerId) {
         return maskGeneric(providerId, 2, 2);
+    }
+
+    /**
+     * (2026-08-20, SEC-3-02/FUN-3-01) 조회 응답이 마스킹된 값만 내려주는 필드(name/email/phone
+     * 등)는, 수정 폼이 그 값을 그대로 채워둔 채로 다시 제출되면 서버가 마스킹 문자열을 진짜 값인
+     * 것처럼 저장해버릴 수 있다. 수정 요청으로 들어온 값이 "현재 저장된 값을 마스킹한 결과"와
+     * 똑같다면, 사용자가 실제로 바꾼 게 아니라 화면에 떠 있던 표시값을 그대로 돌려보낸 것으로
+     * 보고 미변경 취급한다.
+     */
+    public static boolean isMaskedEchoOf(String submitted, String current, Function<String, String> masker) {
+        return submitted != null && current != null && submitted.equals(masker.apply(current));
     }
 }
