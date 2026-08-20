@@ -134,12 +134,47 @@ class AdminProductServiceTest {
     }
 
     @Test
+    void 같은_상품_안에_옵션_이름이_겹치면_등록에_실패한다() {
+        // given — 옵션 목록 안에서 이름이 중복된 상황(예: "1kg"을 두 번 보냄)
+        when(categoryRepository.existsById(4L)).thenReturn(true);
+        stubSaveAssignsId();
+        when(productOptionRepository.save(any())).thenThrow(new DataIntegrityViolationException(
+                "Duplicate entry '1-1kg' for key 'product_option.uk_option_product_name'"));
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900),
+                        new AdminProductOptionCreateRequest("1kg", 15900)));
+
+        // when, then
+        assertThatThrownBy(() -> adminProductService.register(request))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.OPTION_DUPLICATE_NAME);
+    }
+
+    @Test
     void 알_수_없는_제약_위반은_그대로_전파된다() {
         // given — product_code 유니크 제약처럼 별도로 변환하지 않는 위반
         when(categoryRepository.existsById(4L)).thenReturn(true);
         DataIntegrityViolationException unknownViolation = new DataIntegrityViolationException(
                 "Duplicate entry for key 'uk_product_code'");
         when(productRepository.save(any())).thenThrow(unknownViolation);
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
+
+        // when, then
+        assertThatThrownBy(() -> adminProductService.register(request))
+                .isSameAs(unknownViolation);
+    }
+
+    @Test
+    void 옵션_저장_중_알_수_없는_제약_위반은_그대로_전파된다() {
+        // given — 옵션명 중복이 아닌 다른 위반(예: chk_option_price처럼 별도로 변환하지 않는 제약)
+        when(categoryRepository.existsById(4L)).thenReturn(true);
+        stubSaveAssignsId();
+        DataIntegrityViolationException unknownViolation = new DataIntegrityViolationException(
+                "Check constraint 'chk_option_price' is violated");
+        when(productOptionRepository.save(any())).thenThrow(unknownViolation);
         AdminProductCreateRequest request = new AdminProductCreateRequest(
                 "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));

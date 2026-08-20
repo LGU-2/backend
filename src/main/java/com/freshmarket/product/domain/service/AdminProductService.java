@@ -80,10 +80,17 @@ public class AdminProductService {
                 .toList();
     }
 
-    // 옵션 하나를 생성해 저장하고, 응답 변환에 쓸 수 있도록 그대로 반환한다
+    // 옵션 하나를 생성해 저장한다. 같은 상품 안에서 옵션명이 겹치면 OPTION_DUPLICATE_NAME으로 바꾼다
     private ProductOption saveOption(Long productId, AdminProductOptionCreateRequest optionRequest) {
         ProductOption option = ProductOption.register(productId, optionRequest.name(), optionRequest.price());
-        productOptionRepository.save(option);
+        try {
+            productOptionRepository.save(option);
+        } catch (DataIntegrityViolationException e) {
+            if (isConstraintViolation(e, "uk_option_product_name")) {
+                throw new ProductException(ProductErrorCode.OPTION_DUPLICATE_NAME, e);
+            }
+            throw e;
+        }
         return option;
     }
 
