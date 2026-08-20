@@ -41,9 +41,8 @@ class ProductController {
             @RequestParam(required = false) String pageToken,
             @RequestParam(required = false, defaultValue = "20") int pageSize) {
 
-        PageCursor cursor = PageTokens.decode(pageToken);
-        ProductSearchCondition condition = new ProductSearchCondition(
-                categoryId, minPrice, maxPrice, null, sort, cursor, pageSize);
+        ProductSearchCondition condition =
+                buildCondition(categoryId, minPrice, maxPrice, null, sort, pageToken, pageSize);
 
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
     }
@@ -61,9 +60,8 @@ class ProductController {
             @RequestParam(required = false) String pageToken,
             @RequestParam(required = false, defaultValue = "20") int pageSize) {
 
-        PageCursor cursor = PageTokens.decode(pageToken);
-        ProductSearchCondition condition = new ProductSearchCondition(
-                categoryId, minPrice, maxPrice, query, sort, cursor, pageSize);
+        ProductSearchCondition condition =
+                buildCondition(categoryId, minPrice, maxPrice, query, sort, pageToken, pageSize);
 
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
     }
@@ -74,5 +72,15 @@ class ProductController {
     public ResponseEntity<ResponseEnvelope<ProductDetailResponse>> getProductDetail(
             @PathVariable Long productId) {
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProductDetail(productId)));
+    }
+
+    /*
+     * 목록 조회와 검색이 공유하는 조건 조립 로직 (MNT-3-01).
+     * 둘의 차이는 query 유무 하나뿐이라, 커서 디코딩과 조건 생성을 여기 한 곳에 모은다.
+     */
+    private ProductSearchCondition buildCondition(Long categoryId, Integer minPrice, Integer maxPrice,
+            String query, ProductSortType sort, String pageToken, int pageSize) {
+        PageCursor cursor = PageTokens.decode(pageToken);
+        return new ProductSearchCondition(categoryId, minPrice, maxPrice, query, sort, cursor, pageSize);
     }
 }

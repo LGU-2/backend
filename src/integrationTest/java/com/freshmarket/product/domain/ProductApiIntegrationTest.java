@@ -406,4 +406,35 @@ class ProductApiIntegrationTest {
                 .andExpect(jsonPath("$.data.items", hasSize(1)))
                 .andExpect(jsonPath("$.data.items[0].name").value("20% 할인 세트"));
     }
+    
+    @Test
+    void 검색_결과에서_커서로_다음_페이지를_넘겨도_검색어_조건이_유지된다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        saveProductWithOptions(categoryId, "감귤A", 1000);
+        saveProductWithOptions(categoryId, "감귤B", 2000);
+        saveProductWithOptions(categoryId, "복숭아", 3000);   // 검색어에 안 걸려야 한다
+
+        // when — 1페이지
+        String firstPageJson = mockMvc.perform(get("/v1/products:search")
+                        .param("query", "감귤")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String nextToken = com.jayway.jsonpath.JsonPath.read(firstPageJson, "$.data.nextPageToken");
+
+        // then — 2페이지도 query 를 다시 보내면, "복숭아"가 안 새어나오고 감귤만 남아야 한다
+        mockMvc.perform(get("/v1/products:search")
+                        .param("query", "감귤")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("pageSize", "1")
+                        .param("pageToken", nextToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].name")
+                        .value(org.hamcrest.Matchers.containsString("감귤")));
+    }
 }

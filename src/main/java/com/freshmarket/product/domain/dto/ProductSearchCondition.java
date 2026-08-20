@@ -35,12 +35,8 @@ public record ProductSearchCondition(
             throw new IllegalArgumentException(
                     "minPrice 가 maxPrice 보다 클 수 없다: " + minPrice + " > " + maxPrice);
         }
-        /*
-         * query 는 검색 엔드포인트에서만 채워진다. 목록 조회는 항상 null 이다.
-         * 컨트롤러에서 Bean Validation(@Size)으로 이미 막지만, 다른 경로로 이 record 가
-         * 직접 생성될 경우를 대비해 여기서도 다시 검증한다 (SEC-3-03).
-         */
         if (query != null) {
+            query = query.strip();   // 검증 전에 트림 (FUN-3-01)
             if (query.isBlank()) {
                 throw new IllegalArgumentException("query 는 공백일 수 없다");
             }

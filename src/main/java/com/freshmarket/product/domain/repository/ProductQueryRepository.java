@@ -103,7 +103,7 @@ public class ProductQueryRepository {
         String escaped = query.replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_");
-        return product.name.likeIgnoreCase("%" + escaped + "%", '\\');
+        return product.name.like("%" + escaped + "%", '\\');
     }
 
     /*
