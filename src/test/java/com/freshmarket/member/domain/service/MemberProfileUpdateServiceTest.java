@@ -4,16 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.freshmarket.common.logging.PiiMasker;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.entity.MemberGrade;
 import com.freshmarket.member.domain.entity.MemberStatus;
 import com.freshmarket.member.domain.entity.SocialType;
 import com.freshmarket.member.domain.repository.MemberGradeRepository;
 import com.freshmarket.member.domain.repository.MemberRepository;
-import com.freshmarket.member.dto.MemberProfileUpdateRequest;
-import com.freshmarket.member.dto.MemberResponse;
-import com.freshmarket.member.exception.MemberErrorCode;
-import com.freshmarket.member.exception.MemberException;
+import com.freshmarket.member.domain.dto.MemberProfileUpdateRequest;
+import com.freshmarket.member.domain.dto.MemberResponse;
+import com.freshmarket.member.domain.exception.MemberErrorCode;
+import com.freshmarket.member.domain.exception.MemberException;
 import java.lang.reflect.Field;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -143,6 +144,57 @@ class MemberProfileUpdateServiceTest {
         assertThat(member.getPhone()).isEqualTo("010-9999-9999");
         assertThat(member.isMarketingAgreed()).isTrue();
         assertThat(result.grade().name()).isEqualTo("브론즈");
+    }
+
+    @Test
+    void 조회_응답이_보여준_마스킹된_전화번호를_그대로_다시_보내면_원래_값이_유지된다() {
+        // (SEC-3-02/FUN-3-01) PiiMasker.maskPhone("010-9999-0000") == "010****0000"
+        Member member = newMember();
+        member.updateProfile("기존이름", "기존닉네임", "old@b.com", "010-9999-0000", null);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(memberGradeRepository.findById(1L)).thenReturn(Optional.of(newGrade()));
+
+        sut.updateProfile(1L, request(null, null, null, "010****0000", null));
+
+        assertThat(member.getPhone()).isEqualTo("010-9999-0000");
+    }
+
+    @Test
+    void 조회_응답이_보여준_마스킹된_이름을_그대로_다시_보내면_원래_값이_유지된다() {
+        // PiiMasker.maskName("김민준") == "김*준"
+        Member member = newMember();
+        member.updateProfile("김민준", "기존닉네임", "old@b.com", "010-0000-0000", null);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(memberGradeRepository.findById(1L)).thenReturn(Optional.of(newGrade()));
+
+        sut.updateProfile(1L, request("김*준", null, null, null, null));
+
+        assertThat(member.getName()).isEqualTo("김민준");
+    }
+
+    @Test
+    void 조회_응답이_보여준_마스킹된_이메일을_그대로_다시_보내면_원래_값이_유지된다() {
+        Member member = newMember();
+        member.updateProfile("기존이름", "기존닉네임", "hello@example.com", "010-0000-0000", null);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(memberGradeRepository.findById(1L)).thenReturn(Optional.of(newGrade()));
+        String maskedEmail = PiiMasker.maskEmail("hello@example.com");
+
+        sut.updateProfile(1L, request(null, null, maskedEmail, null, null));
+
+        assertThat(member.getEmail()).isEqualTo("hello@example.com");
+    }
+
+    @Test
+    void 진짜로_바뀐_전화번호는_마스킹값과_안_겹치면_그대로_반영된다() {
+        Member member = newMember();
+        member.updateProfile("기존이름", "기존닉네임", "old@b.com", "010-0000-0000", null);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(memberGradeRepository.findById(1L)).thenReturn(Optional.of(newGrade()));
+
+        sut.updateProfile(1L, request(null, null, null, "010-1111-2222", null));
+
+        assertThat(member.getPhone()).isEqualTo("010-1111-2222");
     }
 
     @Test
