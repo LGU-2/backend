@@ -190,6 +190,12 @@ tasks.register('integrationTest', Test) {
     classpath = sourceSets.integrationTest.runtimeClasspath
     useJUnitPlatform()
     shouldRunAfter tasks.named('test')
+
+    /*
+     * application-integrationTest.yml 을 켠다.
+     * IDE 에서 테스트 클래스를 직접 실행하면 이 설정이 안 걸리므로 클래스에도 @ActiveProfiles 를 붙여 둔다.
+     */
+    systemProperty 'spring.profiles.active', 'integrationTest'
 }
 
 jacoco {
