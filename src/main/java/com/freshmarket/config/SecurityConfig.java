@@ -28,7 +28,8 @@ public class SecurityConfig {
 	        "/swagger-ui.html",
 	        "/v1/products",
 	        "/v1/products/*",
-	        "/v1/products:search"
+	        "/v1/products:search",
+	        "/v1/categories",
 	};
 
     /*
