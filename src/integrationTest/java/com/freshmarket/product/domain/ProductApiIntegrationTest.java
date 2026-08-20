@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.freshmarket.product.domain.entity.ProductImage;
+import com.freshmarket.product.domain.entity.UploadStatus;
+import com.freshmarket.product.domain.repository.ProductImageRepository;
 import com.freshmarket.product.domain.dto.PageCursor;
 import com.freshmarket.product.domain.dto.PageTokens;
 import com.freshmarket.product.domain.entity.Product;
@@ -13,6 +16,8 @@ import com.freshmarket.product.domain.entity.StorageType;
 import com.freshmarket.product.domain.repository.CategoryRepository;
 import com.freshmarket.product.domain.repository.ProductOptionRepository;
 import com.freshmarket.product.domain.repository.ProductRepository;
+import com.freshmarket.product.domain.entity.SaleStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
@@ -49,6 +54,9 @@ class ProductApiIntegrationTest {
 
     @Autowired
     private CategoryRepository categoryRepository;
+    
+    @Autowired
+    private ProductImageRepository productImageRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -259,5 +267,66 @@ class ProductApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return com.jayway.jsonpath.JsonPath.read(json, "$.data.nextPageToken");
+    }
+    
+    @Test
+    void 상품_상세를_조회한다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        Long productId = saveProductWithOptions(categoryId, "감귤", 12900, 32000);
+
+        // when, then
+        mockMvc.perform(get("/v1/products/" + productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.productId").value(productId.intValue()))
+                .andExpect(jsonPath("$.data.name").value("감귤"))
+                .andExpect(jsonPath("$.data.category.name").value("과일"))
+                .andExpect(jsonPath("$.data.options", hasSize(2)))
+                .andExpect(jsonPath("$.data.review.count").value(0));
+    }
+
+    @Test
+    void 확정된_이미지만_상세_응답에_나온다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        Long productId = saveProductWithOptions(categoryId, "감귤", 12900);
+        ProductImage confirmed = ProductImage.register(productId, "products/ab/confirmed.jpg");
+        confirmed.confirm();
+        productImageRepository.save(confirmed);
+        productImageRepository.save(ProductImage.register(productId, "products/ab/pending.jpg"));
+
+        // when, then — PENDING 이미지는 안 나오고 CONFIRMED 하나만 나온다
+        mockMvc.perform(get("/v1/products/" + productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.images", hasSize(1)));
+    }
+
+    @Test
+    void 존재하지_않는_상품을_조회하면_404를_응답한다() throws Exception {
+        mockMvc.perform(get("/v1/products/999999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRODUCT-001"));
+    }
+
+    @Test
+    void 삭제된_상품을_조회하면_404를_응답한다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        Long productId = saveProductWithOptions(categoryId, "복숭아", 9900);
+        softDelete(productId);
+
+        // when, then
+        mockMvc.perform(get("/v1/products/" + productId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRODUCT-001"));
+    }
+
+    @Test
+    void 비로그인_상태에서도_상세_조회가_가능하다() throws Exception {
+        Long categoryId = fruitCategoryId();
+        Long productId = saveProductWithOptions(categoryId, "감귤", 12900);
+
+        mockMvc.perform(get("/v1/products/" + productId))
+                .andExpect(status().isOk());
     }
 }

@@ -1,26 +1,42 @@
 package com.freshmarket.product.domain.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.freshmarket.common.response.CursorPageResponse;
 import com.freshmarket.product.domain.dto.PageCursor;
 import com.freshmarket.product.domain.dto.PageTokens;
+import com.freshmarket.product.domain.dto.ProductDetailResponse;
 import com.freshmarket.product.domain.dto.ProductListItem;
 import com.freshmarket.product.domain.dto.ProductSearchCondition;
 import com.freshmarket.product.domain.dto.ProductSortType;
 import com.freshmarket.product.domain.dto.ProductWithMinPrice;
+import com.freshmarket.product.domain.entity.Category;
+import com.freshmarket.product.domain.entity.Product;
+import com.freshmarket.product.domain.entity.ProductImage;
+import com.freshmarket.product.domain.entity.ProductOption;
 import com.freshmarket.product.domain.entity.SaleStatus;
+import com.freshmarket.product.domain.entity.StorageType;
+import com.freshmarket.product.domain.entity.UploadStatus;
+import com.freshmarket.product.domain.exception.ProductErrorCode;
+import com.freshmarket.product.domain.exception.ProductException;
+import com.freshmarket.product.domain.repository.CategoryRepository;
+import com.freshmarket.product.domain.repository.ProductImageRepository;
+import com.freshmarket.product.domain.repository.ProductOptionRepository;
 import com.freshmarket.product.domain.repository.ProductQueryRepository;
+import com.freshmarket.product.domain.repository.ProductRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
-// ProductService의 목록 조회와 페이징, 응답 변환 분기를 검증한다
+// ProductService의 목록 조회, 상세 조회, 페이징, 응답 변환 분기를 검증한다
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
 
@@ -28,6 +44,18 @@ class ProductServiceTest {
 
     @Mock
     private ProductQueryRepository productQueryRepository;
+
+    @Mock
+    private ProductRepository productRepository;
+
+    @Mock
+    private ProductOptionRepository productOptionRepository;
+
+    @Mock
+    private ProductImageRepository productImageRepository;
+
+    @Mock
+    private CategoryRepository categoryRepository;
 
     @InjectMocks
     private ProductService productService;
@@ -161,5 +189,104 @@ class ProductServiceTest {
         // then — 커서 정렬값이 createdAt 이 아니라 minPrice(12900) 여야 한다
         PageCursor decoded = PageTokens.decode(result.nextPageToken());
         assertThat(decoded.sortValue()).isEqualTo("12900");
+    }
+
+    @Test
+    void 상품_상세를_조회한다() {
+        // given
+        Product product = Product.register(
+                "P-001", "감귤", 4L, 1L, StorageType.COLD, 3, "제주산");
+        ReflectionTestUtils.setField(product, "id", 1L);
+        Category category = Category.register("과일");
+        ReflectionTestUtils.setField(category, "id", 4L);
+        ProductOption option = ProductOption.register(1L, "1kg", 12900);
+        ProductImage image = ProductImage.register(1L, "products/ab/1.jpg");
+        image.confirm();
+
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
+        when(productOptionRepository.findByProductIdAndSaleStatusNot(1L, SaleStatus.OFF_SALE))
+        .thenReturn(List.of(option));
+        when(productImageRepository.findByProductIdAndUploadStatus(1L, UploadStatus.CONFIRMED))
+                .thenReturn(List.of(image));
+
+        // when
+        ProductDetailResponse result = productService.getProductDetail(1L);
+
+        // then
+        assertThat(result.name()).isEqualTo("감귤");
+        assertThat(result.category().name()).isEqualTo("과일");
+        assertThat(result.options()).hasSize(1);
+        assertThat(result.options().get(0).name()).isEqualTo("1kg");
+        assertThat(result.images()).hasSize(1);
+        assertThat(result.review().count()).isEqualTo(0);
+    }
+
+    @Test
+    void 존재하지_않는_상품을_조회하면_실패한다() {
+        // given
+        when(productRepository.findById(999L)).thenReturn(Optional.empty());
+
+        // when, then
+        assertThatThrownBy(() -> productService.getProductDetail(999L))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 삭제된_상품을_조회하면_실패한다() {
+        // given
+        Product deleted = Product.register(
+                "P-002", "복숭아", 4L, 1L, StorageType.COLD, 3);
+        ReflectionTestUtils.setField(deleted, "id", 2L);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
+
+        when(productRepository.findById(2L)).thenReturn(Optional.of(deleted));
+
+        // when, then
+        assertThatThrownBy(() -> productService.getProductDetail(2L))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void 옵션이나_이미지가_없어도_빈_목록으로_조회된다() {
+        // given
+        Product product = Product.register(
+                "P-003", "사과", 4L, 1L, StorageType.COLD, 3);
+        ReflectionTestUtils.setField(product, "id", 3L);
+        Category category = Category.register("과일");
+        ReflectionTestUtils.setField(category, "id", 4L);
+
+        when(productRepository.findById(3L)).thenReturn(Optional.of(product));
+        when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
+        when(productOptionRepository.findByProductIdAndSaleStatusNot(3L, SaleStatus.OFF_SALE))
+        .thenReturn(List.of());
+        when(productImageRepository.findByProductIdAndUploadStatus(3L, UploadStatus.CONFIRMED))
+                .thenReturn(List.of());
+
+        // when
+        ProductDetailResponse result = productService.getProductDetail(3L);
+
+        // then
+        assertThat(result.options()).isEmpty();
+        assertThat(result.images()).isEmpty();
+    }
+    
+    @Test
+    void 카테고리가_없으면_상세_조회에_실패한다() {
+        // given — FK 무결성상 거의 안 일어나지만, 방어적 분기(getProductDetail 의
+        // categoryRepository.findById().orElseThrow())를 검증하기 위한 케이스
+        Product product = Product.register(
+                "P-004", "배", 4L, 1L, StorageType.COLD, 3);
+        ReflectionTestUtils.setField(product, "id", 4L);
+
+        when(productRepository.findById(4L)).thenReturn(Optional.of(product));
+        when(categoryRepository.findById(4L)).thenReturn(Optional.empty());
+
+        // when, then
+        assertThatThrownBy(() -> productService.getProductDetail(4L))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.CATEGORY_NOT_FOUND);
     }
 }
