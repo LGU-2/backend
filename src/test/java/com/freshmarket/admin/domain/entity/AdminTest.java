@@ -9,6 +9,12 @@ import org.junit.jupiter.api.Test;
 class AdminTest {
 
     @Test
+    void toAuthority_는_ROLE_접두사를_붙인다() {
+        assertThat(AdminRole.ADMIN.toAuthority()).isEqualTo("ROLE_ADMIN");
+        assertThat(AdminRole.SUPER_ADMIN.toAuthority()).isEqualTo("ROLE_SUPER_ADMIN");
+    }
+
+    @Test
     void 관리자_등록시_활성_상태로_생성된다() {
         Admin admin = Admin.register("admin.kim", "hash", "관리자", AdminRole.ADMIN);
 

@@ -71,8 +71,8 @@ public class AdminAuthService {
          * 계정이 없을 때 BCrypt 자체를 건너뛰면, 있을 때와 없을 때의 응답 시간이 갈려서
          * 그 시간 차이가 그 자체로 아이디 존재 여부를 흘리는 타이밍 사이드채널이 된다.
          *
-         * found 가 비어 있으면 아래 단락 값과 무관하게 항상 LOGIN_FAILED 로 던진다
-         * (단락 평가로 그렇게 되어 있다). dummyPasswordHash 비교는 오직 시간을 맞추기 위한 것이다.
+         * found 가 비어 있으면 아래 단락 값과 무관하게 항상 LOGIN_FAILED 로 던진다(단락 평가로 그렇게 되어 있다).
+         * dummyPasswordHash 비교는 오직 시간을 맞추기 위한 것이다.
          */
         String hashToCompare = found.map(Admin::getPasswordHash).orElse(dummyPasswordHash);
         boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCompare);
@@ -89,7 +89,7 @@ public class AdminAuthService {
 
         String accessToken = jwtTokenProvider.createToken(
                 String.valueOf(admin.getId()),
-                Map.of(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ADMIN, CLAIM_ROLE, admin.getRole().name()),
+                Map.of(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ADMIN, CLAIM_ROLE, admin.getRole().toAuthority()),
                 Duration.ofSeconds(accessTokenValiditySeconds));
 
         String rawRefreshToken = OpaqueTokenGenerator.generate();
