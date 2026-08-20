@@ -1,5 +1,9 @@
 package com.freshmarket.product.domain.service;
 
+import static com.freshmarket.product.domain.entity.ProductFixture.삭제된_상품;
+import static com.freshmarket.product.domain.entity.ProductFixture.상품;
+import static com.freshmarket.product.domain.entity.ProductFixture.카테고리;
+import static com.freshmarket.product.domain.entity.ProductFixture.옵션;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
@@ -194,19 +198,16 @@ class ProductServiceTest {
     @Test
     void 상품_상세를_조회한다() {
         // given
-        Product product = Product.register(
-                "P-001", "감귤", 4L, 1L, StorageType.COLD, 3, "제주산");
-        ReflectionTestUtils.setField(product, "id", 1L);
-        Category category = Category.register("과일");
-        ReflectionTestUtils.setField(category, "id", 4L);
-        ProductOption option = ProductOption.register(1L, "1kg", 12900);
+        Product product = 상품(1L, "감귤", 4L);
+        Category category = 카테고리(4L, "과일");
+        ProductOption option = 옵션(1L, "1kg", 12900);
         ProductImage image = ProductImage.register(1L, "products/ab/1.jpg");
         image.confirm();
 
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
         when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
         when(productOptionRepository.findByProductIdAndSaleStatusNot(1L, SaleStatus.OFF_SALE))
-        .thenReturn(List.of(option));
+                .thenReturn(List.of(option));
         when(productImageRepository.findByProductIdAndUploadStatus(1L, UploadStatus.CONFIRMED))
                 .thenReturn(List.of(image));
 
@@ -236,11 +237,7 @@ class ProductServiceTest {
     @Test
     void 삭제된_상품을_조회하면_실패한다() {
         // given
-        Product deleted = Product.register(
-                "P-002", "복숭아", 4L, 1L, StorageType.COLD, 3);
-        ReflectionTestUtils.setField(deleted, "id", 2L);
-        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
-
+        Product deleted = 삭제된_상품(2L, "복숭아", 4L);
         when(productRepository.findById(2L)).thenReturn(Optional.of(deleted));
 
         // when, then
@@ -252,16 +249,13 @@ class ProductServiceTest {
     @Test
     void 옵션이나_이미지가_없어도_빈_목록으로_조회된다() {
         // given
-        Product product = Product.register(
-                "P-003", "사과", 4L, 1L, StorageType.COLD, 3);
-        ReflectionTestUtils.setField(product, "id", 3L);
-        Category category = Category.register("과일");
-        ReflectionTestUtils.setField(category, "id", 4L);
+        Product product = 상품(3L, "사과", 4L);
+        Category category = 카테고리(4L, "과일");
 
         when(productRepository.findById(3L)).thenReturn(Optional.of(product));
         when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
         when(productOptionRepository.findByProductIdAndSaleStatusNot(3L, SaleStatus.OFF_SALE))
-        .thenReturn(List.of());
+                .thenReturn(List.of());
         when(productImageRepository.findByProductIdAndUploadStatus(3L, UploadStatus.CONFIRMED))
                 .thenReturn(List.of());
 
@@ -275,11 +269,8 @@ class ProductServiceTest {
     
     @Test
     void 카테고리가_없으면_상세_조회에_실패한다() {
-        // given — FK 무결성상 거의 안 일어나지만, 방어적 분기(getProductDetail 의
-        // categoryRepository.findById().orElseThrow())를 검증하기 위한 케이스
-        Product product = Product.register(
-                "P-004", "배", 4L, 1L, StorageType.COLD, 3);
-        ReflectionTestUtils.setField(product, "id", 4L);
+        // given
+        Product product = 상품(4L, "배", 4L);
 
         when(productRepository.findById(4L)).thenReturn(Optional.of(product));
         when(categoryRepository.findById(4L)).thenReturn(Optional.empty());
