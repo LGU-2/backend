@@ -1,5 +1,6 @@
 package com.freshmarket.config;
 
+import com.freshmarket.common.auth.AuthRateLimitFilter;
 import com.freshmarket.common.auth.jwt.AccessTokenValidAfterRepository;
 import com.freshmarket.common.auth.jwt.JwtAuthenticationFilter;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -64,6 +66,7 @@ public class SecurityConfig {
     private final HandlerExceptionResolver handlerExceptionResolver;
     private final JwtTokenProvider jwtTokenProvider;
     private final AccessTokenValidAfterRepository accessTokenValidAfterRepository;
+    private final StringRedisTemplate redisTemplate;
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
@@ -71,10 +74,12 @@ public class SecurityConfig {
     public SecurityConfig(
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver handlerExceptionResolver,
             JwtTokenProvider jwtTokenProvider,
-            AccessTokenValidAfterRepository accessTokenValidAfterRepository) {
+            AccessTokenValidAfterRepository accessTokenValidAfterRepository,
+            StringRedisTemplate redisTemplate) {
         this.handlerExceptionResolver = handlerExceptionResolver;
         this.jwtTokenProvider = jwtTokenProvider;
         this.accessTokenValidAfterRepository = accessTokenValidAfterRepository;
+        this.redisTemplate = redisTemplate;
     }
 
     @Bean
@@ -99,6 +104,12 @@ public class SecurityConfig {
 
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtTokenProvider, accessTokenValidAfterRepository),
+                        UsernamePasswordAuthenticationFilter.class)
+                // (2026-08-20, SEC-6-01/SEC-6-02) 로그인/재발급 레이트리밋. JwtAuthenticationFilter보다
+                // 먼저 돌 필요는 없지만(어차피 permitAll 경로라 인증 여부와 무관) 순서를 하나로
+                // 묶어두는 게 필터 체인을 훑을 때 더 읽기 쉽다.
+                .addFilterBefore(
+                        new AuthRateLimitFilter(redisTemplate),
                         UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeHttpRequests(auth -> auth
