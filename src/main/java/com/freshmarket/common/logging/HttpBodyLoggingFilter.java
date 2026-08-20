@@ -49,6 +49,14 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
             "/notifications/stream" // SSE 등 스트리밍 응답은 캐싱하면 안 됨
     );
 
+    // (OBS-3-05) 이 목록에 없는 Content-Type은 캐싱/로깅 대상에서 뺀다. 텍스트 계열이 아닌
+    // 요청(이미지 업로드 등 multipart/octet-stream)까지 무조건 ContentCachingRequestWrapper로
+    // 감싸면, 4xx 응답에서 바이너리를 UTF-8로 억지로 디코드해 깨진 문자를 그대로 로그에 남기게
+    // 된다 — 정상 응답이라 실제로는 안 남기는 경우조차 캐싱 자체는 매 요청 일어나는 것도 낭비다.
+    private static final List<String> LOGGABLE_CONTENT_TYPE_PREFIXES = List.of(
+            "application/json", "text/", "application/x-www-form-urlencoded"
+    );
+
     // "password":"1234", "refreshToken": "eyJ..." 같은 키-값 쌍의 값을 통째로 마스킹.
     // phone/address류(recipient/zipcode/roadAddress/detailAddress)도 자유 형식 텍스트라 이메일처럼
     // 부분 마스킹하기 애매해서 password/token과 똑같이 통째로 REDACTED 처리한다.
@@ -69,7 +77,15 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return EXCLUDED_PATH_PREFIXES.stream().anyMatch(uri::startsWith);
+        if (EXCLUDED_PATH_PREFIXES.stream().anyMatch(uri::startsWith)) {
+            return true;
+        }
+        String contentType = request.getContentType();
+        // GET/DELETE처럼 바디가 없는 요청은 contentType이 null이다 — 감쌀 필요는 있지만(응답
+        // 바디는 여전히 로깅 대상) 바이너리 위험이 없어 그대로 통과시킨다. 값이 있는데 텍스트
+        // 계열이 아니면(이미지 업로드 등) 이 필터를 건너뛴다.
+        return contentType != null
+                && LOGGABLE_CONTENT_TYPE_PREFIXES.stream().noneMatch(contentType::startsWith);
     }
 
     @Override
