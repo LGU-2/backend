@@ -28,11 +28,12 @@ public class SecurityConfig {
      * 인증 없이 여는 경로다.
      * 여기 없는 것은 전부 인증을 요구한다. 기본값이 거부다 (SEC-1-04).
      */
-    private static final String[] PUBLIC_PATHS = {
-            "/v3/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html"
-    };
+	private static final String[] PUBLIC_PATHS = {
+	        "/v3/api-docs/**",
+	        "/swagger-ui/**",
+	        "/swagger-ui.html",
+	        "/v1/products",
+	};
 
     /*
      * 관리자 인증 리소스 경로다 (auth.md: POST 로그인/재발급, DELETE 로그아웃이 이 하나를 공유한다).
