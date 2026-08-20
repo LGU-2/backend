@@ -14,6 +14,8 @@ import java.util.List;
 // 관리자가 상품을 새로 등록할 때 보내는 요청 본문. 재고와 소비기한은 로트 입고로만 들어오므로 여기서 받지 않는다
 public record AdminProductCreateRequest(
         @Schema(description = "상품명", example = "제주 감귤 1kg") @NotBlank @Size(max = 255) String name,
+        @Schema(description = "요청 식별자(클라이언트가 생성). 같은 값으로 재시도하면 최초 등록 결과를 그대로 돌려준다",
+                example = "3fa85f64-5717-4562-b3fc-2c963f66afa6") @NotBlank @Size(max = 100) String requestId,
         @Schema(description = "카테고리 ID", example = "4") @NotNull @Positive Long categoryId,
         @Schema(description = "공급처 ID", example = "2") @NotNull @Positive Long supplierId,
         @Schema(description = "보관 온도", example = "COLD") @NotBlank @Pattern(regexp = "ROOM|COLD|FROZEN") String storageType,

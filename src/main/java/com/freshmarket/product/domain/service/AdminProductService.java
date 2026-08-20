@@ -15,6 +15,7 @@ import com.freshmarket.product.domain.repository.ProductRepository;
 import java.security.SecureRandom;
 import java.time.Year;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,23 +41,53 @@ public class AdminProductService {
         this.categoryRepository = categoryRepository;
     }
 
-    // 상품과 옵션들을 함께 등록한다. 카테고리는 사전 확인하고, 공급처는 DB 제약으로 확인한다
+    /*
+     * 상품과 옵션들을 함께 등록한다. 카테고리는 사전 확인하고, 공급처는 DB 제약으로 확인한다.
+     * 같은 requestId로 재시도가 오면(API-5-07, AIP-155) 새로 등록하지 않고 최초 결과를 그대로 돌려준다.
+     * 먼저 조회해 일반적인(순차적인) 재시도를 검증 전에 걸러내고, save() 시점의 uk_product_request_id
+     * 위반은 두 요청이 거의 동시에 들어온 경합 상황을 잡는 안전망이다.
+     */
     @Transactional
     public AdminProductResponse register(AdminProductCreateRequest request) {
+        Optional<Product> existingProduct = productRepository.findByRequestId(request.requestId());
+        if (existingProduct.isPresent()) {
+            return responseOf(existingProduct.get());
+        }
+
         validateCategoryExists(request.categoryId());
         StorageType storageType = StorageType.valueOf(request.storageType());
         int saleAvailableDaysFromExpiry = resolveSaleAvailableDaysFromExpiry(request.saleAvailableDaysFromExpiry());
 
-        Product product = Product.register(generateProductCode(), request.name(), request.categoryId(),
-                request.supplierId(), storageType, saleAvailableDaysFromExpiry, request.description());
+        Product product = Product.register(request.requestId(), generateProductCode(), request.name(),
+                request.categoryId(), request.supplierId(), storageType, saleAvailableDaysFromExpiry,
+                request.description());
         try {
             productRepository.save(product);
         } catch (DataIntegrityViolationException e) {
+            if (isConstraintViolation(e, "uk_product_request_id")) {
+                return responseOf(findByRequestIdOrThrow(request.requestId()));
+            }
             throw resolveSaveException(e);
         }
 
         List<AdminProductOptionResponse> optionResponses = registerOptions(product.getId(), request.options());
         return AdminProductResponse.of(product, optionResponses);
+    }
+
+    // 이미 등록된 상품의 옵션을 다시 조회해 응답을 재구성한다. 재시도 응답 재사용에 쓰인다
+    private AdminProductResponse responseOf(Product product) {
+        List<AdminProductOptionResponse> optionResponses = productOptionRepository.findAllByProductId(product.getId())
+                .stream()
+                .map(AdminProductOptionResponse::from)
+                .toList();
+        return AdminProductResponse.of(product, optionResponses);
+    }
+
+    // save() 시점에 uk_product_request_id 위반이 났다면, 동시 재시도가 먼저 커밋을 마친 것이라 반드시 존재한다
+    private Product findByRequestIdOrThrow(String requestId) {
+        return productRepository.findByRequestId(requestId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "request_id 유니크 위반 직후 재조회에 실패했다: " + requestId));
     }
 
     // 카테고리가 실재하는지 미리 확인한다. 카테고리 등록 때 상위 카테고리 존재를 확인했던 것과 같은 패턴이다

@@ -11,12 +11,15 @@ import com.freshmarket.product.domain.dto.AdminProductCreateRequest;
 import com.freshmarket.product.domain.dto.AdminProductOptionCreateRequest;
 import com.freshmarket.product.domain.dto.AdminProductResponse;
 import com.freshmarket.product.domain.entity.Product;
+import com.freshmarket.product.domain.entity.ProductOption;
+import com.freshmarket.product.domain.entity.StorageType;
 import com.freshmarket.product.domain.exception.ProductErrorCode;
 import com.freshmarket.product.domain.exception.ProductException;
 import com.freshmarket.product.domain.repository.CategoryRepository;
 import com.freshmarket.product.domain.repository.ProductOptionRepository;
 import com.freshmarket.product.domain.repository.ProductRepository;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -47,7 +50,7 @@ class AdminProductServiceTest {
         when(categoryRepository.existsById(4L)).thenReturn(true);
         stubSaveAssignsId();
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 2L, "COLD", 3, "달콤한 제주 감귤입니다.",
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, "달콤한 제주 감귤입니다.",
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when
@@ -55,6 +58,7 @@ class AdminProductServiceTest {
 
         // then
         assertThat(result.name()).isEqualTo("제주 감귤 1kg");
+        assertThat(result.requestId()).isEqualTo("req-1");
         assertThat(result.categoryId()).isEqualTo(4L);
         assertThat(result.supplierId()).isEqualTo(2L);
         assertThat(result.storageType()).isEqualTo("COLD");
@@ -71,7 +75,7 @@ class AdminProductServiceTest {
         when(categoryRepository.existsById(4L)).thenReturn(true);
         stubSaveAssignsId();
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 2L, "COLD", null, null,
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", null, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when
@@ -82,11 +86,76 @@ class AdminProductServiceTest {
     }
 
     @Test
+    void 같은_요청_식별자로_재시도하면_기존_상품을_그대로_반환한다() {
+        // given — 이전 요청으로 이미 등록된 상품이 있는 상황(사전 조회에서 바로 잡힘)
+        Product existing = Product.register("req-1", "P-2026-ABC123", "제주 감귤 1kg", 4L, 2L,
+                StorageType.COLD, 3, "달콤한 제주 감귤입니다.");
+        ReflectionTestUtils.setField(existing, "id", 1L);
+        when(productRepository.findByRequestId("req-1")).thenReturn(Optional.of(existing));
+        when(productOptionRepository.findAllByProductId(1L))
+                .thenReturn(List.of(ProductOption.register(1L, "1kg", 12900)));
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, "달콤한 제주 감귤입니다.",
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
+
+        // when
+        AdminProductResponse result = adminProductService.register(request);
+
+        // then
+        assertThat(result.productId()).isEqualTo(1L);
+        assertThat(result.options()).hasSize(1);
+        verify(productRepository, never()).save(any());
+        verify(categoryRepository, never()).existsById(any());
+    }
+
+    @Test
+    void 저장_중_요청_식별자가_동시에_중복되면_기존_상품을_반환한다() {
+        // given — 사전 조회 시점엔 없었지만, save() 직전에 동시 재시도가 먼저 커밋을 마친 경합 상황
+        when(categoryRepository.existsById(4L)).thenReturn(true);
+        Product existing = Product.register("req-1", "P-2026-ABC123", "제주 감귤 1kg", 4L, 2L,
+                StorageType.COLD, 3, "달콤한 제주 감귤입니다.");
+        ReflectionTestUtils.setField(existing, "id", 1L);
+        when(productRepository.findByRequestId("req-1"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+        when(productOptionRepository.findAllByProductId(1L))
+                .thenReturn(List.of(ProductOption.register(1L, "1kg", 12900)));
+        when(productRepository.save(any())).thenThrow(new DataIntegrityViolationException(
+                "Duplicate entry 'req-1' for key 'product.uk_product_request_id'"));
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, "달콤한 제주 감귤입니다.",
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
+
+        // when
+        AdminProductResponse result = adminProductService.register(request);
+
+        // then
+        assertThat(result.productId()).isEqualTo(1L);
+        verify(productOptionRepository, never()).save(any());
+    }
+
+    @Test
+    void 요청_식별자_위반_직후_재조회가_비어있으면_예외를_던진다() {
+        // given — 유니크 위반이 났다는 건 그 순간 동시 재시도가 커밋을 마쳤다는 뜻이라 재조회는 항상 있어야 한다.
+        // 이 방어 분기(있을 수 없는 상황)의 커버리지를 위한 케이스
+        when(categoryRepository.existsById(4L)).thenReturn(true);
+        when(productRepository.findByRequestId("req-1")).thenReturn(Optional.empty());
+        when(productRepository.save(any())).thenThrow(new DataIntegrityViolationException(
+                "Duplicate entry 'req-1' for key 'product.uk_product_request_id'"));
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, null,
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
+
+        // when, then
+        assertThatThrownBy(() -> adminProductService.register(request))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void 존재하지_않는_카테고리로_등록하면_실패한다() {
         // given
         when(categoryRepository.existsById(999L)).thenReturn(false);
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 999L, 2L, "COLD", 3, null,
+                "제주 감귤 1kg", "req-1", 999L, 2L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when, then
@@ -105,7 +174,7 @@ class AdminProductServiceTest {
                         + "(`freshmarket`.`product`, CONSTRAINT `fk_product_supplier` "
                         + "FOREIGN KEY (`supplier_id`) REFERENCES `supplier` (`supplier_id`))"));
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 999L, "COLD", 3, null,
+                "제주 감귤 1kg", "req-1", 4L, 999L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when, then
@@ -124,7 +193,7 @@ class AdminProductServiceTest {
                         + "(`freshmarket`.`product`, CONSTRAINT `fk_product_category` "
                         + "FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`))"));
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when, then
@@ -141,7 +210,7 @@ class AdminProductServiceTest {
         when(productOptionRepository.save(any())).thenThrow(new DataIntegrityViolationException(
                 "Duplicate entry '1-1kg' for key 'product_option.uk_option_product_name'"));
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900),
                         new AdminProductOptionCreateRequest("1kg", 15900)));
 
@@ -159,7 +228,7 @@ class AdminProductServiceTest {
                 "Duplicate entry for key 'uk_product_code'");
         when(productRepository.save(any())).thenThrow(unknownViolation);
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when, then
@@ -176,7 +245,7 @@ class AdminProductServiceTest {
                 "Check constraint 'chk_option_price' is violated");
         when(productOptionRepository.save(any())).thenThrow(unknownViolation);
         AdminProductCreateRequest request = new AdminProductCreateRequest(
-                "제주 감귤 1kg", 4L, 2L, "COLD", 3, null,
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, null,
                 List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
 
         // when, then
