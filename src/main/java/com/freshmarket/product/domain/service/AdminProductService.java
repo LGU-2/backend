@@ -71,6 +71,7 @@ public class AdminProductService {
         return saleAvailableDaysFromExpiry != null ? saleAvailableDaysFromExpiry : 0;
     }
 
+    // 옵션들을 하나씩 저장한다. saveAll()로 묶지 않고 개별 저장하는 이유는 register()와 동일(JPA-3, cascade 없이 각 저장을 추적 가능하게)
     private List<AdminProductOptionResponse> registerOptions(Long productId,
             List<AdminProductOptionCreateRequest> optionRequests) {
         return optionRequests.stream()
@@ -79,6 +80,7 @@ public class AdminProductService {
                 .toList();
     }
 
+    // 옵션 하나를 생성해 저장하고, 응답 변환에 쓸 수 있도록 그대로 반환한다
     private ProductOption saveOption(Long productId, AdminProductOptionCreateRequest optionRequest) {
         ProductOption option = ProductOption.register(productId, optionRequest.name(), optionRequest.price());
         productOptionRepository.save(option);
