@@ -67,6 +67,13 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
             "(?i)(\"(password|accessToken|refreshToken|token|secret|authorization|idToken|clientSecret"
                     + "|phone|address|recipient|zipcode|roadAddress|detailAddress)\"\\s*:\\s*\")([^\"]*)(\")");
 
+    // (OBS-3-04/SEC-4-02) application/x-www-form-urlencoded 바디("password=1234&token=eyJ...")는
+    // 위 JSON 전용 패턴("key":"value")에 안 걸려서 그대로 새어나갔다 — 로그인 폼 등 form-urlencoded로
+    // 오는 요청의 민감 키도 동일한 키 목록으로 잡아서 "key=" 뒤 값(다음 "&" 전까지) 전체를 REDACTED 처리한다.
+    private static final Pattern SENSITIVE_FORM_FIELD = Pattern.compile(
+            "(?i)((?:^|&)(?:password|accessToken|refreshToken|token|secret|authorization|idToken|clientSecret"
+                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress)=)([^&]*)");
+
     // 위 키-값 패턴에 안 걸린 이메일/전화번호도 한 번 더 잡아서 부분 마스킹(키 이름이 다르거나
     // 문자열 안에 섞여 나오는 경우 대비 catch-all).
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
@@ -158,6 +165,10 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
         // 오해를 방지), group(4)=닫는 따옴표.
         String masked = SENSITIVE_JSON_FIELD.matcher(body).replaceAll(
                 mr -> mr.group(1) + PiiMasker.redact(mr.group(3)) + mr.group(4));
+        // group(1)="&key=" 또는 "key="(구분자+키+등호), group(2)=값. JSON 패턴과 별개로 폼 인코딩
+        // 바디에도 동일하게 적용 — 두 패턴은 문법이 달라 서로 겹쳐 매치되지 않는다.
+        masked = SENSITIVE_FORM_FIELD.matcher(masked).replaceAll(
+                mr -> mr.group(1) + PiiMasker.redact(mr.group(2)));
         masked = maskPattern(masked, EMAIL_PATTERN, PiiMasker::maskEmail);
         masked = maskPattern(masked, PHONE_PATTERN, PiiMasker::maskPhone);
         return masked;
