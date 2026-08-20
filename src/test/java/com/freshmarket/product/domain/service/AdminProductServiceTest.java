@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -131,6 +132,46 @@ class AdminProductServiceTest {
         // then
         assertThat(result.productId()).isEqualTo(1L);
         verify(productOptionRepository, never()).save(any());
+    }
+
+    @Test
+    void 락_대기_타임아웃_후_재조회에서_찾으면_기존_상품을_반환한다() {
+        // given — save()가 유니크 위반이 아니라 락 대기 타임아웃으로 실패했지만, 그 사이 첫 요청이 커밋을 마친 상황
+        when(categoryRepository.existsById(4L)).thenReturn(true);
+        Product existing = Product.register("req-1", "P-2026-ABC123", "제주 감귤 1kg", 4L, 2L,
+                StorageType.COLD, 3, "달콤한 제주 감귤입니다.");
+        ReflectionTestUtils.setField(existing, "id", 1L);
+        when(productRepository.findByRequestId("req-1"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+        when(productOptionRepository.findAllByProductId(1L))
+                .thenReturn(List.of(ProductOption.register(1L, "1kg", 12900)));
+        when(productRepository.save(any())).thenThrow(new CannotAcquireLockException("Lock wait timeout exceeded"));
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, "달콤한 제주 감귤입니다.",
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
+
+        // when
+        AdminProductResponse result = adminProductService.register(request);
+
+        // then
+        assertThat(result.productId()).isEqualTo(1L);
+        verify(productOptionRepository, never()).save(any());
+    }
+
+    @Test
+    void 락_대기_타임아웃_후_재조회에서도_못_찾으면_처리중_오류를_던진다() {
+        // given — 첫 요청이 타임아웃 안에도 여전히 처리 중인 상황(비정상적으로 느린 경우)
+        when(categoryRepository.existsById(4L)).thenReturn(true);
+        when(productRepository.findByRequestId("req-1")).thenReturn(Optional.empty());
+        when(productRepository.save(any())).thenThrow(new CannotAcquireLockException("Lock wait timeout exceeded"));
+        AdminProductCreateRequest request = new AdminProductCreateRequest(
+                "제주 감귤 1kg", "req-1", 4L, 2L, "COLD", 3, null,
+                List.of(new AdminProductOptionCreateRequest("1kg", 12900)));
+
+        // when, then
+        assertThatThrownBy(() -> adminProductService.register(request))
+                .isInstanceOf(ProductException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ProductErrorCode.REGISTRATION_IN_PROGRESS);
     }
 
     @Test

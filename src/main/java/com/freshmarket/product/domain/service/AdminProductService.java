@@ -17,6 +17,7 @@ import java.time.Year;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,6 +69,8 @@ public class AdminProductService {
                 return responseOf(findByRequestIdOrThrow(request.requestId()));
             }
             throw resolveSaveException(e);
+        } catch (PessimisticLockingFailureException e) {
+            return responseOfInProgressRetry(request.requestId(), e);
         }
 
         List<AdminProductOptionResponse> optionResponses = registerOptions(product.getId(), request.options());
@@ -88,6 +91,18 @@ public class AdminProductService {
         return productRepository.findByRequestId(requestId)
                 .orElseThrow(() -> new IllegalStateException(
                         "request_id 유니크 위반 직후 재조회에 실패했다: " + requestId));
+    }
+
+    /*
+     * save()가 유니크 위반이 아니라 락 대기 타임아웃(PessimisticLockingFailureException)으로 실패한 경우다.
+     * 동시 재시도가 아직 커밋 전이라 유니크 위반조차 나지 않고 대기하다 시간 초과된 상황이므로, 그 사이
+     * 커밋됐을 수도 있어 한 번 더 조회하고, 그래도 없으면 아직 처리 중이라는 뜻이라 클라이언트에게
+     * 재시도를 안내한다(자체 재시도 루프는 넣지 않는다 — resolveSaveException의 이유와 동일).
+     */
+    private AdminProductResponse responseOfInProgressRetry(String requestId, PessimisticLockingFailureException cause) {
+        return productRepository.findByRequestId(requestId)
+                .map(this::responseOf)
+                .orElseThrow(() -> new ProductException(ProductErrorCode.REGISTRATION_IN_PROGRESS, cause));
     }
 
     // 카테고리가 실재하는지 미리 확인한다. 카테고리 등록 때 상위 카테고리 존재를 확인했던 것과 같은 패턴이다
