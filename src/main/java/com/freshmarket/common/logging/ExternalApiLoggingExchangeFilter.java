@@ -39,10 +39,13 @@ public final class ExternalApiLoggingExchangeFilter {
                             "event=EXTERNAL_API_CALL method={} path={} status={} durationMs={}",
                             request.method(), path, response.statusCode().value(),
                             Duration.between(start, Instant.now()).toMillis()))
+                    // (MNT-4-03) ex.toString()만 마지막 "{}" 자리를 채우면 SLF4J가 이걸 그냥 문자열
+                    // 인자로 취급해 스택트레이스가 로그에 안 남는다. err={}에는 요약 메시지를 남기고,
+                    // ex 자체를 플레이스홀더 없는 마지막 인자로 추가로 넘겨야 스택트레이스까지 함께 찍힌다.
                     .doOnError(ex -> log.warn(
                             "event=EXTERNAL_API_CALL_FAILED method={} path={} durationMs={} err={}",
                             request.method(), path,
-                            Duration.between(start, Instant.now()).toMillis(), ex.toString()));
+                            Duration.between(start, Instant.now()).toMillis(), ex.toString(), ex));
         };
     }
 }
