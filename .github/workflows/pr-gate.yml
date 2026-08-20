@@ -111,6 +111,14 @@ jobs:
     name: G-PR
     needs: build
     if: github.base_ref == 'develop'
-    uses: fresh-market/.github/.github/workflows/llm-verify.yml@main
+    #
+    # 판정 엔진을 Codex 로 바꾼 판본을 --full 로 태워 비용을 재기 위한 시험 설정이다.
+    # uses 만 브랜치로 바꾸면 run.py 는 main 에서 오므로 common_ref 까지 함께 준다.
+    # 확인이 끝나면 되돌린다.
+    uses: fresh-market/.github/.github/workflows/llm-verify.yml@refactor/no-system-design
+    with:
+      common_ref: refactor/no-system-design
+      full: true
     secrets:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
