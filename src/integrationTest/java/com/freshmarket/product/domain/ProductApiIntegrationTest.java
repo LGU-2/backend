@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Transactional
 @Sql("/sql/product-test-supplier.sql")
 @Testcontainers
+// Gradle 로 돌릴 때는 integrationTest 태스크가 켜주고, IDE 에서 직접 실행할 때는 이 줄이 켠다.
+@ActiveProfiles("integrationTest")
 class ProductApiIntegrationTest {
 
     @Container
