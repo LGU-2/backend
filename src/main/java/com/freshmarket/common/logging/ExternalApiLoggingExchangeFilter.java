@@ -30,14 +30,18 @@ public final class ExternalApiLoggingExchangeFilter {
     public static ExchangeFilterFunction logCalls() {
         return (request, next) -> {
             Instant start = Instant.now();
+            // (SEC-4-02) 쿼리 문자열은 뺀다. 카카오처럼 인가 코드/액세스 토큰을 쿼리로 주고받는
+            // 외부 API가 붙으면 그대로 새기 때문이다 — 이 필터의 목적(상태코드/소요시간 확인)엔
+            // path만으로 충분하다.
+            String path = request.url().getPath();
             return next.exchange(request)
                     .doOnNext(response -> log.info(
-                            "event=EXTERNAL_API_CALL method={} uri={} status={} durationMs={}",
-                            request.method(), request.url(), response.statusCode().value(),
+                            "event=EXTERNAL_API_CALL method={} path={} status={} durationMs={}",
+                            request.method(), path, response.statusCode().value(),
                             Duration.between(start, Instant.now()).toMillis()))
                     .doOnError(ex -> log.warn(
-                            "event=EXTERNAL_API_CALL_FAILED method={} uri={} durationMs={} err={}",
-                            request.method(), request.url(),
+                            "event=EXTERNAL_API_CALL_FAILED method={} path={} durationMs={} err={}",
+                            request.method(), path,
                             Duration.between(start, Instant.now()).toMillis(), ex.toString()));
         };
     }
