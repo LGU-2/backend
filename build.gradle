@@ -206,7 +206,15 @@ tasks.named('jacocoTestCoverageVerification') {
 tasks.register('coverageDataCheck') {
     description = '커버리지 검증 대상이 있는데 실행 데이터가 없는 상태를 막는다'
     group = 'verification'
-    dependsOn tasks.named('test')
+    /*
+     * compileJava 에도 의존을 건다.
+     * 이 태스크는 build/classes/java/main 을 입력으로 읽으므로 그것을 만드는 태스크와의
+     * 관계가 선언되어야 한다. test 를 통해 간접적으로 이어지지만 -x test 로 돌리면
+     * 그 사슬이 끊겨 Gradle 이 실행 순서 오류로 빌드를 세운다.
+     */
+    dependsOn tasks.named('test'), tasks.named('compileJava')
+
+    def testTask = tasks.named('test')
 
     def targets = fileTree(layout.buildDirectory.dir('classes/java/main')) {
         include '**/domain/service/*.class'
@@ -222,11 +230,32 @@ tasks.register('coverageDataCheck') {
             logger.lifecycle('커버리지 검증 대상 없음. *.domain.service.* 클래스가 아직 없다')
             return
         }
-        if (execFiles.filter { it.exists() }.isEmpty()) {
+        def found = execFiles.files.findAll { it.exists() }
+        if (found.isEmpty()) {
             throw new GradleException(
                     "커버리지 검증 대상이 ${targets.files.size()}개 있는데 실행 데이터가 없다.\n" +
                     '테스트가 하나도 없으면 jacocoTestCoverageVerification 이 건너뛰어 통과처럼 보인다.\n' +
                     '대상: ' + targets.files.collect { it.name }.sort().join(', '))
+        }
+
+        /*
+         * 파일이 있는 것만으로는 모자라다. -x test 로 돌리면 앞선 실행이 남긴 파일이
+         * 그대로 남아 지금 코드를 한 줄도 실행하지 않고 통과한다.
+         * 그 상태가 파일이 없는 것보다 나쁜 이유는, 게이트가 돌았고 통과했다는 기록이
+         * 남기 때문이다.
+         *
+         * 파일 시각을 대상 클래스와 비교하는 방법은 쓰지 않는다. test 가 UP-TO-DATE 면
+         * exec 을 다시 쓰지 않는데 compileJava 는 산출물을 다시 쓸 수 있어서,
+         * 정상적인 재빌드가 낡음으로 잡힌다.
+         *
+         * 대신 test 가 이번 빌드에 참여했는지를 본다. -x test 로 빠지면 그래프에 없으므로
+         * executed 가 false 다. UP-TO-DATE 는 참여한 것이라 true 이고 통과한다.
+         */
+        if (!testTask.get().state.executed) {
+            throw new GradleException(
+                    'test 를 건너뛴 채로 커버리지 게이트를 통과시킬 수 없다.\n' +
+                    "build/jacoco 에 남은 실행 데이터는 앞선 실행의 것이라 지금 코드의 결과가 아니다.\n" +
+                    '컴파일만 확인하려면 assemble 을, 검증까지 하려면 -x test 를 빼고 돌린다.')
         }
     }
 }
