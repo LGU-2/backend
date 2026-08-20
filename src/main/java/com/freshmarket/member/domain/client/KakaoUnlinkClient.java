@@ -1,8 +1,8 @@
 package com.freshmarket.member.domain.client;
 
 import com.freshmarket.common.logging.PiiMasker;
-import com.freshmarket.member.exception.MemberErrorCode;
-import com.freshmarket.member.exception.MemberException;
+import com.freshmarket.member.domain.exception.MemberErrorCode;
+import com.freshmarket.member.domain.exception.MemberException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

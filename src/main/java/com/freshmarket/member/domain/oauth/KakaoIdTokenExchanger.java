@@ -1,7 +1,7 @@
 package com.freshmarket.member.domain.oauth;
 
-import com.freshmarket.member.exception.AuthErrorCode;
-import com.freshmarket.member.exception.AuthException;
+import com.freshmarket.member.domain.exception.AuthErrorCode;
+import com.freshmarket.member.domain.exception.AuthException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
