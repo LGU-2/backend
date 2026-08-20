@@ -49,9 +49,10 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
-            "/",
             "/webhook/kakao/unlink", // 카카오가 호출하는 웹훅 — 인증 쿠키 없이 들어옴
-            "/v1/auth/kakao/authorize" // 로그인 시작 — 아직 토큰이 없는 시점
+            "/v1/auth/kakao/authorize", // 로그인 시작 — 아직 토큰이 없는 시점
+            "/v1/products",
+              
     };
 
     /*

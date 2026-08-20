@@ -153,8 +153,13 @@ dependencies {
      * Boot 4 는 @DataJpaTest 와 @AutoConfigureTestDatabase 를 각각
      * spring-boot-data-jpa-test, spring-boot-jdbc-test 로 쪼갰다.
      * 이 스타터가 둘을 함께 끌어온다.
+     
+     * 추가
+     * Boot 4 는 MockMvc 지원(@AutoConfigureMockMvc)을 spring-boot-starter-test 에서 분리해
+     * spring-boot-starter-webmvc-test 로 뺐다. API 계층까지 검증하는 통합 테스트에 필요하다.
      */
     integrationTestImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    integrationTestImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test' 
     integrationTestImplementation 'org.springframework.boot:spring-boot-testcontainers'
     /*
      * Boot 4.0.5 의 BOM 이 Testcontainers 2.0.4 를 관리한다.
