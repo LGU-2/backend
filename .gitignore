@@ -36,6 +36,7 @@ bin/
 .env
 .env.*
 !.env.example
+# application-local.yml.example 은 올린다. 실제 값이 든 application-local.yml 은 올리지 않는다
 application-local.yml
 application-local.yaml
 application-local.properties

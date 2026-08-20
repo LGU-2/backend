@@ -1,0 +1,21 @@
+# 운영 설정이다. 다른 환경과 달라지는 것만 적는다.
+# 배포에서 SPRING_PROFILES_ACTIVE=prod 로 켠다.
+#
+# 비밀값(카카오 키, JWT 서명 키)은 여기 두지 않고 같은 이름의 환경변수로 준다.
+
+spring:
+  # 기본값을 두지 않는다. 값이 빠지면 로컬 DB 로 붙는 대신 기동을 막는다
+  datasource:
+    url: "${DB_URL}"
+    username: "${DB_USERNAME}"
+    password: "${DB_PASSWORD}"
+
+  jpa:
+    properties:
+      hibernate:
+        # SQL 정렬은 읽기 편하라고 켜는 개발용이다
+        format_sql: false
+
+  flyway:
+    # 이력이 없는 스키마를 조용히 baseline 하고 마이그레이션을 건너뛰는 사고를 막는다
+    baseline-on-migrate: false
