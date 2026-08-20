@@ -2,8 +2,8 @@ package com.freshmarket.product.domain.service;
 
 import static com.freshmarket.product.domain.entity.ProductFixture.삭제된_상품;
 import static com.freshmarket.product.domain.entity.ProductFixture.상품;
-import static com.freshmarket.product.domain.entity.ProductFixture.카테고리;
 import static com.freshmarket.product.domain.entity.ProductFixture.옵션;
+import static com.freshmarket.product.domain.entity.ProductFixture.카테고리;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
@@ -21,7 +21,6 @@ import com.freshmarket.product.domain.entity.Product;
 import com.freshmarket.product.domain.entity.ProductImage;
 import com.freshmarket.product.domain.entity.ProductOption;
 import com.freshmarket.product.domain.entity.SaleStatus;
-import com.freshmarket.product.domain.entity.StorageType;
 import com.freshmarket.product.domain.entity.UploadStatus;
 import com.freshmarket.product.domain.exception.ProductErrorCode;
 import com.freshmarket.product.domain.exception.ProductException;
@@ -38,9 +37,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
-// ProductService의 목록 조회, 상세 조회, 페이징, 응답 변환 분기를 검증한다
+// ProductService의 목록 조회, 검색, 상세 조회, 페이징, 응답 변환 분기를 검증한다
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
 
@@ -68,7 +66,7 @@ class ProductServiceTest {
     void 조건에_맞는_상품_목록을_조회한다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                4L, null, null, ProductSortType.CREATED_DESC, null, 20);
+                4L, null, null, null, ProductSortType.CREATED_DESC, null, 20);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE, NOW)));
 
@@ -85,7 +83,7 @@ class ProductServiceTest {
     void 결과가_pageSize보다_많으면_다음_페이지_토큰을_준다() {
         // given — pageSize 2 인데 리포지토리가 3건(= pageSize + 1)을 준 상황
         ProductSearchCondition condition = new ProductSearchCondition(
-                null, null, null, ProductSortType.CREATED_DESC, null, 2);
+                null, null, null, null, ProductSortType.CREATED_DESC, null, 2);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(3L, "상품3", 1L, "카테고리", 1000, SaleStatus.ON_SALE, NOW),
                 new ProductWithMinPrice(2L, "상품2", 1L, "카테고리", 2000, SaleStatus.ON_SALE, NOW),
@@ -106,7 +104,7 @@ class ProductServiceTest {
     void 결과가_pageSize_이하면_다음_페이지_토큰이_없다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                null, null, null, ProductSortType.CREATED_DESC, null, 20);
+                null, null, null, null, ProductSortType.CREATED_DESC, null, 20);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE, NOW)));
 
@@ -121,7 +119,7 @@ class ProductServiceTest {
     void 조회_결과가_없으면_빈_목록과_토큰_없음을_준다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                999L, null, null, ProductSortType.CREATED_DESC, null, 20);
+                999L, null, null, null, ProductSortType.CREATED_DESC, null, 20);
         when(productQueryRepository.search(condition)).thenReturn(List.of());
 
         // when
@@ -136,7 +134,7 @@ class ProductServiceTest {
     void 품절_상품은_soldOut이_true로_내려간다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                null, null, null, ProductSortType.CREATED_DESC, null, 20);
+                null, null, null, null, ProductSortType.CREATED_DESC, null, 20);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.SOLD_OUT, NOW)));
 
@@ -151,7 +149,7 @@ class ProductServiceTest {
     void 판매중_상품은_soldOut이_false로_내려간다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                null, null, null, ProductSortType.CREATED_DESC, null, 20);
+                null, null, null, null, ProductSortType.CREATED_DESC, null, 20);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE, NOW)));
 
@@ -166,7 +164,7 @@ class ProductServiceTest {
     void 카테고리_정보가_요약되어_내려간다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                null, null, null, ProductSortType.CREATED_DESC, null, 20);
+                null, null, null, null, ProductSortType.CREATED_DESC, null, 20);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE, NOW)));
 
@@ -182,7 +180,7 @@ class ProductServiceTest {
     void 가격_정렬이면_최저가_기준으로_다음_페이지_토큰을_만든다() {
         // given
         ProductSearchCondition condition = new ProductSearchCondition(
-                null, null, null, ProductSortType.PRICE_ASC, null, 1);
+                null, null, null, null, ProductSortType.PRICE_ASC, null, 1);
         when(productQueryRepository.search(condition)).thenReturn(List.of(
                 new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE, NOW),
                 new ProductWithMinPrice(2L, "복숭아", 4L, "과일", 20000, SaleStatus.ON_SALE, NOW)));
@@ -193,6 +191,36 @@ class ProductServiceTest {
         // then — 커서 정렬값이 createdAt 이 아니라 minPrice(12900) 여야 한다
         PageCursor decoded = PageTokens.decode(result.nextPageToken());
         assertThat(decoded.sortValue()).isEqualTo("12900");
+    }
+
+    @Test
+    void 검색어가_있으면_리포지토리에_그대로_전달된다() {
+        // given — 서비스는 검색과 목록을 같은 메서드로 처리한다. query 유무만 다르다
+        ProductSearchCondition condition = new ProductSearchCondition(
+                null, null, null, "감귤", ProductSortType.CREATED_DESC, null, 20);
+        when(productQueryRepository.search(condition)).thenReturn(List.of(
+                new ProductWithMinPrice(1L, "감귤", 4L, "과일", 12900, SaleStatus.ON_SALE, NOW)));
+
+        // when
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
+
+        // then
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).name()).isEqualTo("감귤");
+    }
+
+    @Test
+    void 검색_결과가_없으면_빈_목록을_준다() {
+        // given
+        ProductSearchCondition condition = new ProductSearchCondition(
+                null, null, null, "존재하지않는상품명", ProductSortType.CREATED_DESC, null, 20);
+        when(productQueryRepository.search(condition)).thenReturn(List.of());
+
+        // when
+        CursorPageResponse<ProductListItem> result = productService.getProducts(condition);
+
+        // then
+        assertThat(result.items()).isEmpty();
     }
 
     @Test
@@ -266,7 +294,7 @@ class ProductServiceTest {
         assertThat(result.options()).isEmpty();
         assertThat(result.images()).isEmpty();
     }
-    
+
     @Test
     void 카테고리가_없으면_상세_조회에_실패한다() {
         // given

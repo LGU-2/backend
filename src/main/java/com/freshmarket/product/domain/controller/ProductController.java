@@ -10,16 +10,20 @@ import com.freshmarket.product.domain.dto.ProductSearchCondition;
 import com.freshmarket.product.domain.dto.ProductSortType;
 import com.freshmarket.product.domain.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-//회원에게 상품 목록 조회와 상세 조회를 노출한다. 관리자용은 AdminProductController 가 따로 맡는다
+// 회원에게 상품 목록 조회, 검색, 상세 조회를 노출한다. 관리자용은 AdminProductController 가 따로 맡는다
 @RestController
 @RequiredArgsConstructor
+@Validated
 class ProductController {
 
     private final ProductService productService;
@@ -37,9 +41,27 @@ class ProductController {
             @RequestParam(required = false) String pageToken,
             @RequestParam(required = false, defaultValue = "20") int pageSize) {
 
-        PageCursor cursor = PageTokens.decode(pageToken);
-        ProductSearchCondition condition = new ProductSearchCondition(
-                categoryId, minPrice, maxPrice, sort, cursor, pageSize);
+        ProductSearchCondition condition =
+                buildCondition(categoryId, minPrice, maxPrice, null, sort, pageToken, pageSize);
+
+        return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
+    }
+
+    // 상품명 부분 일치. 목록 조회와 같은 필터·정렬을 받고 검색어 조건만 추가된다 (API-3-08)
+    @Operation(summary = "상품 검색",
+            description = "상품명 부분 일치로 검색한다. 목록 조회와 같은 필터·정렬을 받는다.")
+    @GetMapping("/v1/products:search")
+    public ResponseEntity<ResponseEnvelope<CursorPageResponse<ProductListItem>>> searchProducts(
+            @RequestParam @NotBlank @Size(max = 100) String query,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Integer minPrice,
+            @RequestParam(required = false) Integer maxPrice,
+            @RequestParam(required = false, defaultValue = "CREATED_DESC") ProductSortType sort,
+            @RequestParam(required = false) String pageToken,
+            @RequestParam(required = false, defaultValue = "20") int pageSize) {
+
+        ProductSearchCondition condition =
+                buildCondition(categoryId, minPrice, maxPrice, query, sort, pageToken, pageSize);
 
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
     }
@@ -50,5 +72,15 @@ class ProductController {
     public ResponseEntity<ResponseEnvelope<ProductDetailResponse>> getProductDetail(
             @PathVariable Long productId) {
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProductDetail(productId)));
+    }
+
+    /*
+     * 목록 조회와 검색이 공유하는 조건 조립 로직 (MNT-3-01).
+     * 둘의 차이는 query 유무 하나뿐이라, 커서 디코딩과 조건 생성을 여기 한 곳에 모은다.
+     */
+    private ProductSearchCondition buildCondition(Long categoryId, Integer minPrice, Integer maxPrice,
+            String query, ProductSortType sort, String pageToken, int pageSize) {
+        PageCursor cursor = PageTokens.decode(pageToken);
+        return new ProductSearchCondition(categoryId, minPrice, maxPrice, query, sort, cursor, pageSize);
     }
 }

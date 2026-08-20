@@ -329,4 +329,112 @@ class ProductApiIntegrationTest {
         mockMvc.perform(get("/v1/products/" + productId))
                 .andExpect(status().isOk());
     }
+    
+    @Test
+    void 상품명_부분_일치로_검색한다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        saveProductWithOptions(categoryId, "제주 감귤", 12900);
+        saveProductWithOptions(categoryId, "복숭아", 9900);
+
+        // when, then — "감귤"로 검색하면 "제주 감귤"만 나온다
+        mockMvc.perform(get("/v1/products:search").param("query", "감귤"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].name").value("제주 감귤"));
+    }
+
+    @Test
+    void 검색은_목록과_같은_카테고리_필터를_받는다() throws Exception {
+        // given
+        Long fruitId = fruitCategoryId();
+        saveProductWithOptions(fruitId, "감귤", 12900);
+
+        // when, then
+        mockMvc.perform(get("/v1/products:search")
+                        .param("query", "감귤")
+                        .param("categoryId", String.valueOf(fruitId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)));
+    }
+
+    @Test
+    void 검색어_없이_요청하면_400을_응답한다() throws Exception {
+        mockMvc.perform(get("/v1/products:search"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 검색어가_공백이면_400을_응답한다() throws Exception {
+        mockMvc.perform(get("/v1/products:search").param("query", "   "))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 검색어가_100자를_넘으면_400을_응답한다() throws Exception {
+        String tooLong = "감".repeat(101);
+        mockMvc.perform(get("/v1/products:search").param("query", tooLong))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 비로그인_상태에서도_검색이_가능하다() throws Exception {
+        mockMvc.perform(get("/v1/products:search").param("query", "감귤"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 검색_결과가_없으면_빈_배열을_응답한다() throws Exception {
+        mockMvc.perform(get("/v1/products:search").param("query", "존재하지않는상품명"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(0)));
+    }
+    
+    @Test
+    void 검색어에_와일드카드_문자가_있어도_리터럴로_취급한다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        saveProductWithOptions(categoryId, "20% 할인 세트", 12900);
+        saveProductWithOptions(categoryId, "일반 상품", 9900);
+
+        // when, then — "%"가 LIKE 와일드카드로 해석되면 전체 상품이 다 걸린다.
+        // 이스케이프가 제대로 되면 "20% 할인 세트" 하나만 나와야 한다
+        mockMvc.perform(get("/v1/products:search")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("query", "20%"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].name").value("20% 할인 세트"));
+    }
+    
+    @Test
+    void 검색_결과에서_커서로_다음_페이지를_넘겨도_검색어_조건이_유지된다() throws Exception {
+        // given
+        Long categoryId = fruitCategoryId();
+        saveProductWithOptions(categoryId, "감귤A", 1000);
+        saveProductWithOptions(categoryId, "감귤B", 2000);
+        saveProductWithOptions(categoryId, "복숭아", 3000);   // 검색어에 안 걸려야 한다
+
+        // when — 1페이지
+        String firstPageJson = mockMvc.perform(get("/v1/products:search")
+                        .param("query", "감귤")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String nextToken = com.jayway.jsonpath.JsonPath.read(firstPageJson, "$.data.nextPageToken");
+
+        // then — 2페이지도 query 를 다시 보내면, "복숭아"가 안 새어나오고 감귤만 남아야 한다
+        mockMvc.perform(get("/v1/products:search")
+                        .param("query", "감귤")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("pageSize", "1")
+                        .param("pageToken", nextToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items", hasSize(1)))
+                .andExpect(jsonPath("$.data.items[0].name")
+                        .value(org.hamcrest.Matchers.containsString("감귤")));
+    }
 }

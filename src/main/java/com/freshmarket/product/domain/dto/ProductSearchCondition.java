@@ -4,6 +4,7 @@ public record ProductSearchCondition(
         Long categoryId,
         Integer minPrice,
         Integer maxPrice,
+        String query,
         ProductSortType sort,
         PageCursor cursor,
         int pageSize
@@ -12,6 +13,7 @@ public record ProductSearchCondition(
     private static final ProductSortType DEFAULT_SORT = ProductSortType.CREATED_DESC;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_QUERY_LENGTH = 100;
 
     public ProductSearchCondition {
         if (sort == null) {
@@ -32,6 +34,16 @@ public record ProductSearchCondition(
         if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
             throw new IllegalArgumentException(
                     "minPrice 가 maxPrice 보다 클 수 없다: " + minPrice + " > " + maxPrice);
+        }
+        if (query != null) {
+            query = query.strip();   // 검증 전에 트림 (FUN-3-01)
+            if (query.isBlank()) {
+                throw new IllegalArgumentException("query 는 공백일 수 없다");
+            }
+            if (query.length() > MAX_QUERY_LENGTH) {
+                throw new IllegalArgumentException(
+                        "query 는 " + MAX_QUERY_LENGTH + "자를 넘을 수 없다: " + query.length());
+            }
         }
     }
 }
