@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /*
@@ -47,7 +48,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         }
 
         if (isOverLimit(request.getRemoteAddr())) {
-            response.setStatus(HttpServletResponse.SC_TOO_MANY_REQUESTS);
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             return;
         }
 
