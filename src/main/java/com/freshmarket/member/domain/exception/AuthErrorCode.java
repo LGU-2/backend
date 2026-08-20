@@ -1,4 +1,4 @@
-package com.freshmarket.member.exception;
+package com.freshmarket.member.domain.exception;
 
 import com.freshmarket.common.exception.ErrorCode;
 import lombok.Getter;

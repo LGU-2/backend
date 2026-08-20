@@ -1,4 +1,4 @@
-package com.freshmarket.member.dto;
+package com.freshmarket.member.domain.dto;
 
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.entity.MemberStatus;

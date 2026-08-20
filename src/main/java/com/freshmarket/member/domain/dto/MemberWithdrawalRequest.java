@@ -1,4 +1,4 @@
-package com.freshmarket.member.dto;
+package com.freshmarket.member.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
