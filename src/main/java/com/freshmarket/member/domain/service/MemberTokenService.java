@@ -10,8 +10,8 @@ import com.freshmarket.common.auth.jwt.TokenHasher;
 import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.repository.MemberRepository;
-import com.freshmarket.member.exception.AuthErrorCode;
-import com.freshmarket.member.exception.AuthException;
+import com.freshmarket.member.domain.exception.AuthErrorCode;
+import com.freshmarket.member.domain.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Clock;
 import java.time.Duration;
@@ -235,8 +235,17 @@ public class MemberTokenService {
             log.warn("event=REDIS_DELETE_FAILED role={} id={} — DB 백업만 반영됨", role, memberId, e);
         }
 
-        accessTokenValidAfterRepository.invalidateBefore(role, memberId, LocalDateTime.now(clock),
-                Duration.ofMillis(jwtTokenProvider.getAccessTokenValidityMs()));
+        try {
+            accessTokenValidAfterRepository.invalidateBefore(role, memberId, LocalDateTime.now(clock),
+                    Duration.ofMillis(jwtTokenProvider.getAccessTokenValidityMs()));
+        } catch (DataAccessException e) {
+            // (2026-08-20 추가, REL-2-11) 앞의 세 단계와 통일 — 이거 하나 실패했다고 로그아웃
+            // 응답 자체를 500으로 만들 이유가 없다. 대가는: 이 컷라인 기록이 안 남는 동안엔
+            // 이미 로그아웃된 회원의 (아직 자연 만료 전) 액세스 토큰이 계속 통할 수 있다는
+            // 것인데, 이건 JwtAuthenticationFilter.isValidAfterCutoff()가 Redis 장애 시 이미
+            // fail-open으로 감수하기로 한 것과 같은 종류의 리스크라 새로 늘어나는 게 아니다.
+            log.warn("event=INVALIDATE_BEFORE_FAILED role={} id={}", role, memberId, e);
+        }
 
         if (logoutExternalSession) {
             memberRepository.findById(memberId)

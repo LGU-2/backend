@@ -25,8 +25,8 @@ import com.freshmarket.member.domain.MemberLogoutEvent;
 import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.entity.SocialType;
 import com.freshmarket.member.domain.repository.MemberRepository;
-import com.freshmarket.member.exception.AuthErrorCode;
-import com.freshmarket.member.exception.AuthException;
+import com.freshmarket.member.domain.exception.AuthErrorCode;
+import com.freshmarket.member.domain.exception.AuthException;
 import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Field;
 import java.time.Clock;
@@ -338,6 +338,20 @@ class MemberTokenServiceTest {
 
         verify(memberRepository).clearRefreshToken(1L);
         verify(accessTokenValidAfterRepository).invalidateBefore(eq("ROLE_USER"), eq(1L), any(), any());
+    }
+
+    @Test
+    void invalidateBefore가_실패해도_로그아웃_자체는_예외_없이_끝난다() {
+        // (2026-08-20, REL-2-11) 이것도 다른 세 단계처럼 실패를 삼키게 바꿨다 — 안 그러면
+        // 여기서 던진 예외가 컨트롤러까지 올라가 이미 성공한 정리 작업들이 있는데도 로그아웃
+        // 응답이 500이 된다.
+        when(refreshTokenRepository.findActiveHash("ROLE_USER", 1L)).thenReturn(Optional.of("current-hash"));
+        doThrow(new DataAccessResourceFailureException("redis down"))
+                .when(accessTokenValidAfterRepository).invalidateBefore(eq("ROLE_USER"), eq(1L), any(), any());
+
+        assertThatCode(() -> sut.revoke(1L, "ROLE_USER", false)).doesNotThrowAnyException();
+        verify(memberRepository).clearRefreshToken(1L);
+        verify(refreshTokenRepository).deleteByHash("current-hash");
     }
 
     @Test
