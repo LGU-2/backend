@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 // AdminLotService의 등록 성공과 실패 케이스를 검증한다
@@ -88,6 +89,39 @@ class AdminLotServiceTest {
                 .isInstanceOf(StockException.class)
                 .hasFieldOrPropertyWithValue("errorCode", StockErrorCode.OPTION_NOT_FOUND);
         verify(stockLotRepository, never()).save(any());
+    }
+
+    @Test
+    void 등록_중_옵션이_동시에_삭제되면_존재하지_않는_옵션으로_응답한다() {
+        // given — 사전 확인(existsOption) 통과 직후, save() 시점엔 옵션이 이미 삭제된 경합 상황
+        when(productApi.existsOption(12L, 31L)).thenReturn(true);
+        when(stockLotRepository.save(any())).thenThrow(new DataIntegrityViolationException(
+                "Cannot add or update a child row: a foreign key constraint fails "
+                        + "(`freshmarket`.`stock_lot`, CONSTRAINT `fk_lot_option` "
+                        + "FOREIGN KEY (`product_option_id`) REFERENCES `product_option` (`product_option_id`))"));
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when, then
+        assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
+                .isInstanceOf(StockException.class)
+                .hasFieldOrPropertyWithValue("errorCode", StockErrorCode.OPTION_NOT_FOUND);
+        verify(stockMovementRepository, never()).save(any());
+    }
+
+    @Test
+    void 알_수_없는_제약_위반은_그대로_전파된다() {
+        // given — fk_lot_option이 아닌 다른 위반(예: chk_lot_qty처럼 별도로 변환하지 않는 제약)
+        when(productApi.existsOption(12L, 31L)).thenReturn(true);
+        DataIntegrityViolationException unknownViolation = new DataIntegrityViolationException(
+                "Check constraint 'chk_lot_qty' is violated");
+        when(stockLotRepository.save(any())).thenThrow(unknownViolation);
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when, then
+        assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
+                .isSameAs(unknownViolation);
     }
 
     @Test

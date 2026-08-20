@@ -10,6 +10,7 @@ import com.freshmarket.stock.domain.exception.StockException;
 import com.freshmarket.stock.domain.repository.StockLotRepository;
 import com.freshmarket.stock.domain.repository.StockMovementRepository;
 import java.time.LocalDate;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +38,19 @@ public class AdminLotService {
         validateExpiryDate(receivedDate, request.expiryDate());
 
         StockLot stockLot = StockLot.register(optionId, receivedDate, request.expiryDate(), request.initialQty());
-        stockLotRepository.save(stockLot);
+        try {
+            stockLotRepository.save(stockLot);
+        } catch (DataIntegrityViolationException e) {
+            /*
+             * validateOptionExists()로 이미 확인했지만, 그 직후 옵션이 삭제되는 경합이면 fk_lot_option
+             * 위반이 날 수 있다. 지금은 옵션 삭제 기능이 없어 실제로 발생하진 않지만, AdminProductService의
+             * 카테고리/공급처 처리와 같은 방식으로 방어해 둔다.
+             */
+            if (isConstraintViolation(e, "fk_lot_option")) {
+                throw new StockException(StockErrorCode.OPTION_NOT_FOUND, e);
+            }
+            throw e;
+        }
 
         StockMovement movement = StockMovement.inbound(stockLot.getId(), request.initialQty());
         stockMovementRepository.save(movement);
@@ -62,5 +75,11 @@ public class AdminLotService {
         if (expiryDate.isBefore(receivedDate)) {
             throw new StockException(StockErrorCode.EXPIRY_BEFORE_RECEIVED);
         }
+    }
+
+    // DB 예외의 근본 원인 메시지에 제약 이름이 들어있는지로 어떤 제약을 위반했는지 구분한다
+    private boolean isConstraintViolation(DataIntegrityViolationException e, String constraintName) {
+        String message = e.getMostSpecificCause().getMessage();
+        return message != null && message.contains(constraintName);
     }
 }
