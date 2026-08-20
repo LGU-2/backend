@@ -3,6 +3,8 @@ package com.freshmarket.member.domain.repository;
 import com.freshmarket.member.domain.entity.Address;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +20,13 @@ public interface AddressRepository extends JpaRepository<Address, Long> {
     // 잘못 해석할 수 있는 알려진 함정이 있다 — JPQL로 쓰면 그 위험이 없다.
     @Query("select a from Address a where a.memberId = :memberId order by a.isDefault desc, a.createdAt desc")
     List<Address> findByMemberIdOrderedByDefaultFirst(@Param("memberId") Long memberId);
+
+    // (2026-08-20, API-3-04/API-5-01) 컨트롤러의 목록 응답용. 배송지가 회원당 10개(등록 상한)로
+    // 작아서 지금 당장 성능 문제는 아니지만, 기존 메서드에 나중에 페이지네이션을 끼워 넣는 건
+    // 호환을 깨는 변경이라(api-design-guideline.md) 처음부터 넣어둔다. 정렬 기준은 위 메서드와
+    // 동일하게 유지한다.
+    @Query("select a from Address a where a.memberId = :memberId order by a.isDefault desc, a.createdAt desc")
+    Page<Address> findByMemberIdOrderedByDefaultFirst(@Param("memberId") Long memberId, Pageable pageable);
 
     Optional<Address> findByIdAndMemberId(Long id, Long memberId);
 
