@@ -48,6 +48,13 @@ class AdminAuthServiceTest {
     );
 
     @Test
+    void 로그인_요청이_null이면_즉시_예외가_발생한다() {
+        assertThatThrownBy(() -> adminAuthService.login(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("request");
+    }
+
+    @Test
     void 아이디와_비밀번호가_일치하면_토큰을_발급한다() {
         // given
         Admin admin = AdminFixture.active(
@@ -120,11 +127,11 @@ class AdminAuthServiceTest {
     }
 
     /*
-     * auth.md: 401 ADMIN-001(자격 증명 불일치)과 403 ADMIN-002(비활성 계정)를 구분해서 응답한다.
-     * 비밀번호가 맞아야만 이 분기에 도달하므로, 계정을 실제로 소유한 사람에게만 상태가 드러난다.
+     * 비활성 계정도 외부에는 일반 로그인 실패와 같은 응답을 반환한다 (SEC-6-04).
+     * 올바른 비밀번호를 입력하더라도 계정 상태를 별도 오류 코드로 노출하지 않는다.
      */
     @Test
-    void 비활성_계정이고_비밀번호가_맞으면_비활성화_사실을_알려준다() {
+    void 비활성_계정이면_비밀번호가_맞아도_일반_로그인_실패로_응답한다() {
         // given
         Admin admin = AdminFixture.inactive(
                 "admin.kim",
@@ -142,13 +149,10 @@ class AdminAuthServiceTest {
         assertThatThrownBy(() -> adminAuthService.login(request))
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
-                .isEqualTo(AdminErrorCode.ACCOUNT_INACTIVE);
+                .isEqualTo(AdminErrorCode.LOGIN_FAILED);
     }
 
-    /*
-     * 비밀번호를 몰라도 계정 상태를 알아낼 수 없어야 한다 (SEC-6-04).
-     * 상태 확인이 비밀번호 검증 다음이라, 틀린 비밀번호로는 ACCOUNT_INACTIVE 에 도달하지 못한다.
-     */
+    // 비활성 계정은 비밀번호 일치 여부와 관계없이 외부에 계정 상태를 노출하지 않는다 (SEC-6-04).
     @Test
     void 비활성_계정이어도_비밀번호가_틀리면_계정_상태를_알려주지_않는다() {
         // given

@@ -13,6 +13,7 @@ import com.freshmarket.common.auth.jwt.TokenHasher;
 import com.freshmarket.common.auth.jwt.TokenType;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -64,6 +65,8 @@ public class AdminAuthService {
     }
 
     public AdminLoginResult login(AdminLoginRequest request) {
+        Objects.requireNonNull(request, "request");
+
         Optional<Admin> found = adminRepository.findByLoginId(request.loginId());
 
         /*
@@ -80,12 +83,11 @@ public class AdminAuthService {
         if (found.isEmpty() || !passwordMatches) { throw new AdminException(AdminErrorCode.LOGIN_FAILED); }
 
         /*
-         * 비밀번호가 맞은 뒤에만 계정 상태를 본다 (auth.md: 401 ADMIN-001 / 403 ADMIN-002 분리).
-         * 순서가 중요하다 — 상태 확인을 먼저 하면, 비밀번호를 몰라도 "이 계정은 비활성"이라는 사실이 드러난다.
-         * 비밀번호가 맞아야만 도달하는 자리에 둬서, 계정을 실제로 소유한 사람에게만 상태를 알려준다.
+         * 비활성 계정도 외부에는 일반 로그인 실패와 같은 응답으로 처리한다 (SEC-6-04).
+         * 아이디/비밀번호가 맞더라도 계정 상태를 별도 코드로 알려주면 공격자가 계정 상태를 추측할 수 있으므로 LOGIN_FAILED 로 통일한다.
          */
         Admin admin = found.get();
-        if (!admin.isActive()) { throw new AdminException(AdminErrorCode.ACCOUNT_INACTIVE); }
+        if (!admin.isActive()) { throw new AdminException(AdminErrorCode.LOGIN_FAILED); }
 
         String accessToken = jwtTokenProvider.createAccessToken(
                 admin.getId(), TokenType.ADMIN, admin.getRole().toAuthority());
