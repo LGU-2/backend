@@ -13,6 +13,7 @@ import com.freshmarket.cart.domain.dto.CartItemUpdateRequest;
 import com.freshmarket.cart.domain.dto.CartResponse;
 import com.freshmarket.cart.domain.entity.Cart;
 import com.freshmarket.cart.domain.entity.CartItem;
+import com.freshmarket.cart.domain.exception.CartErrorCode;
 import com.freshmarket.cart.domain.exception.CartException;
 import com.freshmarket.cart.domain.repository.CartItemRepository;
 import com.freshmarket.cart.domain.repository.CartRepository;
@@ -99,12 +100,29 @@ class CartServiceTest {
         when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
         when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
         when(cartItemRepository.findByCartIdAndProductOptionId(10L, 11L)).thenReturn(Optional.empty());
+        when(cartItemRepository.countByCartId(10L)).thenReturn(0L);
         when(cartItemRepository.save(any(CartItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = sut.addItem(1L, new CartItemCreateRequest(11L, 2));
 
         assertThat(result.productOptionId()).isEqualTo(11L);
         assertThat(result.qty()).isEqualTo(2);
+    }
+
+    @Test
+    void 새_옵션은_장바구니에_99개까지만_담을_수_있다() {
+        Cart cart = cart(1L, 10L);
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
+        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
+        when(cartItemRepository.findByCartIdAndProductOptionId(10L, 11L)).thenReturn(Optional.empty());
+        when(cartItemRepository.countByCartId(10L)).thenReturn(99L);
+
+        assertThatThrownBy(() -> sut.addItem(1L, new CartItemCreateRequest(11L, 1)))
+                .isInstanceOf(CartException.class)
+                .extracting(e -> ((CartException) e).getErrorCode())
+                .isEqualTo(CartErrorCode.CART_ITEM_LIMIT_EXCEEDED);
+
+        verify(cartItemRepository, never()).save(any(CartItem.class));
     }
 
     @Test

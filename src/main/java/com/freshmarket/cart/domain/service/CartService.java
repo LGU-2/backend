@@ -29,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class CartService {
 
+    private static final int MAX_CART_ITEMS = 99;
+
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final ProductApi productApi;
@@ -68,8 +70,7 @@ public class CartService {
                     existing.increaseQty(request.qty());
                     return existing;
                 })
-                .orElseGet(() -> cartItemRepository.save(CartItem.add(
-                        cart.getId(), request.productOptionId(), request.qty())));
+                .orElseGet(() -> addNewItem(cart.getId(), request));
         return CartItemResponse.from(item, option);
     }
 
@@ -100,6 +101,13 @@ public class CartService {
     private CartItem findItem(Long cartId, Long cartItemId) {
         return cartItemRepository.findByIdAndCartId(cartItemId, cartId)
                 .orElseThrow(() -> new CartException(CartErrorCode.CART_ITEM_NOT_FOUND));
+    }
+
+    private CartItem addNewItem(Long cartId, CartItemCreateRequest request) {
+        if (cartItemRepository.countByCartId(cartId) >= MAX_CART_ITEMS) {
+            throw new CartException(CartErrorCode.CART_ITEM_LIMIT_EXCEEDED);
+        }
+        return cartItemRepository.save(CartItem.add(cartId, request.productOptionId(), request.qty()));
     }
 
     private CartItemResponse toResponse(CartItem item) {
