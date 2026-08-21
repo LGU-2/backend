@@ -19,6 +19,9 @@ import com.freshmarket.member.MemberRegisteredEvent;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
+
+import com.freshmarket.product.ProductApi;
+import com.freshmarket.product.ProductOptionInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,8 +64,8 @@ class CartServiceTest {
         CartItem second = item(10L, 12L, 3, 101L);
         when(cartRepository.findByMemberId(1L)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findAllByCartIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(first, second));
-        when(productApi.findOption(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
-        when(productApi.findOption(12L)).thenReturn(Optional.of(
+        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
+        when(productApi.findOptionInfo(12L)).thenReturn(Optional.of(
                 new ProductOptionInfo(12L, "사과", "2kg", 15000, true)));
 
         CartResponse result = sut.getCart(1L);
@@ -77,7 +80,7 @@ class CartServiceTest {
         Cart cart = cart(1L, 10L);
         CartItem existing = item(10L, 11L, 2, 100L);
         when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
-        when(productApi.findOption(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
+        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
         when(cartItemRepository.findByCartIdAndProductOptionId(10L, 11L)).thenReturn(Optional.of(existing));
 
         var result = sut.addItem(1L, new CartItemCreateRequest(11L, 3));
@@ -90,7 +93,7 @@ class CartServiceTest {
     void 새_옵션을_카트에_담는다() {
         Cart cart = cart(1L, 10L);
         when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
-        when(productApi.findOption(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
+        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
         when(cartItemRepository.findByCartIdAndProductOptionId(10L, 11L)).thenReturn(Optional.empty());
         when(cartItemRepository.save(any(CartItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -103,7 +106,7 @@ class CartServiceTest {
     @Test
     void 구매할_수_없는_옵션은_담을_수_없다() {
         when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
-        when(productApi.findOption(11L)).thenReturn(Optional.of(
+        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(
                 new ProductOptionInfo(11L, "감귤", "1kg", 12900, false)));
 
         assertThatThrownBy(() -> sut.addItem(1L, new CartItemCreateRequest(11L, 1)))
@@ -113,7 +116,7 @@ class CartServiceTest {
     @Test
     void 없는_상품_옵션은_담을_수_없다() {
         when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
-        when(productApi.findOption(999L)).thenReturn(Optional.empty());
+        when(productApi.findOptionInfo(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> sut.addItem(1L, new CartItemCreateRequest(999L, 1)))
                 .isInstanceOf(CartException.class);
@@ -125,7 +128,7 @@ class CartServiceTest {
         CartItem existing = item(10L, 11L, 2, 100L);
         when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findByIdAndCartId(100L, 10L)).thenReturn(Optional.of(existing));
-        when(productApi.findOption(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
+        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
 
         var result = sut.updateItem(1L, 100L, new CartItemUpdateRequest(4));
 
@@ -150,6 +153,14 @@ class CartServiceTest {
         when(cartRepository.findByMemberId(1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> sut.getCart(1L))
+                .isInstanceOf(CartException.class);
+    }
+
+    @Test
+    void 카트가_없으면_상품을_담을_수_없다() {
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sut.addItem(1L, new CartItemCreateRequest(11L, 1)))
                 .isInstanceOf(CartException.class);
     }
 
