@@ -24,6 +24,8 @@ spring:
             # 카카오 개발자 콘솔 > 카카오 로그인 > 보안 > Client Secret
             client-secret: ""
 
+            redirect-uri: ""
+
 jwt:
   # HS256 서명 키라 32바이트 이상이어야 한다. 아무 긴 문자열이어도 되며 로컬 값은 공유하지 않는다.
   secret: ""
