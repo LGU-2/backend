@@ -34,7 +34,7 @@ class AdminAuthController {
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
 
     private final AdminAuthService adminAuthService;
-    private final String adminAuthPath;
+    private final String refreshTokenCookiePath;
     private final boolean refreshCookieSecure;
 
     AdminAuthController(
@@ -42,7 +42,7 @@ class AdminAuthController {
             @Value("${admin.auth-path}") String adminAuthPath,
             @Value("${admin.refresh-cookie-secure}") boolean refreshCookieSecure) {
         this.adminAuthService = adminAuthService;
-        this.adminAuthPath = adminAuthPath;
+        this.refreshTokenCookiePath = parentPath(adminAuthPath);
         this.refreshCookieSecure = refreshCookieSecure;
     }
 
@@ -59,20 +59,26 @@ class AdminAuthController {
         AdminLoginResult result = adminAuthService.login(request);
 
         /*
-         * auth.md "관리자 > 재발급과 로그아웃" 절의 쿠키 그대로다.
-         * Path 를 로그인/재발급/로그아웃이 공유하는 이 경로 하나로 좁힌다 — 다른 admin API 요청에는 이 쿠키가 실려 가지 않는다.
-         * Secure 는 설정으로 뺐다: 로컬 개발(HTTP)에서는 꺼야 브라우저가 쿠키를 실어 보낸다.
+         * auth.md "관리자 > 재발급과 로그아웃" 절의 쿠키 설정을 따른다.
+         * Path 는 로그인과 재발급이 함께 쓰는 /v1/admin/auth/ 범위로 제한한다.
+         * Secure 는 설정으로 분리해 로컬 개발(HTTP)에서는 끌 수 있게 한다.
          */
         ResponseCookie refreshTokenCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, result.refreshToken())
                 .httpOnly(true)
                 .secure(refreshCookieSecure)
                 .sameSite("Strict")
-                .path(adminAuthPath)
+                .path(refreshTokenCookiePath)
                 .maxAge(result.refreshTokenValiditySeconds())
                 .build();
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString())
                 .body(ResponseEnvelope.success(result.response()));
+    }
+
+    // refreshToken 쿠키를 로그인/재발급 경로에서 함께 쓰기 위해 상위 경로를 구한다.
+    private static String parentPath(String path) {
+        int lastSlash = path.lastIndexOf('/');
+        return lastSlash < 0 ? "/" : path.substring(0, lastSlash + 1);
     }
 }
