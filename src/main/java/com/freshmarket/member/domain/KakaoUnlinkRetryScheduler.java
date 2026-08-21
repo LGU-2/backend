@@ -2,6 +2,7 @@ package com.freshmarket.member.domain;
 
 import com.freshmarket.member.domain.service.KakaoUnlinkRetryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +13,8 @@ import org.springframework.stereotype.Component;
  * 메서드마다 자동으로 남긴다.
  */
 @Component
+// 빈 자체를 batch 프로필로 묶는다. @EnableScheduling 만 끄면 빈은 남아 실수로 호출될 수 있다
+@Profile("batch")
 @RequiredArgsConstructor
 public class KakaoUnlinkRetryScheduler {
 
