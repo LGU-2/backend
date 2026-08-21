@@ -2,6 +2,7 @@ package com.freshmarket.payment.domain.service;
 
 import com.freshmarket.payment.PaymentRequest;
 import com.freshmarket.payment.PaymentResult;
+import com.freshmarket.payment.domain.PaymentPreparation;
 import com.freshmarket.payment.domain.client.PaymentGatewayApproval;
 import com.freshmarket.payment.domain.entity.Payment;
 import com.freshmarket.payment.domain.exception.PaymentErrorCode;
@@ -28,16 +29,27 @@ public class PaymentService {
 
     // PG 호출 전에 PENDING 행을 별도 트랜잭션으로 확정한다. 외부 호출 동안 DB 트랜잭션을 잡지 않는다.
     @Transactional
-    public Payment preparePayment(PaymentRequest request) {
-        return paymentRepository.findByOrderId(request.orderId())
-                .orElseGet(() -> paymentRepository.save(
-                        Payment.prepare(request.orderId(), request.method(), request.amount())));
+    public PaymentPreparation preparePayment(PaymentRequest request) {
+        boolean newlyPrepared = paymentRepository.insertIfAbsent(request.orderId(), request.method().name(),
+                request.amount(), java.time.LocalDateTime.now()) == 1;
+        Payment payment = paymentRepository.findByOrderId(request.orderId())
+                .orElseThrow(() -> new PaymentException(PaymentErrorCode.PAYMENT_NOT_FOUND));
+        if (!payment.matches(request)) {
+            throw new PaymentException(PaymentErrorCode.PAYMENT_REQUEST_MISMATCH);
+        }
+        return new PaymentPreparation(payment, newlyPrepared);
     }
 
     @Transactional
     public PaymentResult approvePayment(Long paymentId, PaymentGatewayApproval approval) {
-        Payment payment = paymentRepository.findById(paymentId)
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                 .orElseThrow(() -> new PaymentException(PaymentErrorCode.PAYMENT_NOT_FOUND));
+        if (payment.isPaid()) {
+            return PaymentResult.from(payment);
+        }
+        if (!payment.isPending()) {
+            throw new PaymentException(PaymentErrorCode.PAYMENT_NOT_PENDING);
+        }
 
         payment.approve(approval.pgTid(), approval.paidAt());
 

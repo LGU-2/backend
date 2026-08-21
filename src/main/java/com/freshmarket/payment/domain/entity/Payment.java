@@ -2,6 +2,7 @@ package com.freshmarket.payment.domain.entity;
 
 import com.freshmarket.common.entity.BaseMutableTimeEntity;
 import com.freshmarket.payment.PaymentMethod;
+import com.freshmarket.payment.PaymentRequest;
 import com.freshmarket.payment.PaymentStatus;
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
@@ -68,9 +69,6 @@ public class Payment extends BaseMutableTimeEntity {
     }
 
     public void approve(String pgTid, LocalDateTime paidAt) {
-        if (status == PaymentStatus.PAID) {
-            return;
-        }
         if (pgTid == null || pgTid.isBlank() || pgTid.length() > PG_TID_MAX_LENGTH) {
             throw new IllegalArgumentException("유효한 pgTid 가 필요하다");
         }
@@ -84,5 +82,19 @@ public class Payment extends BaseMutableTimeEntity {
 
     public boolean isPaid() {
         return status == PaymentStatus.PAID;
+    }
+
+    public boolean isPending() {
+        return status == PaymentStatus.PENDING;
+    }
+
+    public boolean matches(PaymentRequest request) {
+        return orderId.equals(request.orderId())
+                && amount == request.amount()
+                && method == request.method();
+    }
+
+    public PaymentRequest toRequest() {
+        return new PaymentRequest(orderId, amount, method);
     }
 }

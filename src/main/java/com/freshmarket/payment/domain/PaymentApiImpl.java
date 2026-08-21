@@ -19,10 +19,11 @@ class PaymentApiImpl implements PaymentApi {
 
     @Override
     public PaymentResult requestPayment(PaymentRequest request) {
-        Payment payment = paymentService.preparePayment(request);
-        if (payment.isPaid()) {
+        PaymentPreparation preparation = paymentService.preparePayment(request);
+        Payment payment = preparation.payment();
+        if (!preparation.newlyPrepared()) {
             return PaymentResult.from(payment);
         }
-        return paymentService.approvePayment(payment.getId(), paymentGateway.request(request));
+        return paymentService.approvePayment(payment.getId(), paymentGateway.request(payment.toRequest()));
     }
 }
