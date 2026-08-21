@@ -224,7 +224,7 @@ class AdminLotServiceTest {
     }
 
     @Test
-    void 알_수_없는_제약_위반은_그대로_전파된다() {
+    void 알_수_없는_제약_위반은_감싸서_던진다() {
         // given — fk_lot_option이 아닌 다른 위반(예: chk_lot_qty처럼 별도로 변환하지 않는 제약)
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
         DataIntegrityViolationException unknownViolation = new DataIntegrityViolationException(
@@ -235,7 +235,8 @@ class AdminLotServiceTest {
 
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
-                .isSameAs(unknownViolation);
+                .isInstanceOf(IllegalStateException.class)
+                .hasCause(unknownViolation);
     }
 
     @Test

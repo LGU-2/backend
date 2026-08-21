@@ -70,7 +70,13 @@ public class AdminLotService {
             if (isConstraintViolation(e, "fk_lot_option")) {
                 throw new StockException(StockErrorCode.OPTION_NOT_FOUND, e);
             }
-            throw e;
+            /*
+             * 알려진 제약(uk_lot_request_id, fk_lot_option) 위반이 아니면 원인을 알 수 없는 실패다.
+             * Spring의 DataIntegrityViolationException을 그대로 던지면 저장소 계층의 예외 타입이 서비스
+             * 경계 밖으로 새어나가므로, 원인은 유지한 채(cause) 더 명확한 메시지로 감싸서 던진다.
+             */
+            throw new IllegalStateException(
+                    "로트 저장 중 알 수 없는 제약 위반이 발생했다: " + e.getMostSpecificCause().getMessage(), e);
         } catch (PessimisticLockingFailureException e) {
             return responseOfInProgressRetry(request.requestId(), optionId, e);
         }
