@@ -45,6 +45,30 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
+  # 로그인 state/nonce, access token valid-after 커트라인, refresh token 회전이 이 캐시를 쓴다.
+  # 엔진은 Valkey 이고 프로토콜이 같아 spring.data.redis 설정을 그대로 쓴다 (compose.yaml 참고).
+  # 변수명을 compose 와 맞춘다. 한쪽만 바꾸면 컨테이너와 앱이 서로 다른 포트를 본다
+  data:
+    redis:
+      host: "${VALKEY_HOST:localhost}"
+      port: "${VALKEY_PORT:6379}"
+
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: "${KAKAO_CLIENT_ID}"
+            client-secret: "${KAKAO_CLIENT_SECRET}"
+            authorization-grant-type: authorization_code
+            redirect-uri: "${KAKAO_REDIRECT_URI:http://localhost:5173/oauth/callback}"
+            scope: openid
+        provider:
+          kakao:
+            issuer-uri: https://kauth.kakao.com
+            user-info-uri: https://kapi.kakao.com/v1/oidc/userinfo
+            user-name-attribute: sub
+
   lifecycle:
     # 종료 타임아웃 계층의 안쪽에서 셋째다. compose 45초, systemd 60초가 바깥이다
     timeout-per-shutdown-phase: 30s
@@ -97,17 +121,23 @@ springdoc:
     path: /swagger-ui.html
 
 app:
-  security:
-    # auth.md: 로그인(POST)/재발급(POST :refresh)/로그아웃(DELETE)이 이 경로 하나를 공유한다
-    admin-auth-path: "${ADMIN_AUTH_PATH:/v1/admin/auth/tokens}"
-  jwt:
-    # 로컬 개발 편의를 위한 기본값이다. 운영에서는 반드시 환경변수/시크릿 매니저로 덮어쓴다.
-    # 소스에 실키를 넣지 않는다 (비기능요구사항 보안 > 자격 증명 관리).
-    secret: "${JWT_SECRET:local-dev-only-secret-key-please-override-in-real-environments}"
-    admin:
-      # 관리자 Access 30분 / Refresh 1일, 자동 로그인 미제공 (인증(OIDC) 설계 시트 3항)
-      access-token-validity-seconds: ${ADMIN_ACCESS_TOKEN_VALIDITY_SECONDS:1800}
-      refresh-token-validity-seconds: ${ADMIN_REFRESH_TOKEN_VALIDITY_SECONDS:86400}
-      # 리프레시 토큰 쿠키의 Secure 속성. 운영은 HTTPS 라 true 가 기본이다.
-      # 로컬 개발은 보통 HTTP 라 true 로 두면 브라우저가 쿠키를 아예 안 보낸다 - 로컬에서는 환경변수로 false 를 덮어쓴다.
-      refresh-cookie-secure: ${ADMIN_REFRESH_COOKIE_SECURE:true}
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:5173}"
+
+jwt:
+  secret: "${JWT_SECRET}"
+  access-token-validity-ms: "${JWT_ACCESS_VALIDITY_MS:1800000}"
+  refresh-token-validity-ms: "${JWT_REFRESH_VALIDITY_MS:1209600000}"
+  cookie:
+    secure: "${JWT_COOKIE_SECURE:false}"
+
+# (admin-login) 관리자 전용 값. access-token 유효기간은 위 jwt.access-token-validity-ms 를 공유한다
+admin:
+  refresh-token-validity-seconds: ${ADMIN_REFRESH_TOKEN_VALIDITY_SECONDS:86400}
+  # 리프레시 토큰 쿠키의 Secure 속성. 운영은 HTTPS 라 true 가 기본이다.
+  # 로컬 개발은 보통 HTTP 라 true 로 두면 브라우저가 쿠키를 아예 안 보낸다 - 로컬에서는 환경변수로 false 를 덮어쓴다.
+  refresh-cookie-secure: ${ADMIN_REFRESH_COOKIE_SECURE:true}
+
+kakao:
+  app-id: "${KAKAO_APP_ID}"
+  admin-key: "${KAKAO_ADMIN_KEY}"

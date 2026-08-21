@@ -7,7 +7,7 @@
 |---|---|---|---|
 | `compose.yaml` | Docker Compose | MySQL 컨테이너를 **만든다** | O |
 | `application.yml` | Spring Boot | 환경과 무관한 공통 설정 | O |
-| `application-local.yml` | Spring Boot | 앱이 쓸 로컬 값. 비밀값이 여기 있다 | **X** |
+| `../src/main/resources/application-local.yml` | Spring Boot | 앱이 쓸 로컬 값. 비밀값이 여기 있다 | **X** |
 | `application-local.yml.example` | 사람 | 거기 무엇을 적는지 보여준다 | O |
 | `.env` | Docker Compose | `compose.yaml` 의 값을 **덮는다** | **X** |
 | `.env.example` | 사람 | `.env` 에 무엇을 적을 수 있는지 보여준다 | O |
@@ -22,7 +22,7 @@
 | 파일 | 언제 읽히나 | 추적 |
 |---|---|---|
 | `application.yml` | 항상 | O |
-| `application-local.yml` | 로컬. 기본값이라 따로 켤 것이 없다 | **X** |
+| `../src/main/resources/application-local.yml` | 로컬. 기본값이라 따로 켤 것이 없다 | **X** |
 | `application-prod.yml` | `SPRING_PROFILES_ACTIVE=prod` | O |
 | `src/integrationTest/resources/application-integrationTest.yml` | `./gradlew integrationTest` | O |
 
@@ -198,7 +198,7 @@ cp src/main/resources/application-local.yml.example src/main/resources/applicati
 `.env` 와 헷갈리지 않는다. `.env` 는 Compose 만 읽고 컨테이너를 어떻게 띄울지에만 관여한다.
 카카오 키를 `.env` 에 적어도 앱에는 전달되지 않는다.
 
-**`src/main/resources` 는 jar 에 담기는 자리다.** `application-local.yml` 은 저장소에는 안 올라가지만,
+**`src/main/resources` 는 jar 에 담기는 자리다.** `../src/main/resources/application-local.yml` 은 저장소에는 안 올라가지만,
 로컬에서 `bootJar` 를 만들면 그 값이 jar 안에 들어간다. 그렇게 만든 jar 는 남에게 주지 않는다.
 
 ## 올리면 안 되는 것

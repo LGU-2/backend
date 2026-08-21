@@ -86,7 +86,7 @@ public class SecurityConfig {
             JwtTokenProvider jwtTokenProvider,
             AccessTokenValidAfterRepository accessTokenValidAfterRepository,
             StringRedisTemplate redisTemplate,
-            @Value("${app.security.admin-auth-path}") String adminAuthPath) {
+            @Value("${admin.auth-path}") String adminAuthPath) {
         this.handlerExceptionResolver = handlerExceptionResolver;
         this.jwtTokenProvider = jwtTokenProvider;
         this.accessTokenValidAfterRepository = accessTokenValidAfterRepository;

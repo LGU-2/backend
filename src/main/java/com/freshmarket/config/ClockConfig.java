@@ -12,8 +12,6 @@ import org.springframework.context.annotation.Configuration;
  * systemDefaultZone()을 쓰는 이유는 프로젝트 전반이 LocalDateTime.now()/ZoneId.systemDefault()로
  * 시스템 기본 시간대를 그대로 쓰고 있어서(BaseMutableTimeEntity 등), 이 빈만 UTC 등으로 다르게
  * 잡으면 시간대가 갈리는 혼란이 생긴다 — 기존 동작과 동일하게 맞춘다.
- * 서비스가 LocalDateTime.now()/Instant.now() 를 직접 부르지 않고 이 빈을 주입받게 한다 (MNT-2-03).
- * 직접 호출하면 "지금 시각"을 테스트에서 통제할 수 없어, 시각에 걸린 분기(만료, 유효기간)를 결정적으로 검증하기 어렵다.
  */
 @Configuration
 public class ClockConfig {
@@ -22,6 +20,4 @@ public class ClockConfig {
     public Clock clock() {
         return Clock.systemDefaultZone();
     }
-
-    }
-
+}

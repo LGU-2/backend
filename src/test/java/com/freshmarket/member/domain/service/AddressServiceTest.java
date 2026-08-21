@@ -3,12 +3,16 @@ package com.freshmarket.member.domain.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.freshmarket.member.domain.entity.Address;
+import com.freshmarket.member.domain.entity.Member;
 import com.freshmarket.member.domain.repository.AddressRepository;
+import com.freshmarket.member.domain.repository.MemberRepository;
 import com.freshmarket.member.domain.dto.AddressCreateRequest;
 import com.freshmarket.member.domain.dto.AddressUpdateRequest;
 import com.freshmarket.member.domain.exception.MemberErrorCode;
@@ -37,11 +41,18 @@ class AddressServiceTest {
     @Mock
     private AddressRepository addressRepository;
 
+    @Mock
+    private MemberRepository memberRepository;
+
     private AddressService sut;
 
     @BeforeEach
     void setUp() {
-        sut = new AddressService(addressRepository);
+        sut = new AddressService(addressRepository, memberRepository);
+        // (DI-2-01/DI-3-06) create()가 addressRepository.countByMemberId() 전에 회원 행을 락으로
+        // 먼저 잡는다 — update/delete 테스트는 이 스텁을 안 쓰므로 lenient로 둔다(strict stubbing
+        // 미사용 예외 방지).
+        lenient().when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(mock(Member.class)));
     }
 
     @Test
@@ -109,6 +120,22 @@ class AddressServiceTest {
                 .isInstanceOf(MemberException.class)
                 .extracting(e -> ((MemberException) e).getErrorCode())
                 .isEqualTo(MemberErrorCode.ADDRESS_LIMIT_EXCEEDED);
+        verify(addressRepository, never()).save(any());
+    }
+
+    @Test
+    void 존재하지_않는_회원이면_배송지_등록_시_예외() {
+        // (DI-2-01/DI-3-06) create()가 count 확인 전에 회원 행을 락으로 먼저 잡는다 — 그 조회가
+        // 비면(탈퇴 등으로 회원이 없으면) 카운트를 보지도 않고 바로 실패해야 한다.
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
+
+        AddressCreateRequest request = new AddressCreateRequest("홍길동", "010-1234-5678", "12345", "서울시", null, false);
+
+        assertThatThrownBy(() -> sut.create(1L, request))
+                .isInstanceOf(MemberException.class)
+                .extracting(e -> ((MemberException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.MEMBER_NOT_FOUND);
+        verify(addressRepository, never()).countByMemberId(any());
         verify(addressRepository, never()).save(any());
     }
 
