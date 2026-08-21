@@ -41,8 +41,15 @@ public class KakaoUnlinkClient {
                     .toBodilessEntity()
                     .block();
         } catch (WebClientResponseException e) {
-            log.warn("event=KAKAO_UNLINK_NON_FATAL status={} body={} kakaoUserId={}",
-                    e.getStatusCode(), e.getResponseBodyAsString(), PiiMasker.maskProviderId(kakaoUserId));
+            // (2026-08-21, SEC-4-02) 카카오 응답 바디를 그대로 찍으면 이 클래스만 HttpBodyLoggingFilter/
+            // ExternalApiLoggingExchangeFilter의 마스킹 인프라를 우회해서 새는 경로가 된다. 바디는
+            // 카카오 쪽 자유 형식 에러 메시지라 어떤 값이 실릴지 우리가 통제할 수 없으므로(부분
+            // 마스킹이 애매한 경우, 다른 필터들의 REDACTED 관례와 동일하게) 통째로 가린다. 상태코드와
+            // 바디 길이만 남겨도 "카카오가 몇 번대 에러로 몇 바이트짜리 응답을 줬는지"는 추적 가능하다.
+            String rawBody = e.getResponseBodyAsString();
+            log.warn("event=KAKAO_UNLINK_NON_FATAL status={} bodyLength={} body={} kakaoUserId={}",
+                    e.getStatusCode(), rawBody == null ? 0 : rawBody.length(),
+                    PiiMasker.redact(rawBody), PiiMasker.maskProviderId(kakaoUserId));
         } catch (Exception e) {
             log.error("event=KAKAO_UNLINK_FAILED kakaoUserId={}", PiiMasker.maskProviderId(kakaoUserId), e);
             throw new MemberException(MemberErrorCode.KAKAO_UNLINK_FAILED, e);
