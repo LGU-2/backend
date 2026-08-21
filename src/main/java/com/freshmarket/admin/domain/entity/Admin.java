@@ -28,13 +28,19 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Admin extends BaseMutableTimeEntity {
 
-    @Column(name = "login_id", nullable = false, length = 50)
+    // 아래 세 상수는 컬럼 정의의 length 값과 반드시 같아야 한다. 검증과 컬럼이 따로 놀면
+    // DB 는 막는데 애플리케이션은 통과시키는(또는 그 반대인) 경우가 생긴다.
+    private static final int LOGIN_ID_MAX_LENGTH = 50;
+    private static final int PASSWORD_HASH_MAX_LENGTH = 255;
+    private static final int NAME_MAX_LENGTH = 50;
+
+    @Column(name = "login_id", nullable = false, length = LOGIN_ID_MAX_LENGTH)
     private String loginId;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", nullable = false, length = PASSWORD_HASH_MAX_LENGTH)
     private String passwordHash;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = NAME_MAX_LENGTH)
     private String name;
 
     @Enumerated(EnumType.STRING)
@@ -56,15 +62,9 @@ public class Admin extends BaseMutableTimeEntity {
     private LocalDateTime deletedAt;
 
     private Admin(String loginId, String passwordHash, String name, AdminRole role) {
-        if (loginId == null || loginId.isBlank()) {
-            throw new IllegalArgumentException("loginId 는 필수다");
-        }
-        if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("passwordHash 는 필수다");
-        }
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("name 은 필수다");
-        }
+        validateLoginId(loginId);
+        validatePasswordHash(passwordHash);
+        validateName(name);
         if (role == null) {
             throw new IllegalArgumentException("role 은 필수다");
         }
@@ -73,6 +73,36 @@ public class Admin extends BaseMutableTimeEntity {
         this.name = name;
         this.role = role;
         this.status = AdminStatus.ACTIVE;   // 외부 입력을 받지 않는다 (EC R4)
+    }
+
+    private static void validateLoginId(String loginId) {
+        if (loginId == null || loginId.isBlank()) {
+            throw new IllegalArgumentException("loginId 는 필수다");
+        }
+        if (loginId.length() > LOGIN_ID_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "loginId 는 " + LOGIN_ID_MAX_LENGTH + "자를 넘을 수 없다: " + loginId.length());
+        }
+    }
+
+    private static void validatePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("passwordHash 는 필수다");
+        }
+        if (passwordHash.length() > PASSWORD_HASH_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "passwordHash 는 " + PASSWORD_HASH_MAX_LENGTH + "자를 넘을 수 없다: " + passwordHash.length());
+        }
+    }
+
+    private static void validateName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("name 은 필수다");
+        }
+        if (name.length() > NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "name 은 " + NAME_MAX_LENGTH + "자를 넘을 수 없다: " + name.length());
+        }
     }
 
     /*
@@ -85,9 +115,7 @@ public class Admin extends BaseMutableTimeEntity {
         return new Admin(loginId, passwordHash, name, role);
     }
 
-    public boolean isActive() {
-        return this.status == AdminStatus.ACTIVE;
-    }
+    public boolean isActive() { return this.status == AdminStatus.ACTIVE; }
 
     // 로그인 성공 시 리프레시 토큰을 갱신한다. 평문은 절대 받지 않는다 (호출부가 해시해서 넘긴다)
     public void issueRefreshToken(String refreshTokenHash, LocalDateTime expiresAt) {

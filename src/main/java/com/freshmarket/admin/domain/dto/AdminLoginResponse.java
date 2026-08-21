@@ -26,6 +26,17 @@ public record AdminLoginResponse(
         AdminSummary admin
 ) {
 
+    /*
+     * accessToken 은 그 자체로 API 를 호출할 수 있는 인증 수단이다.
+     * 이 응답 객체가 로그에 찍히면 토큰이 평문으로 남아, 로그를 본 사람이 그 토큰으로
+     * 유효기간이 끝나기 전까지 관리자 권한을 그대로 흉내 낼 수 있다 (SEC-4-02). 그래서 가린다.
+     */
+    @Override
+    public String toString() {
+        return "AdminLoginResponse[accessToken=****, tokenType=" + tokenType
+                + ", expiresInSeconds=" + expiresInSeconds + ", admin=" + admin + "]";
+    }
+
     @Schema(description = "로그인한 관리자 요약 정보")
     public record AdminSummary(
 

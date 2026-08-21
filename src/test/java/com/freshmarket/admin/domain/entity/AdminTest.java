@@ -36,6 +36,23 @@ class AdminTest {
     }
 
     @Test
+    void 관리자_등록시_길이_상한을_넘으면_예외가_발생한다() {
+        // login_id VARCHAR(50), password_hash VARCHAR(255), name VARCHAR(50) (V1__init_schema.sql)
+        String over50 = "a".repeat(51);
+        String over255 = "a".repeat(256);
+
+        assertThatThrownBy(() -> Admin.register(over50, "hash", "관리자", AdminRole.ADMIN))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Admin.register("admin.kim", over255, "관리자", AdminRole.ADMIN))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Admin.register("admin.kim", "hash", over50, AdminRole.ADMIN))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        // 상한과 정확히 같은 길이는 통과해야 한다 (경계값)
+        assertThat(Admin.register("a".repeat(50), "hash", "a".repeat(50), AdminRole.ADMIN)).isNotNull();
+    }
+
+    @Test
     void 리프레시_토큰_발급시_필수값이_없으면_예외가_발생한다() {
         Admin admin = AdminFixture.active("admin.kim", "hash", AdminRole.ADMIN);
         LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
