@@ -133,6 +133,7 @@ jwt:
 
 # (admin-login) 관리자 전용 값. access-token 유효기간은 위 jwt.access-token-validity-ms 를 공유한다
 admin:
+  auth-path: "${ADMIN_AUTH_PATH:/v1/admin/auth/tokens}"
   refresh-token-validity-seconds: ${ADMIN_REFRESH_TOKEN_VALIDITY_SECONDS:86400}
   # 리프레시 토큰 쿠키의 Secure 속성. 운영은 HTTPS 라 true 가 기본이다.
   # 로컬 개발은 보통 HTTP 라 true 로 두면 브라우저가 쿠키를 아예 안 보낸다 - 로컬에서는 환경변수로 false 를 덮어쓴다.
