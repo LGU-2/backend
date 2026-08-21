@@ -16,6 +16,7 @@ import com.freshmarket.stock.domain.exception.StockException;
 import com.freshmarket.stock.domain.repository.StockLotRepository;
 import com.freshmarket.stock.domain.repository.StockMovementRepository;
 import java.time.LocalDate;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -46,7 +47,7 @@ class AdminLotServiceTest {
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
         stubSaveAssignsId();
         AdminLotCreateRequest request = new AdminLotCreateRequest(
-                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
 
         // when
         AdminLotResponse result = adminLotService.register(12L, 31L, request);
@@ -68,7 +69,7 @@ class AdminLotServiceTest {
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
         stubSaveAssignsId();
         AdminLotCreateRequest request = new AdminLotCreateRequest(
-                null, LocalDate.now().plusDays(10), 100);
+                "req-1", null, LocalDate.now().plusDays(10), 100);
 
         // when
         AdminLotResponse result = adminLotService.register(12L, 31L, request);
@@ -78,11 +79,68 @@ class AdminLotServiceTest {
     }
 
     @Test
+    void 같은_요청_식별자로_재시도하면_기존_로트를_그대로_반환한다() {
+        // given — 이전 요청으로 이미 등록된 로트가 있는 상황(사전 조회에서 바로 잡힘)
+        StockLot existing = StockLot.register("req-1", 31L, LocalDate.of(2026, 8, 17),
+                LocalDate.of(2026, 8, 31), 200);
+        ReflectionTestUtils.setField(existing, "id", 77L);
+        when(stockLotRepository.findByRequestId("req-1")).thenReturn(Optional.of(existing));
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when
+        AdminLotResponse result = adminLotService.register(12L, 31L, request);
+
+        // then
+        assertThat(result.stockLotId()).isEqualTo(77L);
+        verify(stockLotRepository, never()).save(any());
+        verify(productApi, never()).existsOption(any(), any());
+    }
+
+    @Test
+    void 저장_중_요청_식별자가_동시에_중복되면_기존_로트를_반환한다() {
+        // given — 사전 조회 시점엔 없었지만, save() 직전에 동시 재시도가 먼저 커밋을 마친 경합 상황
+        when(productApi.existsOption(12L, 31L)).thenReturn(true);
+        StockLot existing = StockLot.register("req-1", 31L, LocalDate.of(2026, 8, 17),
+                LocalDate.of(2026, 8, 31), 200);
+        ReflectionTestUtils.setField(existing, "id", 77L);
+        when(stockLotRepository.findByRequestId("req-1"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+        when(stockLotRepository.save(any())).thenThrow(new DataIntegrityViolationException(
+                "Duplicate entry 'req-1' for key 'stock_lot.uk_lot_request_id'"));
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when
+        AdminLotResponse result = adminLotService.register(12L, 31L, request);
+
+        // then
+        assertThat(result.stockLotId()).isEqualTo(77L);
+        verify(stockMovementRepository, never()).save(any());
+    }
+
+    @Test
+    void 요청_식별자_위반_직후_재조회가_비어있으면_예외를_던진다() {
+        // given — 유니크 위반이 났다는 건 그 순간 동시 재시도가 커밋을 마쳤다는 뜻이라 재조회는 항상 있어야 한다.
+        // 이 방어 분기(있을 수 없는 상황)의 커버리지를 위한 케이스
+        when(productApi.existsOption(12L, 31L)).thenReturn(true);
+        when(stockLotRepository.findByRequestId("req-1")).thenReturn(Optional.empty());
+        when(stockLotRepository.save(any())).thenThrow(new DataIntegrityViolationException(
+                "Duplicate entry 'req-1' for key 'stock_lot.uk_lot_request_id'"));
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when, then
+        assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void 존재하지_않는_옵션으로_등록하면_실패한다() {
         // given
         when(productApi.existsOption(12L, 999L)).thenReturn(false);
         AdminLotCreateRequest request = new AdminLotCreateRequest(
-                null, LocalDate.now().plusDays(10), 100);
+                "req-1", null, LocalDate.now().plusDays(10), 100);
 
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 999L, request))
@@ -100,7 +158,7 @@ class AdminLotServiceTest {
                         + "(`freshmarket`.`stock_lot`, CONSTRAINT `fk_lot_option` "
                         + "FOREIGN KEY (`product_option_id`) REFERENCES `product_option` (`product_option_id`))"));
         AdminLotCreateRequest request = new AdminLotCreateRequest(
-                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
 
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
@@ -117,7 +175,7 @@ class AdminLotServiceTest {
                 "Check constraint 'chk_lot_qty' is violated");
         when(stockLotRepository.save(any())).thenThrow(unknownViolation);
         AdminLotCreateRequest request = new AdminLotCreateRequest(
-                LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
 
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
@@ -129,7 +187,7 @@ class AdminLotServiceTest {
         // given
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
         AdminLotCreateRequest request = new AdminLotCreateRequest(
-                LocalDate.of(2026, 8, 20), LocalDate.of(2026, 8, 10), 100);
+                "req-1", LocalDate.of(2026, 8, 20), LocalDate.of(2026, 8, 10), 100);
 
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))

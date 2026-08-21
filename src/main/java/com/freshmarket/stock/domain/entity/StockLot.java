@@ -20,6 +20,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StockLot extends BaseMutableTimeEntity {
 
+    private static final int REQUEST_ID_MAX_LENGTH = 100;
+
+    // 재시도 감지용 요청 식별자(클라이언트 생성). 같은 값으로 다시 입고 요청이 오면 새로 만들지 않는다 (API-5-07, AIP-155)
+    @Column(name = "request_id", nullable = false, length = REQUEST_ID_MAX_LENGTH)
+    private String requestId;
+
     // 옵션 FK. 연관관계 매핑 대신 식별자 컬럼으로 둔다 (JPA-1-02)
     @Column(name = "product_option_id", nullable = false)
     private Long productOptionId;
@@ -41,10 +47,13 @@ public class StockLot extends BaseMutableTimeEntity {
     @Column(name = "status", nullable = false, length = 30)
     private LotStatus status;
 
-    private StockLot(Long productOptionId, LocalDate receivedDate, LocalDate expiryDate, int initialQty) {
+    private StockLot(String requestId, Long productOptionId, LocalDate receivedDate, LocalDate expiryDate,
+            int initialQty) {
+        validateRequestId(requestId);
         validateProductOptionId(productOptionId);
         validateExpiryDate(receivedDate, expiryDate);
         validateInitialQty(initialQty);
+        this.requestId = requestId;
         this.productOptionId = productOptionId;
         this.receivedDate = receivedDate;
         this.expiryDate = expiryDate;
@@ -54,9 +63,20 @@ public class StockLot extends BaseMutableTimeEntity {
     }
 
     // 로트를 새로 입고한다. 가용 수량은 입고 수량과 같은 값으로 시작한다
-    public static StockLot register(Long productOptionId, LocalDate receivedDate, LocalDate expiryDate,
-            int initialQty) {
-        return new StockLot(productOptionId, receivedDate, expiryDate, initialQty);
+    public static StockLot register(String requestId, Long productOptionId, LocalDate receivedDate,
+            LocalDate expiryDate, int initialQty) {
+        return new StockLot(requestId, productOptionId, receivedDate, expiryDate, initialQty);
+    }
+
+    // 요청 식별자가 비어있지 않고 길이 제한을 넘지 않는지 검사한다
+    private static void validateRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            throw new IllegalArgumentException("requestId 는 필수다");
+        }
+        if (requestId.length() > REQUEST_ID_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "requestId 는 " + REQUEST_ID_MAX_LENGTH + "자를 넘을 수 없다: " + requestId.length());
+        }
     }
 
     private static void validateProductOptionId(Long productOptionId) {
