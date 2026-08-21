@@ -69,6 +69,10 @@ public class SecurityConfig {
      */
     private final String adminAuthPath;
 
+    // 회원 인증 리소스 경로다 (auth.md: POST 로그인/재발급, DELETE 로그아웃이 이 하나를 공유한다).
+    // 세 곳(CSRF 예외, 인증 없이 여는 경로, 로그아웃 권한)에서 반복 등장해 상수로 뺐다 (Sonar S1192).
+    private static final String MEMBER_AUTH_PATH = "/v1/auth/tokens";
+
     /*
      * 필터 체인에서 난 예외를 MVC 예외 처리로 되돌린다.
      * 이렇게 하지 않으면 인증 실패 응답만 여기서 따로 만들게 되어 오류 구조가 두 곳으로 갈린다.
@@ -115,32 +119,27 @@ public class SecurityConfig {
     }
 
     /*
-     * 리프레시 토큰과 accessToken 둘 다 HttpOnly 쿠키로 내려주므로 CSRF 보호를 켠다 (admin-login
-     * 리뷰 반영, auth.md "토큰을 어떻게 전달하나" 절). 브라우저가 쿠키를 요청마다 자동으로 실어
-     * 보내는 순간부터 그걸 노리는 위조 요청(CSRF)이 성립하는 공격 조건이 된다 — member 쪽
-     * accessToken도 쿠키로 나가면서(AuthCookieFactory 참고) 노출 범위가 인증이 필요한 모든
-     * API로 넓어져 있었다(merge 전 member-auth 브랜치는 이 이유로 csrf(disable) 상태로 "아직
-     * 결정 안 됨"이라 남겨뒀었다 — admin-login이 먼저 정한 CSRF 활성화 방향으로 합친다).
+     * CSRF를 켠다. 쿠키는 브라우저가 자동으로 실어 보내서, 위조 요청 방어가 필요하다.
+     * SameSite=Strict가 1차 방어, CSRF 토큰(더블 서브밋 쿠키)이 2차 방어다.
      *
-     * 1차 방어는 쿠키의 SameSite=Strict 다(대부분의 크로스사이트 요청 자체가 막힌다).
-     * 그 위에 CSRF 토큰(더블 서브밋 쿠키, CookieCsrfTokenRepository)을 방어층으로 더 쌓는다 — 서버 세션이 없는 STATELESS 구성이라 기본 저장소(HttpSession)를 못 쓴다.
+     * 로그인(POST) 두 곳만 예외로 둔다 — 로그인하기 전엔 아직 쿠키가 없어서 위조할 게 없다.
+     * 경로만으로 열지 않고 메서드(POST)까지 지정한 이유는, 재발급·로그아웃이 로그인과
+     * 같은 경로를 쓰기 때문이다 — 경로만 열면 그 둘까지 같이 CSRF 검사에서 빠져버린다.
      *
-     * 로그인(POST)만 예외로 둔다. 로그인 시점에는 아직 인증 쿠키 자체가 없어서 위조할 인증 상태가
-     * 없다. 메서드까지 지정해서 예외를 좁힌 이유는, admin은 재발급/로그아웃이 로그인과 같은 경로
-     * 문자열(adminAuthPath)을 쓰기 때문이다 — 경로만으로 예외를 주면 나중에 추가할 로그아웃
-     * (DELETE, 쿠키를 실제로 소비하는 요청)까지 조용히 CSRF 검사에서 빠져 버린다. member의
-     * POST /v1/auth/tokens(최초 로그인)도 같은 이유로 예외에 추가한다 — 재발급(:refresh)과
-     * 로그아웃(DELETE)은 이미 발급된 쿠키를 쓰는 요청이라 CSRF 검사 대상에 그대로 남는다.
+     * Sonar S3330: 이 쿠키는 CSRF 토큰이라 브라우저 JS가 값을 읽어 헤더에 실어 보내야 한다.
+     * 그래서 HttpOnly를 끈다 (로그인 쿠키는 따로 있고, 그건 HttpOnly가 켜져 있다).
+     * Sonar S4502: CSRF를 통째로 끄는 게 아니라 로그인 두 경로만 검사에서 제외하는 것이다.
      */
     @Bean
     @Order(2)
+    @SuppressWarnings({"java:S3330", "java:S4502"})
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .ignoringRequestMatchers(
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, adminAuthPath),
-                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/v1/auth/tokens")))
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, MEMBER_AUTH_PATH)))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -161,9 +160,9 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         // 로그인/재발급은 토큰이 없거나 만료된 상태로 오는 요청이라 permitAll이어야 한다.
-                        .requestMatchers(HttpMethod.POST, "/v1/auth/tokens", "/v1/auth/tokens:refresh").permitAll()
+                        .requestMatchers(HttpMethod.POST, MEMBER_AUTH_PATH, MEMBER_AUTH_PATH + ":refresh").permitAll()
                         .requestMatchers("/v1/members/**").hasAuthority("TYPE_MEMBER")
-                        .requestMatchers(HttpMethod.DELETE, "/v1/auth/tokens").hasAuthority("TYPE_MEMBER")
+                        .requestMatchers(HttpMethod.DELETE, MEMBER_AUTH_PATH).hasAuthority("TYPE_MEMBER")
                         .requestMatchers(HttpMethod.POST, adminAuthPath).permitAll()
                         // (merge) admin-auth-path 아래 로그인(POST)만 공개하고, 그 경로를 포함해
                         // 나머지 관리자 API(재발급/로그아웃/향후 admin 리소스 전부)는 TYPE_ADMIN

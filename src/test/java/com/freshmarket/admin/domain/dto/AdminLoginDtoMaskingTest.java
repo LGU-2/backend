@@ -19,8 +19,7 @@ class AdminLoginDtoMaskingTest {
 
         String result = request.toString();
 
-        assertThat(result).contains("admin.kim");
-        assertThat(result).doesNotContain("raw-password-1234");
+        assertThat(result).contains("admin.kim").doesNotContain("raw-password-1234");
     }
 
     @Test
@@ -33,8 +32,7 @@ class AdminLoginDtoMaskingTest {
 
         String result = response.toString();
 
-        assertThat(result).contains("Bearer");
-        assertThat(result).doesNotContain("eyJhbGciOiJIUzI1NiJ9.this-is-a-fake-jwt-access-token");
+        assertThat(result).contains("Bearer").doesNotContain("eyJhbGciOiJIUzI1NiJ9.this-is-a-fake-jwt-access-token");
     }
 
     @Test
@@ -48,8 +46,7 @@ class AdminLoginDtoMaskingTest {
 
         String output = result.toString();
 
-        assertThat(output).doesNotContain("raw-refresh-token-value");
         // 중첩된 response 의 accessToken 도 함께 가려져야 한다 (response.toString() 에 위임)
-        assertThat(output).doesNotContain("access-token-value");
+        assertThat(output).doesNotContain("raw-refresh-token-value").doesNotContain("access-token-value");
     }
 }
