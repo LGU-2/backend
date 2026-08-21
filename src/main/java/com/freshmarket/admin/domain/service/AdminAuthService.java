@@ -7,13 +7,12 @@ import com.freshmarket.admin.domain.entity.Admin;
 import com.freshmarket.admin.domain.exception.AdminErrorCode;
 import com.freshmarket.admin.domain.exception.AdminException;
 import com.freshmarket.admin.domain.repository.AdminRepository;
-import com.freshmarket.common.security.JwtTokenProvider;
-import com.freshmarket.common.security.OpaqueTokenGenerator;
-import com.freshmarket.common.security.TokenHasher;
+import com.freshmarket.common.auth.jwt.JwtTokenProvider;
+import com.freshmarket.common.auth.jwt.OpaqueTokenGenerator;
+import com.freshmarket.common.auth.jwt.TokenHasher;
+import com.freshmarket.common.auth.jwt.TokenType;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,15 +24,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * 5회 실패 시 30분 잠금은 이번 범위에서 뺐다 (admin 테이블에 fail_count, locked_until 컬럼이 없다.
  * auth.md "정하지 못한 것" 절에도 같은 이유로 보류돼 있다).
+ *
+ * (merge: feat/member-auth와 합치며 추가) JWT 서명·액세스 토큰 발급은 member/admin이 공유하는
+ * common.auth.jwt.JwtTokenProvider를 그대로 쓴다 — admin이 따로 두던 common.security.JwtTokenProvider와
+ * 거의 동일한 구현을 독립적으로 만들었던 것이라, 중복을 없애고 이쪽으로 통합했다. 액세스 토큰
+ * 유효기간도 이제 JwtTokenProvider가 갖고 있어(jwt.access-token-validity-ms) 별도 파라미터가 필요 없다.
+ * 리프레시 토큰은 admin은 여전히 DB 컬럼(refresh_token_hash/refresh_token_expires_at)에 저장한다 —
+ * member의 Redis 회전 방식과는 별개 정책으로 유지한다 (이번 병합 범위 밖).
  */
 @Service
 @Transactional
 public class AdminAuthService {
 
     private static final String TOKEN_TYPE = "Bearer";
-    private static final String CLAIM_TOKEN_TYPE = "type";
-    private static final String CLAIM_ROLE = "role";
-    private static final String TOKEN_TYPE_ADMIN = "ADMIN";
 
     // 실제 계정과 무관한 값이다. 계정이 없을 때도 이 해시로 BCrypt 를 돌려 응답 시간을 맞춘다 (SEC-6-04)
     private static final String DUMMY_PASSWORD_SOURCE = "dummy-password-for-constant-time-comparison";
@@ -42,7 +45,6 @@ public class AdminAuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final Clock clock;
-    private final long accessTokenValiditySeconds;
     private final long refreshTokenValiditySeconds;
     private final String dummyPasswordHash;
 
@@ -51,13 +53,11 @@ public class AdminAuthService {
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
             Clock clock,
-            @Value("${app.jwt.admin.access-token-validity-seconds}") long accessTokenValiditySeconds,
-            @Value("${app.jwt.admin.refresh-token-validity-seconds}") long refreshTokenValiditySeconds) {
+            @Value("${admin.refresh-token-validity-seconds}") long refreshTokenValiditySeconds) {
         this.adminRepository = adminRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.clock = clock;
-        this.accessTokenValiditySeconds = accessTokenValiditySeconds;
         this.refreshTokenValiditySeconds = refreshTokenValiditySeconds;
         // 같은 인코더로 미리 만들어 둬야 진짜 비밀번호 검증과 연산 비용(코스트 팩터)이 완전히 같다
         this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD_SOURCE);
@@ -71,8 +71,8 @@ public class AdminAuthService {
          * 계정이 없을 때 BCrypt 자체를 건너뛰면, 있을 때와 없을 때의 응답 시간이 갈려서
          * 그 시간 차이가 그 자체로 아이디 존재 여부를 흘리는 타이밍 사이드채널이 된다.
          *
-         * found 가 비어 있으면 아래 단락 값과 무관하게 항상 LOGIN_FAILED 로 던진다(단락 평가로 그렇게 되어 있다).
-         * dummyPasswordHash 비교는 오직 시간을 맞추기 위한 것이다.
+         * found 가 비어 있으면 아래 단락 값과 무관하게 항상 LOGIN_FAILED 로 던진다
+         * (단락 평가로 그렇게 되어 있다). dummyPasswordHash 비교는 오직 시간을 맞추기 위한 것이다.
          */
         String hashToCompare = found.map(Admin::getPasswordHash).orElse(dummyPasswordHash);
         boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCompare);
@@ -87,20 +87,18 @@ public class AdminAuthService {
         Admin admin = found.get();
         if (!admin.isActive()) { throw new AdminException(AdminErrorCode.ACCOUNT_INACTIVE); }
 
-        String accessToken = jwtTokenProvider.createToken(
-                String.valueOf(admin.getId()),
-                Map.of(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ADMIN, CLAIM_ROLE, admin.getRole().toAuthority()),
-                Duration.ofSeconds(accessTokenValiditySeconds));
+        String accessToken = jwtTokenProvider.createAccessToken(
+                admin.getId(), TokenType.ADMIN, admin.getRole().toAuthority());
 
         String rawRefreshToken = OpaqueTokenGenerator.generate();
         admin.issueRefreshToken(
-                TokenHasher.sha256Hex(rawRefreshToken),
+                TokenHasher.sha256(rawRefreshToken),
                 LocalDateTime.now(clock).plusSeconds(refreshTokenValiditySeconds));
 
         AdminLoginResponse response = new AdminLoginResponse(
                 accessToken,
                 TOKEN_TYPE,
-                accessTokenValiditySeconds,
+                jwtTokenProvider.getAccessTokenValidityMs() / 1000,
                 new AdminLoginResponse.AdminSummary(
                         admin.getLoginId(), admin.getName(), admin.getRole()));
 

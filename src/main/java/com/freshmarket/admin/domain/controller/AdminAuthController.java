@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "관리자 인증", description = "관리자 로그인/로그아웃/토큰 재발급")
 @RestController
-@RequestMapping("${app.security.admin-auth-path}")
+@RequestMapping("${admin.auth-path}")
 class AdminAuthController {
 
     // auth.md: Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict; Path=...
@@ -39,8 +39,8 @@ class AdminAuthController {
 
     AdminAuthController(
             AdminAuthService adminAuthService,
-            @Value("${app.security.admin-auth-path}") String adminAuthPath,
-            @Value("${app.jwt.admin.refresh-cookie-secure}") boolean refreshCookieSecure) {
+            @Value("${admin.auth-path}") String adminAuthPath,
+            @Value("${admin.refresh-cookie-secure}") boolean refreshCookieSecure) {
         this.adminAuthService = adminAuthService;
         this.adminAuthPath = adminAuthPath;
         this.refreshCookieSecure = refreshCookieSecure;

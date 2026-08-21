@@ -12,11 +12,10 @@ public enum AdminRole {
 
     private final String displayName;
 
-    /*
-     * Spring Security 의 hasRole()/hasAuthority() 판정은 "ROLE_" 접두사가 붙은 문자열을 전제로
-     * 동작한다 (hasRole 은 내부적으로 이 접두사를 자동으로 붙여 비교한다).
-     * 접두사를 붙이는 지점을 name() 을 쓰는 각 호출부에 흩어 두면 한쪽에서 빠뜨려도 컴파일은 통과하고 인가만 조용히 실패한다.
-     * 그래서 변환을 이 메서드 하나로 모은다.
-     */
-    public String toAuthority() { return "ROLE_" + name(); }
+    // (merge: feat/member-auth와 합치며 추가) JwtTokenProvider가 만드는 JWT의 role 클레임은
+    // Spring Security 권한 문자열 그대로("ROLE_ADMIN", "ROLE_SUPER_ADMIN")를 담는다 — enum
+    // 상수명 자체가 이미 그 포맷인 MemberRole(ROLE_USER)과 형식을 맞춘다.
+    public String toAuthority() {
+        return "ROLE_" + name();
+    }
 }

@@ -77,7 +77,7 @@ No active profile set, falling back to 1 default profile: "local"
 `application.yml` 은 클래스패스에 있어 가장 약하다. 그래서 파일을 고치지 않고도 덮을 수 있다.
 
 ```bash
-DB_URL=jdbc:mysql://localhost:13306/freshmarket ./gradlew bootRun
+DB_URL=jdbc:mysql://localhost:3307/freshmarket ./gradlew bootRun
 ```
 
 ## 문법이 서로 다르다
@@ -107,11 +107,11 @@ Spring 에서 `:-` 를 쓰면 기본값이 `-3306` 이 된다.
 
 ## 언제 무엇을 고치나
 
-| 상황 | 할 일 |
-|---|---|
-| 아무 문제 없음 | 아무것도 안 한다 |
-| 3306 이 이미 쓰인다 | `.env` 에 `MYSQL_PORT=13306` |
-| 컨테이너 이름이 겹친다 | `.env` 에 `MYSQL_CONTAINER_NAME=...` |
+| 상황 | 할 일                                       |
+|---|-------------------------------------------|
+| 아무 문제 없음 | 아무것도 안 한다                                 |
+| 3306 이 이미 쓰인다 | `.env` 에 `MYSQL_PORT=3307`                |
+| 컨테이너 이름이 겹친다 | `.env` 에 `MYSQL_CONTAINER_NAME=...`       |
 | compose 없이 다른 DB 에 붙는다 | 셸에 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
 
 ```bash
