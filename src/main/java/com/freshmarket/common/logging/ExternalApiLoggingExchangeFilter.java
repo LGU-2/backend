@@ -30,15 +30,22 @@ public final class ExternalApiLoggingExchangeFilter {
     public static ExchangeFilterFunction logCalls() {
         return (request, next) -> {
             Instant start = Instant.now();
+            // (SEC-4-02) 쿼리 문자열은 뺀다. 카카오처럼 인가 코드/액세스 토큰을 쿼리로 주고받는
+            // 외부 API가 붙으면 그대로 새기 때문이다 — 이 필터의 목적(상태코드/소요시간 확인)엔
+            // path만으로 충분하다.
+            String path = request.url().getPath();
             return next.exchange(request)
                     .doOnNext(response -> log.info(
-                            "event=EXTERNAL_API_CALL method={} uri={} status={} durationMs={}",
-                            request.method(), request.url(), response.statusCode().value(),
+                            "event=EXTERNAL_API_CALL method={} path={} status={} durationMs={}",
+                            request.method(), path, response.statusCode().value(),
                             Duration.between(start, Instant.now()).toMillis()))
+                    // (MNT-4-03) ex.toString()만 마지막 "{}" 자리를 채우면 SLF4J가 이걸 그냥 문자열
+                    // 인자로 취급해 스택트레이스가 로그에 안 남는다. err={}에는 요약 메시지를 남기고,
+                    // ex 자체를 플레이스홀더 없는 마지막 인자로 추가로 넘겨야 스택트레이스까지 함께 찍힌다.
                     .doOnError(ex -> log.warn(
-                            "event=EXTERNAL_API_CALL_FAILED method={} uri={} durationMs={} err={}",
-                            request.method(), request.url(),
-                            Duration.between(start, Instant.now()).toMillis(), ex.toString()));
+                            "event=EXTERNAL_API_CALL_FAILED method={} path={} durationMs={} err={}",
+                            request.method(), path,
+                            Duration.between(start, Instant.now()).toMillis(), ex.toString(), ex));
         };
     }
 }
