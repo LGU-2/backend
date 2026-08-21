@@ -11,7 +11,9 @@ import com.freshmarket.order.domain.service.OrderService;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,6 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 class OrderController {
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final OrderService orderService;
 
     @GetMapping
@@ -34,10 +39,12 @@ class OrderController {
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            Pageable pageable
+            @PageableDefault(size = DEFAULT_PAGE_SIZE) Pageable pageable
     ) {
+        Pageable boundedPageable = PageRequest.of(pageable.getPageNumber(),
+                Math.min(pageable.getPageSize(), MAX_PAGE_SIZE), pageable.getSort());
         Page<OrderListItemResponse> page = orderService.getOrders(userDetails.getId(),
-                        new OrderSearchCondition(status, from, to), pageable)
+                        new OrderSearchCondition(status, from, to), boundedPageable)
                 .map(OrderListItemResponse::from);
         return ResponseEntity.ok(ResponseEnvelope.success(PageResponse.from(page)));
     }
