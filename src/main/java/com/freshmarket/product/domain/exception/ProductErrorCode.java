@@ -15,10 +15,12 @@ public enum ProductErrorCode implements ErrorCode {
     CATEGORY_HAS_PRODUCTS(HttpStatus.CONFLICT, "PRODUCT-003", "소속된 상품이 있어 삭제할 수 없습니다."),
     CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "PRODUCT-004", "하위 카테고리가 있어 삭제할 수 없습니다."),
     /*
-     * 재웅님이 카테고리 오류를 CATEGORY- 접두사로 리네임할 예정이라 이 값을 그대로 쓴다.
-     * 그 리네임 PR 이 이 PR 보다 먼저 병합되어야 PRODUCT-001 코드값 중복이 안 생긴다.
+     * 명세는 상품 미존재에 PRODUCT-001 을 배정했으나 그 값이 카테고리 오류에 이미 쓰이고 있다.
+     * PRODUCT-005~007 은 재웅님이 상품 등록(#13)에서 쓰기로 예약해 008 을 쓴다.
+     * 카테고리 오류가 CATEGORY- 로 리네임되면 명세대로 001 로 되돌릴 수 있다.
      */
-    PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT-001", "상품을 찾을 수 없습니다.");
+    PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT-008",
+            "상품을 찾을 수 없습니다. 상품 목록에서 다시 확인해 주세요.");
 
     private final HttpStatus httpStatus;
     private final String code;

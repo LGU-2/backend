@@ -12,6 +12,7 @@ import com.freshmarket.product.domain.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -70,7 +71,7 @@ class ProductController {
     @Operation(summary = "상품 상세 조회", description = "삭제된 상품은 404 로 응답한다.")
     @GetMapping("/v1/products/{productId}")
     public ResponseEntity<ResponseEnvelope<ProductDetailResponse>> getProductDetail(
-            @PathVariable Long productId) {
+            @PathVariable @Positive Long productId) {
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProductDetail(productId)));
     }
 

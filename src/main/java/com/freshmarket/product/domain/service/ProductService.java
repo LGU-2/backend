@@ -121,7 +121,6 @@ public class ProductService {
                 null);
     }
 
-    // 옵션 하나를 응답 표현으로 옮긴다
     private static ProductOptionResponse toOptionResponse(ProductOption option) {
         return new ProductOptionResponse(
                 option.getId(),

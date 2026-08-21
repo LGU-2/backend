@@ -305,7 +305,7 @@ class ProductApiIntegrationTest {
     void 존재하지_않는_상품을_조회하면_404를_응답한다() throws Exception {
         mockMvc.perform(get("/v1/products/999999"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PRODUCT-001"));
+                .andExpect(jsonPath("$.code").value("PRODUCT-008"));   // PRODUCT-001 → PRODUCT-008
     }
 
     @Test
@@ -318,7 +318,7 @@ class ProductApiIntegrationTest {
         // when, then
         mockMvc.perform(get("/v1/products/" + productId))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PRODUCT-001"));
+                .andExpect(jsonPath("$.code").value("PRODUCT-008"));   // PRODUCT-001 → PRODUCT-008
     }
 
     @Test
