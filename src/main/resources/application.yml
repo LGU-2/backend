@@ -45,11 +45,13 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
-  # 로그인 state/nonce, access token valid-after 커트라인, refresh token rotation이 Redis를 사용한다.
+  # 로그인 state/nonce, access token valid-after 커트라인, refresh token 회전이 이 캐시를 쓴다.
+  # 엔진은 Valkey 이고 프로토콜이 같아 spring.data.redis 설정을 그대로 쓴다 (compose.yaml 참고).
+  # 변수명을 compose 와 맞춘다. 한쪽만 바꾸면 컨테이너와 앱이 서로 다른 포트를 본다
   data:
     redis:
-      host: "${REDIS_HOST:localhost}"
-      port: "${REDIS_PORT:6379}"
+      host: "${VALKEY_HOST:localhost}"
+      port: "${VALKEY_PORT:6379}"
 
   security:
     oauth2:
