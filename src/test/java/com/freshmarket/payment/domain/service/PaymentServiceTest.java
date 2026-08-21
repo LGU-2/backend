@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.freshmarket.payment.PaymentMethod;
+import com.freshmarket.payment.PaymentInfo;
 import com.freshmarket.payment.PaymentRequest;
 import com.freshmarket.payment.PaymentResult;
 import com.freshmarket.payment.PaymentStatus;
@@ -136,6 +137,28 @@ class PaymentServiceTest {
                 .isInstanceOf(PaymentException.class)
                 .extracting(e -> ((PaymentException) e).getErrorCode())
                 .isEqualTo(PaymentErrorCode.PAYMENT_NOT_PENDING);
+    }
+
+    @Test
+    void 주문_ID로_결제_상세_표시용_정보를_조회한다() {
+        Payment payment = payment(10L);
+        payment.approve("mock_123", LocalDateTime.of(2026, 8, 21, 15, 30));
+        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
+
+        Optional<PaymentInfo> result = sut.findPaymentInfo(1L);
+
+        assertThat(result).isPresent();
+        assertThat(result.orElseThrow().method()).isEqualTo(PaymentMethod.CARD);
+        assertThat(result.orElseThrow().status()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    @Test
+    void 결제가_없는_주문은_빈_결제_정보를_반환한다() {
+        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.empty());
+
+        Optional<PaymentInfo> result = sut.findPaymentInfo(1L);
+
+        assertThat(result).isEmpty();
     }
 
     private Payment payment(Long id) {

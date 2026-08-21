@@ -1,11 +1,13 @@
 package com.freshmarket.payment.domain;
 
 import com.freshmarket.payment.PaymentApi;
+import com.freshmarket.payment.PaymentInfo;
 import com.freshmarket.payment.PaymentRequest;
 import com.freshmarket.payment.PaymentResult;
 import com.freshmarket.payment.domain.client.PaymentGateway;
 import com.freshmarket.payment.domain.entity.Payment;
 import com.freshmarket.payment.domain.service.PaymentService;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -25,5 +27,10 @@ class PaymentApiImpl implements PaymentApi {
             return PaymentResult.from(payment);
         }
         return paymentService.approvePayment(payment.getId(), paymentGateway.request(payment.toRequest()));
+    }
+
+    @Override
+    public Optional<PaymentInfo> findPaymentInfo(Long orderId) {
+        return paymentService.findPaymentInfo(orderId);
     }
 }

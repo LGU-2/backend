@@ -2,6 +2,7 @@ package com.freshmarket.payment.domain.service;
 
 import com.freshmarket.payment.PaymentRequest;
 import com.freshmarket.payment.PaymentResult;
+import com.freshmarket.payment.PaymentInfo;
 import com.freshmarket.payment.domain.PaymentPreparation;
 import com.freshmarket.payment.domain.client.PaymentGatewayApproval;
 import com.freshmarket.payment.domain.entity.Payment;
@@ -10,6 +11,7 @@ import com.freshmarket.payment.domain.exception.PaymentException;
 import com.freshmarket.payment.domain.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,5 +59,9 @@ public class PaymentService {
                 payment.getId(), payment.getOrderId(), payment.getAmount(), payment.getMethod());
 
         return PaymentResult.from(payment);
+    }
+
+    public Optional<PaymentInfo> findPaymentInfo(Long orderId) {
+        return paymentRepository.findByOrderId(orderId).map(PaymentInfo::from);
     }
 }
