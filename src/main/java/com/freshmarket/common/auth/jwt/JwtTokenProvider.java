@@ -84,7 +84,19 @@ public class JwtTokenProvider {
 
     public TokenType getType(String token) {
         String type = parseClaims(token).get("type", String.class);
-        return type == null ? null : TokenType.valueOf(type);
+        if (type == null) {
+            return null;
+        }
+        // (CMP-3-03) 위조되거나 예전 포맷의 토큰이 "type" 클레임에 MEMBER/ADMIN이 아닌 값을 담고
+        // 있으면 TokenType.valueOf가 IllegalArgumentException을 던진다. 이 메서드의 유일한 호출부인
+        // JwtAuthenticationFilter는 이미 반환값이 null이면 인증을 건너뛰는 패턴(type == null 체크)을
+        // 쓰고 있으므로, 여기서도 예외를 삼키고 null을 반환해 같은 경로로 흡수시킨다 — 그러지 않으면
+        // 필터 체인 밖으로 예외가 새어나가 GlobalExceptionHandler를 거치지 못한 채 비정형 500이 된다.
+        try {
+            return TokenType.valueOf(type);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public String getRole(String token) {
