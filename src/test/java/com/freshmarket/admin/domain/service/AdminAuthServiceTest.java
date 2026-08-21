@@ -2,7 +2,6 @@ package com.freshmarket.admin.domain.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -90,12 +89,12 @@ class AdminAuthServiceTest {
         // 로그인에서 발급한 리프레시 토큰은 Redis 공통 저장소에 등록한다.
         // 재발급 시 이 레코드를 기준으로 Rotation(compareAndRotate)을 수행한다.
         verify(refreshTokenRepository).save(
-                eq(result.refreshToken()),
-                eq(admin.getId()),
-                eq("ROLE_ADMIN"),
-                eq(TokenType.ADMIN),
+                result.refreshToken(),
+                admin.getId(),
+                "ROLE_ADMIN",
+                TokenType.ADMIN,
                 false,
-                eq(Duration.ofSeconds(REFRESH_TOKEN_VALIDITY_SECONDS)));
+                Duration.ofSeconds(REFRESH_TOKEN_VALIDITY_SECONDS));
     }
 
     @Test
