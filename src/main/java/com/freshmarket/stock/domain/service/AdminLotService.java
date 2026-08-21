@@ -35,12 +35,15 @@ public class AdminLotService {
     /*
      * 로트를 입고하고 INBOUND 변동 이력을 함께 남긴다.
      * 같은 requestId로 재시도가 오면(API-5-07, AIP-155) 새로 입고하지 않고 최초 결과를 그대로 돌려준다.
+     * requestId는 optionId와 함께 스코프한다 — 클라이언트가 같은 requestId를 다른 옵션에 잘못
+     * 재사용해도 엉뚱한 옵션의 로트를 재시도 응답으로 돌려주지 않는다.
      * 먼저 조회해 일반적인(순차적인) 재시도를 검증 전에 걸러내고, save() 시점의 uk_lot_request_id
      * 위반은 두 요청이 거의 동시에 들어온 경합 상황을 잡는 안전망이다.
      */
     @Transactional
     public AdminLotResponse register(Long productId, Long optionId, AdminLotCreateRequest request) {
-        Optional<StockLot> existingLot = stockLotRepository.findByRequestId(request.requestId());
+        Optional<StockLot> existingLot = stockLotRepository.findByRequestIdAndProductOptionId(
+                request.requestId(), optionId);
         if (existingLot.isPresent()) {
             return AdminLotResponse.of(existingLot.get());
         }
@@ -55,7 +58,7 @@ public class AdminLotService {
             stockLotRepository.save(stockLot);
         } catch (DataIntegrityViolationException e) {
             if (isConstraintViolation(e, "uk_lot_request_id")) {
-                return AdminLotResponse.of(findByRequestIdOrThrow(request.requestId()));
+                return AdminLotResponse.of(findByRequestIdOrThrow(request.requestId(), optionId));
             }
             /*
              * validateOptionExists()로 이미 확인했지만, 그 직후 옵션이 삭제되는 경합이면 fk_lot_option
@@ -67,7 +70,7 @@ public class AdminLotService {
             }
             throw e;
         } catch (PessimisticLockingFailureException e) {
-            return responseOfInProgressRetry(request.requestId(), e);
+            return responseOfInProgressRetry(request.requestId(), optionId, e);
         }
 
         StockMovement movement = StockMovement.inbound(stockLot.getId(), request.initialQty());
@@ -76,9 +79,14 @@ public class AdminLotService {
         return AdminLotResponse.of(stockLot);
     }
 
-    // save() 시점에 uk_lot_request_id 위반이 났다면, 동시 재시도가 먼저 커밋을 마친 것이라 반드시 존재한다
-    private StockLot findByRequestIdOrThrow(String requestId) {
-        return stockLotRepository.findByRequestId(requestId)
+    /*
+     * save() 시점에 uk_lot_request_id 위반이 났다면, 동시 재시도가 먼저 커밋을 마친 것이라 같은
+     * (requestId, optionId) 조합이 반드시 존재한다. optionId가 다른데도 requestId가 겹쳤다면
+     * 클라이언트가 같은 requestId를 서로 다른 옵션에 재사용한 것이라 여기 재조회로 잡히지 않고
+     * 예외가 그대로 던져진다 — 잘못된 옵션의 로트를 성공 응답으로 돌려주는 것보다 낫다.
+     */
+    private StockLot findByRequestIdOrThrow(String requestId, Long optionId) {
+        return stockLotRepository.findByRequestIdAndProductOptionId(requestId, optionId)
                 .orElseThrow(() -> new IllegalStateException(
                         "request_id 유니크 위반 직후 재조회에 실패했다: " + requestId));
     }
@@ -90,8 +98,9 @@ public class AdminLotService {
      * 재시도를 안내한다(자체 재시도 루프는 넣지 않는다 — flush 실패 후 계속 쓰면 영속성 컨텍스트가
      * 불안정해질 수 있어, 일어나지도 않을 경합을 막으려 위험을 감수할 이유가 없다).
      */
-    private AdminLotResponse responseOfInProgressRetry(String requestId, PessimisticLockingFailureException cause) {
-        return stockLotRepository.findByRequestId(requestId)
+    private AdminLotResponse responseOfInProgressRetry(String requestId, Long optionId,
+            PessimisticLockingFailureException cause) {
+        return stockLotRepository.findByRequestIdAndProductOptionId(requestId, optionId)
                 .map(AdminLotResponse::of)
                 .orElseThrow(() -> new StockException(StockErrorCode.REGISTRATION_IN_PROGRESS, cause));
     }

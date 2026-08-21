@@ -85,7 +85,7 @@ class AdminLotServiceTest {
         StockLot existing = StockLot.register("req-1", 31L, LocalDate.of(2026, 8, 17),
                 LocalDate.of(2026, 8, 31), 200);
         ReflectionTestUtils.setField(existing, "id", 77L);
-        when(stockLotRepository.findByRequestId("req-1")).thenReturn(Optional.of(existing));
+        when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 31L)).thenReturn(Optional.of(existing));
         AdminLotCreateRequest request = new AdminLotCreateRequest(
                 "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
 
@@ -99,13 +99,31 @@ class AdminLotServiceTest {
     }
 
     @Test
+    void 다른_옵션에_재사용된_요청_식별자는_재시도로_보지_않고_새로_등록한다() {
+        // given — requestId "req-1"은 옵션 31에 이미 쓰였지만, 이번 요청은 옵션 45다.
+        // (productId, optionId) 조합까지 봐야 엉뚱한 옵션의 로트를 재시도 응답으로 잘못 돌려주지 않는다.
+        when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 45L)).thenReturn(Optional.empty());
+        when(productApi.existsOption(12L, 45L)).thenReturn(true);
+        stubSaveAssignsId();
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when
+        AdminLotResponse result = adminLotService.register(12L, 45L, request);
+
+        // then
+        assertThat(result.productOptionId()).isEqualTo(45L);
+        verify(stockLotRepository).save(any());
+    }
+
+    @Test
     void 저장_중_요청_식별자가_동시에_중복되면_기존_로트를_반환한다() {
         // given — 사전 조회 시점엔 없었지만, save() 직전에 동시 재시도가 먼저 커밋을 마친 경합 상황
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
         StockLot existing = StockLot.register("req-1", 31L, LocalDate.of(2026, 8, 17),
                 LocalDate.of(2026, 8, 31), 200);
         ReflectionTestUtils.setField(existing, "id", 77L);
-        when(stockLotRepository.findByRequestId("req-1"))
+        when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 31L))
                 .thenReturn(Optional.empty(), Optional.of(existing));
         when(stockLotRepository.save(any())).thenThrow(new DataIntegrityViolationException(
                 "Duplicate entry 'req-1' for key 'stock_lot.uk_lot_request_id'"));
@@ -125,7 +143,7 @@ class AdminLotServiceTest {
         // given — 유니크 위반이 났다는 건 그 순간 동시 재시도가 커밋을 마쳤다는 뜻이라 재조회는 항상 있어야 한다.
         // 이 방어 분기(있을 수 없는 상황)의 커버리지를 위한 케이스
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
-        when(stockLotRepository.findByRequestId("req-1")).thenReturn(Optional.empty());
+        when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 31L)).thenReturn(Optional.empty());
         when(stockLotRepository.save(any())).thenThrow(new DataIntegrityViolationException(
                 "Duplicate entry 'req-1' for key 'stock_lot.uk_lot_request_id'"));
         AdminLotCreateRequest request = new AdminLotCreateRequest(
@@ -143,7 +161,7 @@ class AdminLotServiceTest {
         StockLot existing = StockLot.register("req-1", 31L, LocalDate.of(2026, 8, 17),
                 LocalDate.of(2026, 8, 31), 200);
         ReflectionTestUtils.setField(existing, "id", 77L);
-        when(stockLotRepository.findByRequestId("req-1"))
+        when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 31L))
                 .thenReturn(Optional.empty(), Optional.of(existing));
         when(stockLotRepository.save(any())).thenThrow(new CannotAcquireLockException("Lock wait timeout exceeded"));
         AdminLotCreateRequest request = new AdminLotCreateRequest(
@@ -161,7 +179,7 @@ class AdminLotServiceTest {
     void 락_대기_타임아웃_후_재조회에서도_못_찾으면_처리중_오류를_던진다() {
         // given — 첫 요청이 타임아웃 안에도 여전히 처리 중인 상황(비정상적으로 느린 경우)
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
-        when(stockLotRepository.findByRequestId("req-1")).thenReturn(Optional.empty());
+        when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 31L)).thenReturn(Optional.empty());
         when(stockLotRepository.save(any())).thenThrow(new CannotAcquireLockException("Lock wait timeout exceeded"));
         AdminLotCreateRequest request = new AdminLotCreateRequest(
                 "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
