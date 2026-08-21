@@ -53,6 +53,23 @@ class SecurityAuthorizationIntegrationTest {
      * "인증을 요구받지 않는다" 만 확인한다.
      */
     @Test
+    void 상품_상세는_비로그인도_연다() throws Exception {
+        // 없는 상품이라 404 지만, 401 이 아니라는 것이 확인 대상이다
+        mockMvc.perform(get("/v1/products/999999"))
+                .andExpect(status().isNotFound());
+    }
+
+    /*
+     * 콜론 커스텀 메서드라 /v1/products/** 패턴에 걸리지 않는다.
+     * 체인의 securityMatcher 가 이 형태를 따로 잡지 않으면 조용히 401 이 된다.
+     */
+    @Test
+    void 상품_검색은_비로그인도_연다() throws Exception {
+        mockMvc.perform(get("/v1/products:search").param("query", "감귤"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void 로그인_시작은_인증을_요구하지_않는다() throws Exception {
         mockMvc.perform(get("/v1/auth/kakao/authorize"))
                 .andExpect(status().is(not(HttpServletResponse.SC_UNAUTHORIZED)));

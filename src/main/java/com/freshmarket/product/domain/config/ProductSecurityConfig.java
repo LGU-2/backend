@@ -24,10 +24,14 @@ class ProductSecurityConfig {
     SecurityFilterChain productSecurityFilterChain(HttpSecurity http, ApiSecurityDefaults defaults)
             throws Exception {
         return defaults.apply(http)
-                .securityMatcher("/v1/products", "/v1/products/**")
+                /*
+                 * 검색은 콜론 커스텀 메서드(AIP-136)라 /v1/products/** 에 걸리지 않는다.
+                 * 콜론 뒤는 경로 구분자가 아니어서 별도 패턴으로 적어야 한다.
+                 */
+                .securityMatcher("/v1/products", "/v1/products/**", "/v1/products:*")
                 .authorizeHttpRequests(auth -> auth
-                        // 상품 목록과 상세는 비로그인도 본다
-                        .requestMatchers(GET, "/v1/products", "/v1/products/**").permitAll()
+                        // 목록, 상세, 검색은 비로그인도 본다
+                        .requestMatchers(GET, "/v1/products", "/v1/products/**", "/v1/products:*").permitAll()
 
                         .anyRequest().authenticated())
                 .build();
