@@ -13,6 +13,9 @@ import com.freshmarket.cart.domain.repository.CartRepository;
 import com.freshmarket.member.MemberRegisteredEvent;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.freshmarket.product.ProductApi;
 import com.freshmarket.product.ProductOptionInfo;
@@ -39,9 +42,15 @@ public class CartService {
 
     public CartResponse getCart(Long memberId) {
         Cart cart = findCart(memberId);
-        List<CartItemResponse> items = cartItemRepository.findAllByCartIdOrderByCreatedAtDesc(cart.getId())
+        List<CartItem> cartItems = cartItemRepository.findAllByCartIdOrderByCreatedAtDesc(cart.getId());
+        Map<Long, ProductOptionInfo> optionsById = productApi.findOptionInfos(cartItems.stream()
+                        .map(CartItem::getProductOptionId)
+                        .distinct()
+                        .toList())
                 .stream()
-                .map(this::toResponse)
+                .collect(Collectors.toMap(ProductOptionInfo::productOptionId, Function.identity()));
+        List<CartItemResponse> items = cartItems.stream()
+                .map(item -> CartItemResponse.from(item, findOptionInfo(optionsById, item.getProductOptionId())))
                 .toList();
         return CartResponse.from(cart, items);
     }
@@ -100,5 +109,13 @@ public class CartService {
     private ProductOptionInfo findOptionInfo(Long productOptionId) {
         return productApi.findOptionInfo(productOptionId)
                 .orElseThrow(() -> new CartException(CartErrorCode.PRODUCT_OPTION_NOT_PURCHASABLE));
+    }
+
+    private ProductOptionInfo findOptionInfo(Map<Long, ProductOptionInfo> optionsById, Long productOptionId) {
+        ProductOptionInfo optionInfo = optionsById.get(productOptionId);
+        if (optionInfo == null) {
+            throw new CartException(CartErrorCode.PRODUCT_OPTION_NOT_PURCHASABLE);
+        }
+        return optionInfo;
     }
 }

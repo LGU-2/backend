@@ -3,6 +3,8 @@ package com.freshmarket.cart.domain.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,8 +66,8 @@ class CartServiceTest {
         CartItem second = item(10L, 12L, 3, 101L);
         when(cartRepository.findByMemberId(1L)).thenReturn(Optional.of(cart));
         when(cartItemRepository.findAllByCartIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(first, second));
-        when(productApi.findOptionInfo(11L)).thenReturn(Optional.of(PURCHASABLE_OPTION));
-        when(productApi.findOptionInfo(12L)).thenReturn(Optional.of(
+        when(productApi.findOptionInfos(List.of(11L, 12L))).thenReturn(List.of(
+                PURCHASABLE_OPTION,
                 new ProductOptionInfo(12L, "사과", "2kg", 15000, true)));
 
         CartResponse result = sut.getCart(1L);
@@ -73,6 +75,8 @@ class CartServiceTest {
         assertThat(result.cartId()).isEqualTo(10L);
         assertThat(result.totalQty()).isEqualTo(5);
         assertThat(result.items()).extracting("productName").containsExactly("감귤", "사과");
+        verify(productApi).findOptionInfos(List.of(11L, 12L));
+        verify(productApi, never()).findOptionInfo(anyLong());
     }
 
     @Test
