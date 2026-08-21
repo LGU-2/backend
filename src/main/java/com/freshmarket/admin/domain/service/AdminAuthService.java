@@ -9,12 +9,14 @@ import com.freshmarket.admin.domain.exception.AdminException;
 import com.freshmarket.admin.domain.repository.AdminRepository;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
 import com.freshmarket.common.auth.jwt.OpaqueTokenGenerator;
-import com.freshmarket.common.auth.jwt.TokenHasher;
+import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
 import com.freshmarket.common.auth.jwt.TokenType;
-import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+
+import com.freshmarket.common.logging.PiiMasker;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -30,9 +32,10 @@ import org.springframework.transaction.annotation.Transactional;
  * common.auth.jwt.JwtTokenProvider를 그대로 쓴다 — admin이 따로 두던 common.security.JwtTokenProvider와
  * 거의 동일한 구현을 독립적으로 만들었던 것이라, 중복을 없애고 이쪽으로 통합했다.
  * 액세스 토큰 유효기간도 이제 JwtTokenProvider가 갖고 있어(jwt.access-token-validity-ms) 별도 파라미터가 필요 없다.
- * 리프레시 토큰은 admin은 여전히 DB 컬럼(refresh_token_hash/refresh_token_expires_at)에 저장한다 —
- * member의 Redis 회전 방식과는 별개 정책으로 유지한다 (이번 병합 범위 밖).
+ * 리프레시 토큰은 member와 같은 공통 RefreshTokenRepository(Redis)에 저장한다.
+ * 로그인은 최초 발급만 담당하고, Rotation은 별도 재발급 API에서 compareAndRotate()로 처리한다.
  */
+@Slf4j
 @Service
 @Transactional(timeout = 5)
 public class AdminAuthService {
@@ -45,7 +48,7 @@ public class AdminAuthService {
     private final AdminRepository adminRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final Clock clock;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final long refreshTokenValiditySeconds;
     private final String dummyPasswordHash;
 
@@ -53,12 +56,12 @@ public class AdminAuthService {
             AdminRepository adminRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
-            Clock clock,
+            RefreshTokenRepository refreshTokenRepository,
             @Value("${admin.refresh-token-validity-seconds}") long refreshTokenValiditySeconds) {
         this.adminRepository = adminRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
-        this.clock = clock;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.refreshTokenValiditySeconds = refreshTokenValiditySeconds;
         // 같은 인코더로 미리 만들어 둬야 진짜 비밀번호 검증과 연산 비용(코스트 팩터)이 완전히 같다
         this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD_SOURCE);
@@ -80,22 +83,32 @@ public class AdminAuthService {
         String hashToCompare = found.map(Admin::getPasswordHash).orElse(dummyPasswordHash);
         boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCompare);
 
-        if (found.isEmpty() || !passwordMatches) { throw new AdminException(AdminErrorCode.LOGIN_FAILED); }
+        if (found.isEmpty() || !passwordMatches) {
+            log.warn("event=ADMIN_LOGIN success=false loginId={}", maskLoginId(request.loginId()));
+            throw new AdminException(AdminErrorCode.LOGIN_FAILED);
+        }
 
         /*
          * 비활성 계정도 외부에는 일반 로그인 실패와 같은 응답으로 처리한다 (SEC-6-04).
          * 아이디/비밀번호가 맞더라도 계정 상태를 별도 코드로 알려주면 공격자가 계정 상태를 추측할 수 있으므로 LOGIN_FAILED 로 통일한다.
          */
         Admin admin = found.get();
-        if (!admin.isActive()) { throw new AdminException(AdminErrorCode.LOGIN_FAILED); }
+        if (!admin.isActive()) {
+            log.warn("event=ADMIN_LOGIN success=false loginId={}", maskLoginId(request.loginId()));
+            throw new AdminException(AdminErrorCode.LOGIN_FAILED);
+        }
 
         String accessToken = jwtTokenProvider.createAccessToken(
                 admin.getId(), TokenType.ADMIN, admin.getRole().toAuthority());
 
         String rawRefreshToken = OpaqueTokenGenerator.generate();
-        admin.issueRefreshToken(
-                TokenHasher.sha256(rawRefreshToken),
-                LocalDateTime.now(clock).plusSeconds(refreshTokenValiditySeconds));
+        refreshTokenRepository.save(
+                rawRefreshToken,
+                admin.getId(),
+                admin.getRole().toAuthority(),
+                TokenType.ADMIN,
+                false,
+                Duration.ofSeconds(refreshTokenValiditySeconds));
 
         AdminLoginResponse response = new AdminLoginResponse(
                 accessToken,
@@ -104,7 +117,14 @@ public class AdminAuthService {
                 new AdminLoginResponse.AdminSummary(
                         admin.getLoginId(), admin.getName(), admin.getRole()));
 
+        log.info("event=ADMIN_LOGIN success=true adminId={} loginId={}",
+                admin.getId(), maskLoginId(admin.getLoginId()));
+
         // refreshToken 원문은 응답 본문이 아니라 컨트롤러가 만드는 HttpOnly 쿠키로만 나간다
         return new AdminLoginResult(response, rawRefreshToken, refreshTokenValiditySeconds);
+    }
+
+    private String maskLoginId(String loginId) {
+        return PiiMasker.maskGeneric(loginId, 2, 1);
     }
 }

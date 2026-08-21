@@ -20,8 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /*
- * 리소스를 tokens 로 둔다 (auth.md). 서버가 실제로 보관하는 것이 리프레시 토큰(해시)이지,
- * "세션"이라는 실체는 DB 어디에도 없다 — sessions 로 모델링했던 이전 설계를 auth.md 기준으로 되돌린다.
+ * 리소스를 tokens 로 둔다 (auth.md).
+ * 서버가 실제로 보관하는 것은 Redis의 리프레시 토큰 상태이며, "세션"이라는 별도 도메인 실체를 만들지 않는다.
  *
  * :refresh, DELETE(로그아웃), PUT .../password 는 이 PR 범위가 아니다 (별도 PR).
  */
@@ -53,7 +53,6 @@ class AdminAuthController {
     )
     @ApiResponse(responseCode = "201", description = "발급 성공")
     @ApiResponse(responseCode = "401", description = "아이디 또는 비밀번호 불일치. 사유를 구분해 알리지 않는다 (ADMIN-001)")
-    @ApiResponse(responseCode = "403", description = "비활성 계정 (ADMIN-002)")
     @PostMapping
     ResponseEntity<ResponseEnvelope<AdminLoginResponse>> login(
             @Valid @RequestBody AdminLoginRequest request) {

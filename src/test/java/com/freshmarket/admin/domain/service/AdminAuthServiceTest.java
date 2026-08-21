@@ -2,7 +2,9 @@ package com.freshmarket.admin.domain.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.freshmarket.admin.domain.dto.AdminLoginRequest;
@@ -14,8 +16,11 @@ import com.freshmarket.admin.domain.exception.AdminErrorCode;
 import com.freshmarket.admin.domain.exception.AdminException;
 import com.freshmarket.admin.domain.repository.AdminRepository;
 import com.freshmarket.common.auth.jwt.JwtTokenProvider;
-import java.time.Clock;
+import java.time.Duration;
 import java.util.Optional;
+
+import com.freshmarket.common.auth.jwt.RefreshTokenRepository;
+import com.freshmarket.common.auth.jwt.TokenType;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,12 +43,13 @@ class AdminAuthServiceTest {
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(
             TEST_JWT_SECRET, ACCESS_TOKEN_VALIDITY_MS, REFRESH_TOKEN_VALIDITY_SECONDS * 1000);
+    private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
 
     private final AdminAuthService adminAuthService = new AdminAuthService(
             adminRepository,
             passwordEncoder,
             jwtTokenProvider,
-            Clock.systemDefaultZone(),
+            refreshTokenRepository,
             REFRESH_TOKEN_VALIDITY_SECONDS
     );
 
@@ -81,10 +87,15 @@ class AdminAuthServiceTest {
         assertThat(result.refreshToken()).isNotBlank();
         assertThat(result.refreshTokenValiditySeconds()).isEqualTo(86400L);
 
-        // 로그인 성공 시 리프레시 토큰이 엔티티에도 반영되어야
-        // 다음 로그인에서 이전 토큰이 무효가 된다.
-        assertThat(admin.getRefreshTokenHash()).isNotNull();
-        assertThat(admin.getRefreshTokenExpiresAt()).isNotNull();
+        // 로그인에서 발급한 리프레시 토큰은 Redis 공통 저장소에 등록한다.
+        // 재발급 시 이 레코드를 기준으로 Rotation(compareAndRotate)을 수행한다.
+        verify(refreshTokenRepository).save(
+                eq(result.refreshToken()),
+                eq(admin.getId()),
+                eq("ROLE_ADMIN"),
+                eq(TokenType.ADMIN),
+                eq(false),
+                eq(Duration.ofSeconds(REFRESH_TOKEN_VALIDITY_SECONDS)));
     }
 
     @Test
