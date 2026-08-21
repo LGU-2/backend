@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,14 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
             "/notifications/stream" // SSE 등 스트리밍 응답은 캐싱하면 안 됨
     );
 
+    // (OBS-3-05) 이 목록에 없는 Content-Type은 캐싱/로깅 대상에서 뺀다. 텍스트 계열이 아닌
+    // 요청(이미지 업로드 등 multipart/octet-stream)까지 무조건 ContentCachingRequestWrapper로
+    // 감싸면, 4xx 응답에서 바이너리를 UTF-8로 억지로 디코드해 깨진 문자를 그대로 로그에 남기게
+    // 된다 — 정상 응답이라 실제로는 안 남기는 경우조차 캐싱 자체는 매 요청 일어나는 것도 낭비다.
+    private static final List<String> LOGGABLE_CONTENT_TYPE_PREFIXES = List.of(
+            "application/json", "text/", "application/x-www-form-urlencoded"
+    );
+
     // "password":"1234", "refreshToken": "eyJ..." 같은 키-값 쌍의 값을 통째로 마스킹.
     // phone/address류(recipient/zipcode/roadAddress/detailAddress)도 자유 형식 텍스트라 이메일처럼
     // 부분 마스킹하기 애매해서 password/token과 똑같이 통째로 REDACTED 처리한다.
@@ -64,6 +73,15 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
                     + "|phone|address|recipient|zipcode|roadAddress|detailAddress|name"
                     + "|authorizationCode|state|nonce|code)\"\\s*:\\s*\")([^\"]*)(\")");
 
+    // (OBS-3-04/SEC-4-02) application/x-www-form-urlencoded 바디("password=1234&token=eyJ...")는
+    // 위 JSON 전용 패턴("key":"value")에 안 걸려서 그대로 새어나갔다 — 로그인 폼 등 form-urlencoded로
+    // 오는 요청의 민감 키도 동일한 키 목록으로 잡아서 "key=" 뒤 값(다음 "&" 전까지) 전체를 REDACTED 처리한다.
+    // SENSITIVE_JSON_FIELD와 같은 키 목록을 쓴다 — 인코딩만 다를 뿐 같은 값이 새면 위험도가 같다.
+    private static final Pattern SENSITIVE_FORM_FIELD = Pattern.compile(
+            "(?i)((?:^|&)(?:password|accessToken|refreshToken|token|secret|authorization|idToken|clientSecret"
+                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress|name"
+                    + "|authorizationCode|state|nonce|code)=)([^&]*)");
+
     // 위 키-값 패턴에 안 걸린 이메일/전화번호도 한 번 더 잡아서 부분 마스킹(키 이름이 다르거나
     // 문자열 안에 섞여 나오는 경우 대비 catch-all).
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
@@ -74,7 +92,15 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return EXCLUDED_PATH_PREFIXES.stream().anyMatch(uri::startsWith);
+        if (EXCLUDED_PATH_PREFIXES.stream().anyMatch(uri::startsWith)) {
+            return true;
+        }
+        String contentType = request.getContentType();
+        // GET/DELETE처럼 바디가 없는 요청은 contentType이 null이다 — 감쌀 필요는 있지만(응답
+        // 바디는 여전히 로깅 대상) 바이너리 위험이 없어 그대로 통과시킨다. 값이 있는데 텍스트
+        // 계열이 아니면(이미지 업로드 등) 이 필터를 건너뛴다.
+        return contentType != null
+                && LOGGABLE_CONTENT_TYPE_PREFIXES.stream().noneMatch(contentType::startsWith);
     }
 
     @Override
@@ -147,12 +173,16 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
         // 오해를 방지), group(4)=닫는 따옴표.
         String masked = SENSITIVE_JSON_FIELD.matcher(body).replaceAll(
                 mr -> mr.group(1) + PiiMasker.redact(mr.group(3)) + mr.group(4));
+        // group(1)="&key=" 또는 "key="(구분자+키+등호), group(2)=값. JSON 패턴과 별개로 폼 인코딩
+        // 바디에도 동일하게 적용 — 두 패턴은 문법이 달라 서로 겹쳐 매치되지 않는다.
+        masked = SENSITIVE_FORM_FIELD.matcher(masked).replaceAll(
+                mr -> mr.group(1) + PiiMasker.redact(mr.group(2)));
         masked = maskPattern(masked, EMAIL_PATTERN, PiiMasker::maskEmail);
         masked = maskPattern(masked, PHONE_PATTERN, PiiMasker::maskPhone);
         return masked;
     }
 
-    private String maskPattern(String body, Pattern pattern, java.util.function.Function<String, String> masker) {
+    private String maskPattern(String body, Pattern pattern, UnaryOperator<String> masker) {
         Matcher matcher = pattern.matcher(body);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
