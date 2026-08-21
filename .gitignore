@@ -47,3 +47,6 @@ application-local.properties
 *.p12
 *.jks
 *.keystore
+
+
+.gradle-user/
