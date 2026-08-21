@@ -3,6 +3,7 @@ package com.freshmarket.member.domain.service;
 import com.freshmarket.common.logging.PiiMasker;
 import com.freshmarket.member.domain.entity.Address;
 import com.freshmarket.member.domain.repository.AddressRepository;
+import com.freshmarket.member.domain.repository.MemberRepository;
 import com.freshmarket.member.domain.dto.AddressCreateRequest;
 import com.freshmarket.member.domain.dto.AddressUpdateRequest;
 import com.freshmarket.member.domain.exception.MemberErrorCode;
@@ -27,6 +28,7 @@ public class AddressService {
     private static final int MAX_ADDRESSES_PER_MEMBER = 10;
 
     private final AddressRepository addressRepository;
+    private final MemberRepository memberRepository;
 
     // (2026-08-20, API-3-04/API-5-01) 컨트롤러 응답을 PageResponse로 감싸기 위해 Pageable을
     // 받게 바꿨다 — delete()가 쓰는 non-paged findByMemberIdOrderedByDefaultFirst(memberId)는
@@ -36,8 +38,15 @@ public class AddressService {
         return addressRepository.findByMemberIdOrderedByDefaultFirst(memberId, pageable);
     }
 
+    // (2026-08-21, DI-2-01/DI-3-06) countByMemberId() 후 조건부로 save()하는 방식은 두 요청이
+    // 동시에 들어오면 둘 다 상한 미만으로 카운트를 읽고 둘 다 통과해 상한을 넘길 수 있었다.
+    // member 행에 비관적 락(findByIdForUpdate)을 먼저 걸어서, 같은 회원의 두 번째 요청은 첫 번째가
+    // 끝날 때까지 대기하게 만든다 — "카운트 확인 → 저장"이 사실상 한 회원 기준으로 직렬화된다.
     @Transactional
     public Address create(Long memberId, AddressCreateRequest request) {
+        memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+
         long existingCount = addressRepository.countByMemberId(memberId);
         if (existingCount >= MAX_ADDRESSES_PER_MEMBER) {
             throw new MemberException(MemberErrorCode.ADDRESS_LIMIT_EXCEEDED);

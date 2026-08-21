@@ -1,9 +1,11 @@
 package com.freshmarket.member.domain.repository;
 
 import com.freshmarket.member.domain.entity.Member;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +15,17 @@ import org.springframework.stereotype.Repository;
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
     Optional<Member> findByActiveProviderKey(String activeProviderKey);
+
+    // (DI-2-01/DI-3-06) AddressService.create()가 "배송지 개수 세기 → 상한 미만이면 저장"을 락 없이
+    // 하면, 같은 회원이 동시에 여러 요청을 보낼 때 둘 다 count를 상한 미만으로 읽고 둘 다 저장해
+    // MAX_ADDRESSES_PER_MEMBER를 넘길 수 있다. address 테이블은 회원당 행이 0개일 수도 있어
+    // CategoryRepository.findByIdForUpdate()처럼 "대상 행 자체에 락을 건다"는 못 쓴다 — 대신 항상
+    // 존재가 보장되는 member 행을 뮤텍스로 빌려 쓴다. 같은 회원의 두 번째 create() 트랜잭션은 이
+    // 락을 잡으려다 첫 번째가 커밋(또는 롤백)할 때까지 대기하므로, count 확인과 저장이 사실상
+    // 원자적으로 처리된다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Member m where m.id = :id")
+    Optional<Member> findByIdForUpdate(@Param("id") Long id);
 
     @Modifying
     @Query("update Member m set m.refreshTokenHash = :hash, m.refreshTokenExpiresAt = :expiresAt where m.id = :id")
