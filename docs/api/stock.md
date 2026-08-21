@@ -31,7 +31,7 @@ POST /v1/admin/products/{productId}/options/{optionId}/lots
 | `requestId` | O | 클라이언트가 생성하는 요청 식별자. 100자 이하 |
 | `receivedDate` | | 기본 오늘 |
 | `expiryDate` | O | **`receivedDate` 이상이어야 한다** |
-| `initialQty` | O | 1 이상 |
+| `initialQty` | O | 1 이상 100,000 이하 |
 
 입고하면 `available_qty` 가 `initialQty` 로 시작하고 **`INBOUND` 변동 이력이 함께 기록된다.**
 **같은 `requestId`로 재시도하면 새로 입고하지 않고 최초 입고 결과를 그대로 돌려준다** (`API-5-07`, `AIP-155`).
