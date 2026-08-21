@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record ProductOptionResponse(
         @Schema(description = "옵션 ID", example = "31") Long productOptionId,
         @Schema(description = "옵션명", example = "1kg") String name,
-        @Schema(description = "옵션 판매가", example = "12900") int price,
+        @Schema(description = "옵션 판매가(원)", example = "12900") int priceKrw,
         @Schema(description = "옵션 판매 상태", example = "ON_SALE") SaleStatus saleStatus,
         @Schema(description = "품절 여부", example = "false") boolean soldOut
 ) {

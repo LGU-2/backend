@@ -114,7 +114,7 @@ class ProductApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items", hasSize(1)))
                 .andExpect(jsonPath("$.data.items[0].name").value("감귤"))
-                .andExpect(jsonPath("$.data.items[0].minPrice").value(12900));
+                .andExpect(jsonPath("$.data.items[0].minPriceKrw").value(12900));
     }
 
     @Test
@@ -140,12 +140,12 @@ class ProductApiIntegrationTest {
 
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
-                        .param("minPrice", "40000")
-                        .param("maxPrice", "60000"))
+                        .param("minPriceKrw", "40000")
+                        .param("maxPriceKrw", "60000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items", hasSize(1)))
                 .andExpect(jsonPath("$.data.items[0].name").value("감귤"))
-                .andExpect(jsonPath("$.data.items[0].minPrice").value(48000));
+                .andExpect(jsonPath("$.data.items[0].minPriceKrw").value(48000));
     }
 
     @Test
@@ -155,8 +155,8 @@ class ProductApiIntegrationTest {
 
         mockMvc.perform(get("/v1/products")
                         .param("categoryId", String.valueOf(categoryId))
-                        .param("minPrice", "40000")
-                        .param("maxPrice", "60000"))
+                        .param("minPriceKrw", "40000")
+                        .param("maxPriceKrw", "60000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items", hasSize(0)));
     }
@@ -256,8 +256,8 @@ class ProductApiIntegrationTest {
     @Test
     void 가격_범위가_뒤집히면_400을_응답한다() throws Exception {
         mockMvc.perform(get("/v1/products")
-                        .param("minPrice", "50000")
-                        .param("maxPrice", "10000"))
+                        .param("minPriceKrw", "50000")
+                        .param("maxPriceKrw", "10000"))
                 .andExpect(status().isBadRequest());
     }
 

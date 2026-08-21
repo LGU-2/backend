@@ -58,8 +58,8 @@ public class ProductQueryRepository {
                 .where(
                         product.deletedAt.isNull(),
                         categoryIdEq(condition.categoryId()),
-                        priceGoe(condition.minPrice()),
-                        priceLoe(condition.maxPrice()),
+                        priceGoe(condition.minPriceKrw()),
+                        priceLoe(condition.maxPriceKrw()),
                         nameContains(condition.query()),
                         createdAtCursorLt(condition))
                 .groupBy(product.id, product.name, category.id, category.name,
@@ -82,13 +82,13 @@ public class ProductQueryRepository {
      * 다를 수 있다. (예: 4만원 이상 필터 시, 1kg=12900원 옵션이 있어도 상품 자체는 노출되고
      * minPrice 는 조건을 만족하는 옵션 중 최저값으로 계산된다)
      */
-    private BooleanExpression priceGoe(Integer minPrice) {
-        return minPrice != null ? productOption.price.goe(minPrice) : null;
+    private BooleanExpression priceGoe(Integer minPriceKrw) {
+        return minPriceKrw != null ? productOption.price.goe(minPriceKrw) : null;
     }
 
     // 가격 상한. 이유는 위와 같다
-    private BooleanExpression priceLoe(Integer maxPrice) {
-        return maxPrice != null ? productOption.price.loe(maxPrice) : null;
+    private BooleanExpression priceLoe(Integer maxPriceKrw) {
+        return maxPriceKrw != null ? productOption.price.loe(maxPriceKrw) : null;
     }
 
     /*

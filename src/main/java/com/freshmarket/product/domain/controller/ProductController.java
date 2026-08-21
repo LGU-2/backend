@@ -11,8 +11,9 @@ import com.freshmarket.product.domain.dto.ProductSortType;
 import com.freshmarket.product.domain.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -35,15 +36,15 @@ class ProductController {
                     + "커서 기반으로 페이지네이션한다.")
     @GetMapping("/v1/products")
     public ResponseEntity<ResponseEnvelope<CursorPageResponse<ProductListItem>>> getProducts(
-            @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Integer minPrice,
-            @RequestParam(required = false) Integer maxPrice,
+            @RequestParam(required = false) @Positive Long categoryId,
+            @RequestParam(required = false) @PositiveOrZero Integer minPriceKrw,
+            @RequestParam(required = false) @PositiveOrZero Integer maxPriceKrw,
             @RequestParam(required = false, defaultValue = "CREATED_DESC") ProductSortType sort,
             @RequestParam(required = false) String pageToken,
             @RequestParam(required = false, defaultValue = "20") int pageSize) {
 
-        ProductSearchCondition condition =
-                buildCondition(categoryId, minPrice, maxPrice, null, sort, pageToken, pageSize);
+        ProductSearchCondition condition = buildCondition(
+                categoryId, minPriceKrw, maxPriceKrw, null, sort, pageToken, pageSize);
 
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
     }
@@ -54,15 +55,15 @@ class ProductController {
     @GetMapping("/v1/products:search")
     public ResponseEntity<ResponseEnvelope<CursorPageResponse<ProductListItem>>> searchProducts(
             @RequestParam @NotBlank @Size(max = 100) String query,
-            @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Integer minPrice,
-            @RequestParam(required = false) Integer maxPrice,
+            @RequestParam(required = false) @Positive Long categoryId,
+            @RequestParam(required = false) @PositiveOrZero Integer minPriceKrw,
+            @RequestParam(required = false) @PositiveOrZero Integer maxPriceKrw,
             @RequestParam(required = false, defaultValue = "CREATED_DESC") ProductSortType sort,
             @RequestParam(required = false) String pageToken,
             @RequestParam(required = false, defaultValue = "20") int pageSize) {
 
-        ProductSearchCondition condition =
-                buildCondition(categoryId, minPrice, maxPrice, query, sort, pageToken, pageSize);
+        ProductSearchCondition condition = buildCondition(
+                categoryId, minPriceKrw, maxPriceKrw, query, sort, pageToken, pageSize);
 
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProducts(condition)));
     }
@@ -75,13 +76,11 @@ class ProductController {
         return ResponseEntity.ok(ResponseEnvelope.success(productService.getProductDetail(productId)));
     }
 
-    /*
-     * 목록 조회와 검색이 공유하는 조건 조립 로직 (MNT-3-01).
-     * 둘의 차이는 query 유무 하나뿐이라, 커서 디코딩과 조건 생성을 여기 한 곳에 모은다.
-     */
-    private ProductSearchCondition buildCondition(Long categoryId, Integer minPrice, Integer maxPrice,
+    // 목록 조회와 검색이 공유하는 조건 조립 로직 (MNT-3-01)
+    private ProductSearchCondition buildCondition(Long categoryId, Integer minPriceKrw, Integer maxPriceKrw,
             String query, ProductSortType sort, String pageToken, int pageSize) {
         PageCursor cursor = PageTokens.decode(pageToken);
-        return new ProductSearchCondition(categoryId, minPrice, maxPrice, query, sort, cursor, pageSize);
+        return new ProductSearchCondition(
+                categoryId, minPriceKrw, maxPriceKrw, query, sort, cursor, pageSize);
     }
 }

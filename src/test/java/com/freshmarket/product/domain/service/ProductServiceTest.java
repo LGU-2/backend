@@ -76,7 +76,7 @@ class ProductServiceTest {
         // then
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).name()).isEqualTo("감귤");
-        assertThat(result.items().get(0).minPrice()).isEqualTo(12900);
+        assertThat(result.items().get(0).minPriceKrw()).isEqualTo(12900);
     }
 
     @Test
