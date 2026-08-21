@@ -27,13 +27,13 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * (merge: feat/member-auth와 합치며 추가) JWT 서명·액세스 토큰 발급은 member/admin이 공유하는
  * common.auth.jwt.JwtTokenProvider를 그대로 쓴다 — admin이 따로 두던 common.security.JwtTokenProvider와
- * 거의 동일한 구현을 독립적으로 만들었던 것이라, 중복을 없애고 이쪽으로 통합했다. 액세스 토큰
- * 유효기간도 이제 JwtTokenProvider가 갖고 있어(jwt.access-token-validity-ms) 별도 파라미터가 필요 없다.
+ * 거의 동일한 구현을 독립적으로 만들었던 것이라, 중복을 없애고 이쪽으로 통합했다.
+ * 액세스 토큰 유효기간도 이제 JwtTokenProvider가 갖고 있어(jwt.access-token-validity-ms) 별도 파라미터가 필요 없다.
  * 리프레시 토큰은 admin은 여전히 DB 컬럼(refresh_token_hash/refresh_token_expires_at)에 저장한다 —
  * member의 Redis 회전 방식과는 별개 정책으로 유지한다 (이번 병합 범위 밖).
  */
 @Service
-@Transactional
+@Transactional(timeout = 5)
 public class AdminAuthService {
 
     private static final String TOKEN_TYPE = "Bearer";
