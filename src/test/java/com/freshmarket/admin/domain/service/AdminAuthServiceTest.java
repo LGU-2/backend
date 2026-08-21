@@ -94,7 +94,7 @@ class AdminAuthServiceTest {
                 eq(admin.getId()),
                 eq("ROLE_ADMIN"),
                 eq(TokenType.ADMIN),
-                eq(false),
+                false,
                 eq(Duration.ofSeconds(REFRESH_TOKEN_VALIDITY_SECONDS)));
     }
 
