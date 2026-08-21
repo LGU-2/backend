@@ -14,8 +14,13 @@ import com.freshmarket.admin.domain.exception.AdminErrorCode;
 import com.freshmarket.admin.domain.exception.AdminException;
 import com.freshmarket.admin.domain.repository.AdminRepository;
 import com.freshmarket.common.security.JwtTokenProvider;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Optional;
+import javax.crypto.SecretKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +36,12 @@ class AdminAuthServiceTest {
     private static final String RAW_PASSWORD = "Freahman!2026";
     private static final String TEST_JWT_SECRET =
             "test-only-secret-key-must-be-at-least-32-bytes-long-for-hmac-sha256";
+    /*
+     * JwtTokenProvider 는 아직 파싱 책임이 없다 (common.security.JwtTokenProvider 주석 참고,
+     * 보호된 관리자 API가 생기는 PR에서 추가 예정).
+     * 그래서 발급된 토큰의 클레임을 확인하려면 테스트가 같은 시크릿으로 직접 파싱해야 한다.
+     */
+    private static final SecretKey TEST_KEY = Keys.hmacShaKeyFor(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8));
 
     private final AdminRepository adminRepository = mock(AdminRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -76,6 +87,33 @@ class AdminAuthServiceTest {
         // 다음 로그인에서 이전 토큰이 무효가 된다.
         assertThat(admin.getRefreshTokenHash()).isNotNull();
         assertThat(admin.getRefreshTokenExpiresAt()).isNotNull();
+
+        // JWT의 role 클레임이 Spring Security 권한 포맷("ROLE_ADMIN")으로 담겼는지
+        // 발급된 토큰을 직접 파싱해 확인한다. AdminAuthService 가 admin.getRole().toAuthority()
+        // 대신 name() 으로 되돌아가도("ADMIN"만 남아도) 이 검증이 실패로 잡아낸다.
+        Claims claims = parseClaims(result.response().accessToken());
+        assertThat(claims.get("role", String.class)).isEqualTo("ROLE_ADMIN");
+    }
+
+    @Test
+    void 최고관리자로_로그인하면_토큰의_role_클레임도_최고관리자_포맷이다() {
+        // given
+        Admin admin = AdminFixture.active(
+                "admin.super",
+                passwordEncoder.encode(RAW_PASSWORD),
+                AdminRole.SUPER_ADMIN
+        );
+
+        when(adminRepository.findByLoginId("admin.super")).thenReturn(Optional.of(admin));
+
+        AdminLoginRequest request = new AdminLoginRequest("admin.super", RAW_PASSWORD);
+
+        // when
+        AdminLoginResult result = adminAuthService.login(request);
+
+        // then
+        Claims claims = parseClaims(result.response().accessToken());
+        assertThat(claims.get("role", String.class)).isEqualTo("ROLE_SUPER_ADMIN");
     }
 
     @Test
@@ -167,5 +205,11 @@ class AdminAuthServiceTest {
                 .isInstanceOf(AdminException.class)
                 .extracting(e -> ((AdminException) e).getErrorCode())
                 .isEqualTo(AdminErrorCode.LOGIN_FAILED);
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser().verifyWith(TEST_KEY).build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }
