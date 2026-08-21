@@ -12,6 +12,7 @@ import com.freshmarket.stock.domain.repository.StockMovementRepository;
 import java.time.LocalDate;
 import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +66,8 @@ public class AdminLotService {
                 throw new StockException(StockErrorCode.OPTION_NOT_FOUND, e);
             }
             throw e;
+        } catch (PessimisticLockingFailureException e) {
+            return responseOfInProgressRetry(request.requestId(), e);
         }
 
         StockMovement movement = StockMovement.inbound(stockLot.getId(), request.initialQty());
@@ -78,6 +81,19 @@ public class AdminLotService {
         return stockLotRepository.findByRequestId(requestId)
                 .orElseThrow(() -> new IllegalStateException(
                         "request_id 유니크 위반 직후 재조회에 실패했다: " + requestId));
+    }
+
+    /*
+     * save()가 유니크 위반이 아니라 락 대기 타임아웃(PessimisticLockingFailureException)으로 실패한 경우다.
+     * 동시 재시도가 아직 커밋 전이라 유니크 위반조차 나지 않고 대기하다 시간 초과된 상황이므로, 그 사이
+     * 커밋됐을 수도 있어 한 번 더 조회하고, 그래도 없으면 아직 처리 중이라는 뜻이라 클라이언트에게
+     * 재시도를 안내한다(자체 재시도 루프는 넣지 않는다 — flush 실패 후 계속 쓰면 영속성 컨텍스트가
+     * 불안정해질 수 있어, 일어나지도 않을 경합을 막으려 위험을 감수할 이유가 없다).
+     */
+    private AdminLotResponse responseOfInProgressRetry(String requestId, PessimisticLockingFailureException cause) {
+        return stockLotRepository.findByRequestId(requestId)
+                .map(AdminLotResponse::of)
+                .orElseThrow(() -> new StockException(StockErrorCode.REGISTRATION_IN_PROGRESS, cause));
     }
 
     // optionId가 productId 소속으로 실제 존재하는지 확인한다

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -133,6 +134,42 @@ class AdminLotServiceTest {
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void 락_대기_타임아웃_후_재조회에서_찾으면_기존_로트를_반환한다() {
+        // given — save()가 유니크 위반이 아니라 락 대기 타임아웃으로 실패했지만, 그 사이 첫 요청이 커밋을 마친 상황
+        when(productApi.existsOption(12L, 31L)).thenReturn(true);
+        StockLot existing = StockLot.register("req-1", 31L, LocalDate.of(2026, 8, 17),
+                LocalDate.of(2026, 8, 31), 200);
+        ReflectionTestUtils.setField(existing, "id", 77L);
+        when(stockLotRepository.findByRequestId("req-1"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+        when(stockLotRepository.save(any())).thenThrow(new CannotAcquireLockException("Lock wait timeout exceeded"));
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when
+        AdminLotResponse result = adminLotService.register(12L, 31L, request);
+
+        // then
+        assertThat(result.stockLotId()).isEqualTo(77L);
+        verify(stockMovementRepository, never()).save(any());
+    }
+
+    @Test
+    void 락_대기_타임아웃_후_재조회에서도_못_찾으면_처리중_오류를_던진다() {
+        // given — 첫 요청이 타임아웃 안에도 여전히 처리 중인 상황(비정상적으로 느린 경우)
+        when(productApi.existsOption(12L, 31L)).thenReturn(true);
+        when(stockLotRepository.findByRequestId("req-1")).thenReturn(Optional.empty());
+        when(stockLotRepository.save(any())).thenThrow(new CannotAcquireLockException("Lock wait timeout exceeded"));
+        AdminLotCreateRequest request = new AdminLotCreateRequest(
+                "req-1", LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 31), 200);
+
+        // when, then
+        assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
+                .isInstanceOf(StockException.class)
+                .hasFieldOrPropertyWithValue("errorCode", StockErrorCode.REGISTRATION_IN_PROGRESS);
     }
 
     @Test
