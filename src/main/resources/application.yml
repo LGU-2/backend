@@ -2,12 +2,6 @@ spring:
   application:
     name: freshmarket
 
-  # 로컬에서만 쓰는 시크릿(카카오 키, JWT_SECRET 등)은 프로젝트 루트의 application-local.yml에
-  # 적는다. optional: 이라 파일이 없으면(팀원 전원의 기본 상태) 조용히 넘어간다 — 켜고 끄는
-  # 프로필 절차가 따로 없다. [주의] file: 접두사는 클래스패스가 아니라 실행 시점 작업 디렉터리
-  # 기준 경로다 — 그래서 이 파일은 반드시 프로젝트 루트에 있어야 한다(resources 안이 아니다).
-  config:
-
   profiles:
     # 아무도 프로필을 지정하지 않으면 local 로 본다. 배포와 테스트는 프로필을 직접 주므로 이 값이 덮인다
     default: local
@@ -50,32 +44,6 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-
-  # 로그인 state/nonce(KakaoLoginStateRepository), access token valid-after 커트라인,
-  # refresh token rotation(CAS Lua 스크립트)이 전부 Redis에 있다.
-  data:
-    redis:
-      host: "${REDIS_HOST:localhost}"
-      port: "${REDIS_PORT:6379}"
-
-  security:
-    oauth2:
-      client:
-        registration:
-          kakao:
-            client-id: "${KAKAO_CLIENT_ID}"
-            client-secret: "${KAKAO_CLIENT_SECRET}"
-            authorization-grant-type: authorization_code
-            # (2026-08-18 12:00) docs/api/auth.md 기준 프론트-콜백형으로 바뀌면서 백엔드가 아니라
-            # 프론트 주소를 가리킨다 — 카카오가 이 주소로 302 리다이렉트하면 프론트가 그 code를 받아
-            # POST /v1/auth/tokens로 넘긴다.
-            redirect-uri: "${KAKAO_REDIRECT_URI:http://localhost:5173/oauth/callback}"
-            scope: openid
-        provider:
-          kakao:
-            issuer-uri: https://kauth.kakao.com
-            user-info-uri: https://kapi.kakao.com/v1/oidc/userinfo
-            user-name-attribute: sub
 
   lifecycle:
     # 종료 타임아웃 계층의 안쪽에서 셋째다. compose 45초, systemd 60초가 바깥이다
@@ -127,24 +95,3 @@ management:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
-
-app:
-  # (2026-08-18 12:00) 프론트 콜백형으로 바뀌면서 로그인 성공/실패 시 백엔드가 프론트로 리다이렉트하는
-  # 지점이 없어졌다(응답은 항상 JSON) — 그래서 예전의 app.frontend.callback-url은 여기서는 안 쓰고,
-  # CORS 허용 오리진으로만 프론트 주소가 필요하다.
-  cors:
-    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:5173}"
-
-jwt:
-  secret: "${JWT_SECRET}"
-  access-token-validity-ms: "${JWT_ACCESS_VALIDITY_MS:1800000}"      # 30분 (docs/api/auth.md 기준)
-  refresh-token-validity-ms: "${JWT_REFRESH_VALIDITY_MS:1209600000}" # 14일
-  cookie:
-    # 로컬은 http라 Secure 쿠키를 켜면 브라우저가 쿠키를 안 보낸다 — 운영(https)에서는 반드시 true로.
-    secure: "${JWT_COOKIE_SECURE:false}"
-
-# 카카오 연결 해제 웹훅(KakaoUnlinkWebhookController) 검증용 — 우리 app_id인지, admin key가
-# 맞는지 확인한다. 로그아웃 시 카카오 로그아웃 API 호출(KakaoLogoutClient)에도 admin-key를 쓴다.
-kakao:
-  app-id: "${KAKAO_APP_ID}"
-  admin-key: "${KAKAO_ADMIN_KEY}"
