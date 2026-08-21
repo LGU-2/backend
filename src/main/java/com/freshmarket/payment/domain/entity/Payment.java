@@ -89,6 +89,9 @@ public class Payment extends BaseMutableTimeEntity {
     }
 
     public boolean matches(PaymentRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("payment request 는 필수다");
+        }
         return orderId.equals(request.orderId())
                 && amount == request.amount()
                 && method == request.method();
