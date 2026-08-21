@@ -9,5 +9,9 @@ CREATE TABLE kakao_unlink_failure (
     attempt_count INT NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
-    CONSTRAINT uk_kakao_unlink_failure_member UNIQUE (member_id)
+    CONSTRAINT uk_kakao_unlink_failure_member UNIQUE (member_id),
+    -- (DI-3-03) 이 저장소의 다른 테이블은 전부 참조무결성을 FK로 강제하는데 이 표만 빠져 있었다.
+    -- member_id가 member 테이블에 없는 값을 가리킬 수 있으면, 스케줄러가 존재하지 않는 회원을
+    -- 재시도하거나(고아 행) member가 먼저 삭제됐을 때 정합성이 깨진다.
+    CONSTRAINT fk_kakao_unlink_failure_member FOREIGN KEY (member_id) REFERENCES member (member_id)
 );
