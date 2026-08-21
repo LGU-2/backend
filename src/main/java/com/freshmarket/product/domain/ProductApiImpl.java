@@ -49,6 +49,8 @@ class ProductApiImpl implements ProductApi {
         }
         List<ProductOptionProjection> rows = queryFactory
                 .select(new QProductOptionProjection(
+                        product.id,
+                        product.categoryId,
                         productOption.id,
                         product.name,
                         productOption.name,
@@ -62,8 +64,8 @@ class ProductApiImpl implements ProductApi {
 
         return rows.stream()
                 .map(row -> new ProductOptionInfo(
-                        row.productOptionId(), row.productName(), row.optionName(),
-                        row.price(), row.purchasable()))
+                        row.productId(), row.categoryId(), row.productOptionId(),
+                        row.productName(), row.optionName(), row.price(), row.purchasable()))
                 .toList();
     }
 }

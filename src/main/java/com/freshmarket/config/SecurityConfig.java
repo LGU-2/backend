@@ -48,14 +48,18 @@ public class SecurityConfig {
      * 여기 없는 것은 전부 인증을 요구한다. 기본값이 거부다 (SEC-1-04).
      */
 
-    private static final String[] PUBLIC_PATHS = {
-            "/v3/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html",
-            "/webhook/kakao/unlink", // 카카오가 호출하는 웹훅 — 인증 쿠키 없이 들어옴
-            "/v1/auth/kakao/authorize", // 로그인 시작 — 아직 토큰이 없는 시점
-            "/v1/products"
-    };
+	private static final String[] PUBLIC_PATHS = {
+	        "/v3/api-docs/**",
+	        "/swagger-ui/**",
+	        "/swagger-ui.html",
+	        "/webhook/kakao/unlink", // 카카오가 호출하는 웹훅 — 인증 쿠키 없이 들어옴
+	        "/v1/auth/kakao/authorize", // 로그인 시작 — 아직 토큰이 없는 시점
+	        "/v1/products",
+	        "/v1/products/*",
+	        "/v1/products:search",
+	        "/v1/categories",
+	        "/v1/products:expiringSoon",
+	};
 
     /*
      * 필터 체인에서 난 예외를 MVC 예외 처리로 되돌린다.

@@ -71,6 +71,8 @@ class ProductApiImplIntegrationTest {
 
         // then
         assertThat(result).isPresent();
+        assertThat(result.get().productId()).isEqualTo(product.getId());
+        assertThat(result.get().categoryId()).isEqualTo(categoryId);
         assertThat(result.get().productName()).isEqualTo("감귤");
         assertThat(result.get().optionName()).isEqualTo("1kg");
         assertThat(result.get().price()).isEqualTo(12900);
