@@ -42,3 +42,16 @@ kakao:
 #     url: "jdbc:mysql://localhost:13306/freshmarket"
 #     username: "freshmarket"
 #     password: "freshmarket"
+
+# 카카오 콘솔에 등록한 리다이렉트 주소가 기본값과 다를 때만 푼다.
+# 기본값은 http://localhost:5173/oauth/callback 이다.
+# 빈 문자열로 두면 안 된다. 여기 있는 키는 값이 무엇이든 application.yml 의 기본값을 이기므로,
+# ""로 남기면 그 기본값이 지워져 ClientRegistration 이 기동을 막는다.
+#
+# spring:
+#   security:
+#     oauth2:
+#       client:
+#         registration:
+#           kakao:
+#             redirect-uri: "http://localhost:5173/oauth/callback"
