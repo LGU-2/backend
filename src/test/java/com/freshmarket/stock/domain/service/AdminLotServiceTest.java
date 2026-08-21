@@ -139,9 +139,9 @@ class AdminLotServiceTest {
     }
 
     @Test
-    void 요청_식별자_위반_직후_재조회가_비어있으면_예외를_던진다() {
-        // given — 유니크 위반이 났다는 건 그 순간 동시 재시도가 커밋을 마쳤다는 뜻이라 재조회는 항상 있어야 한다.
-        // 이 방어 분기(있을 수 없는 상황)의 커버리지를 위한 케이스
+    void 다른_옵션에_이미_사용된_요청_식별자면_충돌_오류를_던진다() {
+        // given — save() 시점에 uk_lot_request_id 위반이 났는데, 같은 (requestId, optionId) 조합으로
+        // 재조회해도 없다면 그 requestId는 다른 옵션 소속이라는 뜻이다(클라이언트의 잘못된 재사용)
         when(productApi.existsOption(12L, 31L)).thenReturn(true);
         when(stockLotRepository.findByRequestIdAndProductOptionId("req-1", 31L)).thenReturn(Optional.empty());
         when(stockLotRepository.save(any())).thenThrow(new DataIntegrityViolationException(
@@ -151,7 +151,8 @@ class AdminLotServiceTest {
 
         // when, then
         assertThatThrownBy(() -> adminLotService.register(12L, 31L, request))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(StockException.class)
+                .hasFieldOrPropertyWithValue("errorCode", StockErrorCode.REQUEST_ID_ALREADY_USED);
     }
 
     @Test

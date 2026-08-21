@@ -82,15 +82,14 @@ public class AdminLotService {
     }
 
     /*
-     * save() 시점에 uk_lot_request_id 위반이 났다면, 동시 재시도가 먼저 커밋을 마친 것이라 같은
-     * (requestId, optionId) 조합이 반드시 존재한다. optionId가 다른데도 requestId가 겹쳤다면
-     * 클라이언트가 같은 requestId를 서로 다른 옵션에 재사용한 것이라 여기 재조회로 잡히지 않고
-     * 예외가 그대로 던져진다 — 잘못된 옵션의 로트를 성공 응답으로 돌려주는 것보다 낫다.
+     * save() 시점에 uk_lot_request_id 위반이 났다는 건 이 requestId를 가진 로트가 DB에 이미 있다는
+     * 뜻이다. 같은 (requestId, optionId) 조합으로 재조회했는데도 없다면, 그 로트는 다른 optionId
+     * 소속이라는 뜻 — 클라이언트가 같은 requestId를 서로 다른 옵션에 재사용한 것이다. 잘못된 옵션의
+     * 로트를 성공 응답으로 돌려주는 대신 명확한 충돌 오류로 알려준다.
      */
     private StockLot findByRequestIdOrThrow(String requestId, Long optionId) {
         return stockLotRepository.findByRequestIdAndProductOptionId(requestId, optionId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "request_id 유니크 위반 직후 재조회에 실패했다: " + requestId));
+                .orElseThrow(() -> new StockException(StockErrorCode.REQUEST_ID_ALREADY_USED));
     }
 
     /*

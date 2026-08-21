@@ -40,6 +40,7 @@ POST /v1/admin/products/{productId}/options/{optionId}/lots
 |---|---|---|
 | `422` | `STOCK-001` | 소비기한이 입고일보다 이르다 |
 | `404` | `STOCK-002` | 없거나 삭제된 상품 |
+| `409` | `STOCK-007` | 이미 다른 옵션에 사용된 요청 식별자 |
 
 ## 로트별 조회
 
