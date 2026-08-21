@@ -115,7 +115,7 @@ class OrderServiceTest {
     }
 
     private Order order() {
-        return Order.place(1L, "20260821-000001", OrderStatus.PAID, 25800, 1000,
+        return Order.place(1L, "20260821-000001", 25800, 1000,
                 null, null, 0, 3000, 27800, "홍길동", "01012345678", "06234",
                 "서울 강남구 테헤란로 1", "부재 시 경비실", LocalDateTime.of(2026, 8, 21, 12, 0));
     }
