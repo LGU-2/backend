@@ -1,4 +1,4 @@
-package com.freshmarket.member;
+package com.freshmarket.member.domain.config;
 
 import static org.springframework.http.HttpMethod.DELETE;
 import static org.springframework.http.HttpMethod.GET;
@@ -17,8 +17,8 @@ import org.springframework.security.web.SecurityFilterChain;
  * 공통 설정이 도메인 경로를 알지 않게 하려는 것이다(DPB-5-03).
  * 부수 효과로 도메인끼리 같은 파일을 고치지 않게 되어 SecurityConfig 충돌이 사라진다.
  *
- * 이 클래스가 domain 아래가 아니라 도메인 루트에 있는 이유는
- * "이 도메인이 무엇을 여는가" 가 내부 구현이 아니라 바깥을 향한 선언이기 때문이다.
+ * 이 도메인이 무엇을 열고 무엇을 막는지가 한 파일에 모여 있다.
+ * 다른 도메인은 이 파일을 볼 일도 고칠 일도 없다.
  */
 @Configuration
 class MemberSecurityConfig {

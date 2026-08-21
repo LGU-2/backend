@@ -1,4 +1,4 @@
-package com.freshmarket.product;
+package com.freshmarket.product.domain.config;
 
 import static org.springframework.http.HttpMethod.GET;
 
