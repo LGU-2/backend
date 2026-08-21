@@ -60,19 +60,27 @@ public class HttpBodyLoggingFilter extends OncePerRequestFilter {
     // "password":"1234", "refreshToken": "eyJ..." 같은 키-값 쌍의 값을 통째로 마스킹.
     // phone/address류(recipient/zipcode/roadAddress/detailAddress)도 자유 형식 텍스트라 이메일처럼
     // 부분 마스킹하기 애매해서 password/token과 똑같이 통째로 REDACTED 처리한다.
+    // authorizationCode/state/nonce/code(카카오 로그인·탈퇴 재인증 요청 바디)도 같은 이유로 넣는다 —
+    // 로그인 실패는 흔한 4xx 경로라 이 필드들이 없으면 WARN 로그에 카카오 인가 코드가 상시 평문으로 남는다.
+    // (2026-08-20, SEC-4-04/OBS-3-04) name도 추가한다 — DDL이 email/name/phone을 암호화 대상으로
+    // 못박은 컬럼인데 name만 빠져 있었다. nickname은 안 넣는다 — 카카오/본인이 정하는 공개
+    // 표시용 값이라 DDL의 암호화 대상 목록에도 없고, PII로 볼 근거가 약하다.
     // 값 부분을 별도 캡처 그룹(3번)으로 빼서 PiiMasker.redact()에 그대로 넘긴다 — REDACTED 리터럴을
     // 여기 직접 하드코딩하면 마스킹 문자열이 필요할 때마다 여러 곳에서 따로 관리돼서, 나중에
     // 마스킹 표기를 바꾸거나 정책을 통일할 때 여기만 고치고 끝나지 않는다.
     private static final Pattern SENSITIVE_JSON_FIELD = Pattern.compile(
             "(?i)(\"(password|accessToken|refreshToken|token|secret|authorization|idToken|clientSecret"
-                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress)\"\\s*:\\s*\")([^\"]*)(\")");
+                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress|name"
+                    + "|authorizationCode|state|nonce|code)\"\\s*:\\s*\")([^\"]*)(\")");
 
     // (OBS-3-04/SEC-4-02) application/x-www-form-urlencoded 바디("password=1234&token=eyJ...")는
     // 위 JSON 전용 패턴("key":"value")에 안 걸려서 그대로 새어나갔다 — 로그인 폼 등 form-urlencoded로
     // 오는 요청의 민감 키도 동일한 키 목록으로 잡아서 "key=" 뒤 값(다음 "&" 전까지) 전체를 REDACTED 처리한다.
+    // SENSITIVE_JSON_FIELD와 같은 키 목록을 쓴다 — 인코딩만 다를 뿐 같은 값이 새면 위험도가 같다.
     private static final Pattern SENSITIVE_FORM_FIELD = Pattern.compile(
             "(?i)((?:^|&)(?:password|accessToken|refreshToken|token|secret|authorization|idToken|clientSecret"
-                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress)=)([^&]*)");
+                    + "|phone|address|recipient|zipcode|roadAddress|detailAddress|name"
+                    + "|authorizationCode|state|nonce|code)=)([^&]*)");
 
     // 위 키-값 패턴에 안 걸린 이메일/전화번호도 한 번 더 잡아서 부분 마스킹(키 이름이 다르거나
     // 문자열 안에 섞여 나오는 경우 대비 catch-all).
