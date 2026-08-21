@@ -68,7 +68,7 @@ class ProductApiIntegrationTest {
 
     private Long saveProductWithOptions(Long categoryId, String name, int... prices) {
         Product product = productRepository.save(
-                Product.register("P-" + name, name, categoryId, SUPPLIER_ID,
+                Product.register("req-" + name, "P-" + name, name, categoryId, SUPPLIER_ID,
                         StorageType.COLD, 3));
         for (int price : prices) {
             productOptionRepository.save(
