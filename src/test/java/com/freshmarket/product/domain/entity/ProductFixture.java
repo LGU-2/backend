@@ -1,9 +1,5 @@
 package com.freshmarket.product.domain.entity;
 
-import com.freshmarket.product.domain.entity.Category;
-import com.freshmarket.product.domain.entity.Product;
-import com.freshmarket.product.domain.entity.ProductOption;
-import com.freshmarket.product.domain.entity.StorageType;
 import java.time.LocalDateTime;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -19,7 +15,7 @@ public final class ProductFixture {
     // id 가 채워진 상품. 서비스 단위 테스트에서 리포지토리가 반환하는 상황을 흉내낼 때 쓴다
     public static Product 상품(Long id, String name, Long categoryId) {
         Product product = Product.register(
-                "P-" + name, name, categoryId, 1L, StorageType.COLD, 3);
+                "req-" + id, "P-" + name, name, categoryId, 1L, StorageType.COLD, 3);
         ReflectionTestUtils.setField(product, "id", id);
         return product;
     }
