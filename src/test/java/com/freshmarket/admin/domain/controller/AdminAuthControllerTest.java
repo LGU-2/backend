@@ -17,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 
 class AdminAuthControllerTest {
 
-    private static final String ADMIN_AUTH_PATH = "/v1/admin/auth/tokens";
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/v1/admin/auth/";
     private static final String ACCESS_TOKEN = "access-token";
     private static final String REFRESH_TOKEN = "refresh-token";
@@ -31,7 +30,6 @@ class AdminAuthControllerTest {
         // given
         AdminAuthController controller = new AdminAuthController(
                 adminAuthService,
-                ADMIN_AUTH_PATH,
                 true
         );
 
