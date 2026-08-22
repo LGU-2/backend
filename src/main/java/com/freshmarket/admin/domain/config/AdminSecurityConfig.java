@@ -3,10 +3,14 @@ package com.freshmarket.admin.domain.config;
 import static org.springframework.http.HttpMethod.POST;
 
 import com.freshmarket.common.auth.ApiSecurityDefaults;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
+import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,13 +33,10 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
  * 그 결정을 지키기 위해 defaults.apply() 이후 이 체인에서만 csrf()를 다시 켠다.
  */
 @Configuration
+@EnableMethodSecurity
 class AdminSecurityConfig {
 
     private static final String ADMIN = "TYPE_ADMIN";
-
-    private final String adminAuthPath;
-
-    AdminSecurityConfig(@Value("${admin.auth-path}") String adminAuthPath) { this.adminAuthPath = adminAuthPath; }
 
     @Bean
     @Order(ApiSecurityDefaults.DOMAIN_CHAIN_ORDER)
@@ -45,13 +46,33 @@ class AdminSecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .ignoringRequestMatchers(
-                                PathPatternRequestMatcher.withDefaults().matcher(POST, adminAuthPath)))
+                                PathPatternRequestMatcher.withDefaults().matcher(POST, "/v1/admin/auth/tokens")))
                 .authorizeHttpRequests(auth -> auth
                         // 로그인(POST)은 인증 그 자체라 공개해야 한다
-                        .requestMatchers(POST, adminAuthPath).permitAll()
-                        // 재발급/로그아웃/향후 관리자 API는 TYPE_ADMIN 권한을 요구한다
+                        .requestMatchers(POST, "/v1/admin/auth/tokens").permitAll()
+                        // 재발급/로그아웃 등 로그인 외 관리자 인증 API는 TYPE_ADMIN 권한을 요구한다
                         .anyRequest().hasAuthority(ADMIN))
                 .build();
+    }
+
+    /*
+     * 최고관리자는 일반관리자의 권한을 포함한다.
+     * 따라서 @PreAuthorize("hasRole('ADMIN')")은 ADMIN과 SUPER_ADMIN 모두 통과하고,
+     * @PreAuthorize("hasRole('SUPER_ADMIN')")은 SUPER_ADMIN만 통과한다.
+     */
+    @Bean
+    static RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role("SUPER_ADMIN").implies("ADMIN")
+                .build();
+    }
+
+    // @PreAuthorize의 hasRole/hasAuthority 평가에도 위 RoleHierarchy를 적용한다.
+    @Bean
+    static MethodSecurityExpressionHandler methodSecurityExpressionHandler(RoleHierarchy roleHierarchy) {
+        DefaultMethodSecurityExpressionHandler expressionHandler = new DefaultMethodSecurityExpressionHandler();
+        expressionHandler.setRoleHierarchy(roleHierarchy);
+        return expressionHandler;
     }
 
     // 관리자 비밀번호 해싱 전용. 회원은 카카오에 인증을 위임하므로 비밀번호 자체가 없다

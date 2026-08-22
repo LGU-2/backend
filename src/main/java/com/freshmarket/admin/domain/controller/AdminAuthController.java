@@ -27,22 +27,19 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "관리자 인증", description = "관리자 로그인/로그아웃/토큰 재발급")
 @RestController
-@RequestMapping("${admin.auth-path}")
+@RequestMapping("/v1/admin/auth/tokens")
 class AdminAuthController {
 
     // auth.md: Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict; Path=...
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
 
     private final AdminAuthService adminAuthService;
-    private final String refreshTokenCookiePath;
     private final boolean refreshCookieSecure;
 
     AdminAuthController(
             AdminAuthService adminAuthService,
-            @Value("${admin.auth-path}") String adminAuthPath,
             @Value("${admin.refresh-cookie-secure}") boolean refreshCookieSecure) {
         this.adminAuthService = adminAuthService;
-        this.refreshTokenCookiePath = parentPath(adminAuthPath);
         this.refreshCookieSecure = refreshCookieSecure;
     }
 
@@ -67,18 +64,12 @@ class AdminAuthController {
                 .httpOnly(true)
                 .secure(refreshCookieSecure)
                 .sameSite("Strict")
-                .path(refreshTokenCookiePath)
+                .path("/v1/admin/auth/")
                 .maxAge(result.refreshTokenValiditySeconds())
                 .build();
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString())
                 .body(ResponseEnvelope.success(result.response()));
-    }
-
-    // refreshToken 쿠키를 로그인/재발급 경로에서 함께 쓰기 위해 상위 경로를 구한다.
-    private static String parentPath(String path) {
-        int lastSlash = path.lastIndexOf('/');
-        return lastSlash < 0 ? "/" : path.substring(0, lastSlash + 1);
     }
 }
