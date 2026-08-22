@@ -31,6 +31,7 @@ public class AuthCookieFactory {
     // 정확한 URL로 직접 호출 가능) — 남는 비용은 앞으로 /v1/auth/ 아래 추가되는 엔드포인트가
     // 의식하지 않아도 이 쿠키를 자동으로 받게 된다는 것뿐이다.
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/v1/auth/";
+    private static final String ADMIN_REFRESH_TOKEN_COOKIE_PATH = "/v1/admin/auth/";
     // accessToken은 재발급/로그아웃 경로만이 아니라 인증이 필요한 모든 API 요청에 실려야 한다.
     private static final String ACCESS_TOKEN_COOKIE_PATH = "/";
 
@@ -69,6 +70,16 @@ public class AuthCookieFactory {
             builder.maxAge(Duration.ofMillis(jwtTokenProvider.getRefreshTokenValidityMs()));
         }
         return builder.build();
+    }
+
+    public ResponseCookie adminRefreshTokenCookie(String refreshToken, long validitySeconds) {
+        return ResponseCookie.from("refreshToken", refreshToken)
+                .httpOnly(true)
+                .secure(secure)
+                .path(ADMIN_REFRESH_TOKEN_COOKIE_PATH)
+                .sameSite("Strict")
+                .maxAge(Duration.ofSeconds(validitySeconds))
+                .build();
     }
 
     public ResponseCookie expiredRefreshTokenCookie() {
