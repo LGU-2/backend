@@ -272,7 +272,7 @@ DELETE /v1/admin/auth/tokens
 
 ```
 Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict;
-            Path=/v1/admin/auth/tokens; Max-Age=86400
+            Path=/v1/admin/auth/; Max-Age=86400
 ```
 
 Refresh 가 1일인 것은 **자동 로그인을 제공하지 않기 때문이다.** 관리자 콘솔은 회원 서비스보다
