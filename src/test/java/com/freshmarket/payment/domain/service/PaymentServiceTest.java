@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.freshmarket.payment.PaymentMethod;
 import com.freshmarket.payment.PaymentInfo;
+import com.freshmarket.payment.PaymentApprovedEvent;
 import com.freshmarket.payment.PaymentRequest;
 import com.freshmarket.payment.PaymentResult;
 import com.freshmarket.payment.PaymentStatus;
@@ -20,13 +21,17 @@ import com.freshmarket.payment.domain.entity.Payment;
 import com.freshmarket.payment.domain.exception.PaymentErrorCode;
 import com.freshmarket.payment.domain.exception.PaymentException;
 import com.freshmarket.payment.domain.repository.PaymentRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,11 +40,15 @@ class PaymentServiceTest {
     @Mock
     private PaymentRepository paymentRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private PaymentService sut;
 
     @BeforeEach
     void setUp() {
-        sut = new PaymentService(paymentRepository);
+        Clock clock = Clock.fixed(Instant.parse("2026-08-22T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+        sut = new PaymentService(paymentRepository, eventPublisher, clock);
     }
 
     @Test
@@ -101,6 +110,7 @@ class PaymentServiceTest {
         assertThat(result.status()).isEqualTo(PaymentStatus.PAID);
         assertThat(result.pgTid()).isEqualTo("mock_123");
         assertThat(result.paidAt()).isEqualTo(paidAt);
+        verify(eventPublisher).publishEvent(new PaymentApprovedEvent(10L, 1L, paidAt));
     }
 
     @Test
@@ -137,6 +147,23 @@ class PaymentServiceTest {
                 .isInstanceOf(PaymentException.class)
                 .extracting(e -> ((PaymentException) e).getErrorCode())
                 .isEqualTo(PaymentErrorCode.PAYMENT_NOT_PENDING);
+    }
+
+    @Test
+    void 잘못된_결제_요청은_저장하기_전에_거절한다() {
+        assertThatThrownBy(() -> sut.preparePayment(null))
+                .isInstanceOf(PaymentException.class)
+                .extracting(e -> ((PaymentException) e).getErrorCode())
+                .isEqualTo(PaymentErrorCode.INVALID_PAYMENT_REQUEST);
+    }
+
+    @Test
+    void 결제_엔티티는_PENDING이_아니면_직접_승인할_수_없다() {
+        Payment payment = payment(10L);
+        ReflectionTestUtils.setField(payment, "status", PaymentStatus.CANCELED);
+
+        assertThatThrownBy(() -> payment.approve("mock_123", LocalDateTime.of(2026, 8, 21, 15, 30)))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

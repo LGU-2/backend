@@ -69,6 +69,9 @@ public class Payment extends BaseMutableTimeEntity {
     }
 
     public void approve(String pgTid, LocalDateTime paidAt) {
+        if (!isPending()) {
+            throw new IllegalStateException("승인 대기 상태의 결제만 승인할 수 있습니다.");
+        }
         if (pgTid == null || pgTid.isBlank() || pgTid.length() > PG_TID_MAX_LENGTH) {
             throw new IllegalArgumentException("유효한 pgTid 가 필요하다");
         }
