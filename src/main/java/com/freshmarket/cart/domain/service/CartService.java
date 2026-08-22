@@ -1,5 +1,7 @@
 package com.freshmarket.cart.domain.service;
 
+import com.freshmarket.cart.CartCheckoutInfo;
+import com.freshmarket.cart.CartCheckoutItem;
 import com.freshmarket.cart.domain.dto.CartItemCreateRequest;
 import com.freshmarket.cart.domain.dto.CartItemResponse;
 import com.freshmarket.cart.domain.dto.CartItemUpdateRequest;
@@ -57,6 +59,49 @@ public class CartService {
         return CartResponse.from(cart, items);
     }
 
+    // 주문 대상만 잠가 다시 조회하고, 현재 상품 정보로 주문 스냅샷 원본을 만든다.
+    @Transactional
+    public CartCheckoutInfo getCheckoutItems(Long memberId, List<Long> cartItemIds) {
+        List<Long> itemIds = validateAndNormalizeItemIds(cartItemIds);
+        Cart cart = findCartForUpdate(memberId);
+        List<CartItem> items = findCheckoutItems(cart.getId(), itemIds);
+
+        Map<Long, ProductOptionInfo> optionsById = productApi.findOptionInfos(items.stream()
+                        .map(CartItem::getProductOptionId)
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(ProductOptionInfo::productOptionId, Function.identity()));
+
+        List<CartCheckoutItem> checkoutItems = items.stream()
+                .map(item -> toCheckoutItem(item, optionsById))
+                .toList();
+        return new CartCheckoutInfo(cart.getId(), checkoutItems);
+    }
+
+    // 주문 뒤 추가된 수량은 남기고, 주문 당시 수량만 장바구니에서 제거한다.
+    @Transactional
+    public void removeCheckedOutItems(Long memberId, List<CartCheckoutItem> checkedOutItems) {
+        if (checkedOutItems == null || checkedOutItems.isEmpty()
+                || checkedOutItems.stream().anyMatch(item ->
+                        item == null || item.cartItemId() == null || item.qty() <= 0)) {
+            throw new CartException(CartErrorCode.CART_ITEMS_REQUIRED);
+        }
+        Map<Long, Integer> orderedQtyByItemId = checkedOutItems.stream()
+                .collect(Collectors.toMap(
+                        CartCheckoutItem::cartItemId,
+                        CartCheckoutItem::qty,
+                        Math::max));
+        List<Long> itemIds = orderedQtyByItemId.keySet().stream().sorted().toList();
+        Cart cart = findCartForUpdate(memberId);
+        // 이미 정리된 항목은 재시도에서 빠질 수 있으므로 삭제는 멱등하게 처리한다.
+        List<CartItem> items = cartItemRepository.findAllByCartIdAndIdInForUpdate(cart.getId(), itemIds);
+        List<CartItem> itemsToDelete = items.stream()
+                .filter(item -> removeOrderedQty(item, orderedQtyByItemId.get(item.getId())))
+                .toList();
+        cartItemRepository.deleteAll(itemsToDelete);
+    }
+
     @Transactional
     public CartItemResponse addItem(Long memberId, CartItemCreateRequest request) {
         Cart cart = findCartForUpdate(memberId);
@@ -108,6 +153,42 @@ public class CartService {
             throw new CartException(CartErrorCode.CART_ITEM_LIMIT_EXCEEDED);
         }
         return cartItemRepository.save(CartItem.add(cartId, request.productOptionId(), request.qty()));
+    }
+
+    private List<Long> validateAndNormalizeItemIds(List<Long> cartItemIds) {
+        if (cartItemIds == null || cartItemIds.isEmpty() || cartItemIds.stream().anyMatch(id -> id == null)) {
+            throw new CartException(CartErrorCode.CART_ITEMS_REQUIRED);
+        }
+        return cartItemIds.stream().distinct().toList();
+    }
+
+    private List<CartItem> findCheckoutItems(Long cartId, List<Long> itemIds) {
+        List<CartItem> items = cartItemRepository.findAllByCartIdAndIdInForUpdate(cartId, itemIds);
+        if (items.size() != itemIds.size()) {
+            throw new CartException(CartErrorCode.CART_ITEM_NOT_FOUND);
+        }
+        return items;
+    }
+
+    private CartCheckoutItem toCheckoutItem(
+            CartItem item,
+            Map<Long, ProductOptionInfo> optionsById
+    ) {
+        ProductOptionInfo option = findOptionInfo(optionsById, item.getProductOptionId());
+        if (!option.purchasable()) {
+            throw new CartException(CartErrorCode.PRODUCT_OPTION_NOT_PURCHASABLE);
+        }
+        return new CartCheckoutItem(item.getId(), item.getProductOptionId(), option.productName(),
+                option.optionName(), option.price(), item.getQty());
+    }
+
+    // true면 남은 수량이 없어 삭제 대상이고, false면 주문 뒤 추가된 수량을 엔티티에 남긴다.
+    private boolean removeOrderedQty(CartItem item, int orderedQty) {
+        if (item.getQty() <= orderedQty) {
+            return true;
+        }
+        item.changeQty(item.getQty() - orderedQty);
+        return false;
     }
 
     private CartItemResponse toResponse(CartItem item) {

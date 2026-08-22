@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 import com.freshmarket.cart.domain.dto.CartItemCreateRequest;
 import com.freshmarket.cart.domain.dto.CartItemUpdateRequest;
 import com.freshmarket.cart.domain.dto.CartResponse;
+import com.freshmarket.cart.CartCheckoutInfo;
+import com.freshmarket.cart.CartCheckoutItem;
 import com.freshmarket.cart.domain.entity.Cart;
 import com.freshmarket.cart.domain.entity.CartItem;
 import com.freshmarket.cart.domain.exception.CartErrorCode;
@@ -168,6 +170,101 @@ class CartServiceTest {
         sut.deleteItem(1L, 100L);
 
         verify(cartItemRepository).delete(existing);
+    }
+
+    @Test
+    void 주문할_항목을_잠금_조회하고_현재_상품정보를_반환한다() {
+        Cart cart = cart(1L, 10L);
+        CartItem first = item(10L, 11L, 2, 100L);
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findAllByCartIdAndIdInForUpdate(10L, List.of(100L)))
+                .thenReturn(List.of(first));
+        when(productApi.findOptionInfos(List.of(11L))).thenReturn(List.of(PURCHASABLE_OPTION));
+
+        CartCheckoutInfo result = sut.getCheckoutItems(1L, List.of(100L));
+
+        assertThat(result.cartId()).isEqualTo(10L);
+        assertThat(result.items()).singleElement().satisfies(item -> {
+            assertThat(item.cartItemId()).isEqualTo(100L);
+            assertThat(item.unitPrice()).isEqualTo(12900);
+            assertThat(item.qty()).isEqualTo(2);
+        });
+    }
+
+    @Test
+    void 주문_항목_중_내_카트에_없는_ID가_있으면_실패한다() {
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
+        when(cartItemRepository.findAllByCartIdAndIdInForUpdate(10L, List.of(100L, 999L)))
+                .thenReturn(List.of(item(10L, 11L, 1, 100L)));
+
+        assertThatThrownBy(() -> sut.getCheckoutItems(1L, List.of(100L, 999L)))
+                .isInstanceOf(CartException.class)
+                .extracting(e -> ((CartException) e).getErrorCode())
+                .isEqualTo(CartErrorCode.CART_ITEM_NOT_FOUND);
+    }
+
+    @Test
+    void 주문_시점에_구매할_수_없는_상품이면_실패한다() {
+        CartItem item = item(10L, 11L, 1, 100L);
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
+        when(cartItemRepository.findAllByCartIdAndIdInForUpdate(10L, List.of(100L)))
+                .thenReturn(List.of(item));
+        when(productApi.findOptionInfos(List.of(11L))).thenReturn(List.of(
+                new ProductOptionInfo(11L, "감귤", "1kg", 12900, false)));
+
+        assertThatThrownBy(() -> sut.getCheckoutItems(1L, List.of(100L)))
+                .isInstanceOf(CartException.class)
+                .extracting(e -> ((CartException) e).getErrorCode())
+                .isEqualTo(CartErrorCode.PRODUCT_OPTION_NOT_PURCHASABLE);
+    }
+
+    @Test
+    void 결제된_주문의_선택_항목만_삭제한다() {
+        CartItem item = item(10L, 11L, 1, 100L);
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
+        when(cartItemRepository.findAllByCartIdAndIdInForUpdate(10L, List.of(100L)))
+                .thenReturn(List.of(item));
+
+        CartCheckoutItem checkedOut = new CartCheckoutItem(100L, 11L, "감귤", "1kg", 12900, 1);
+        sut.removeCheckedOutItems(1L, List.of(checkedOut));
+
+        verify(cartItemRepository).deleteAll(List.of(item));
+    }
+
+    @Test
+    void 주문_뒤에_추가된_수량은_삭제하지_않고_남긴다() {
+        CartItem item = item(10L, 11L, 5, 100L);
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
+        when(cartItemRepository.findAllByCartIdAndIdInForUpdate(10L, List.of(100L)))
+                .thenReturn(List.of(item));
+        CartCheckoutItem checkedOut = new CartCheckoutItem(100L, 11L, "감귤", "1kg", 12900, 2);
+
+        sut.removeCheckedOutItems(1L, List.of(checkedOut));
+
+        assertThat(item.getQty()).isEqualTo(3);
+        verify(cartItemRepository).deleteAll(List.of());
+    }
+
+    @Test
+    void 주문_항목_삭제를_재시도해도_성공한다() {
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart(1L, 10L)));
+        when(cartItemRepository.findAllByCartIdAndIdInForUpdate(10L, List.of(100L)))
+                .thenReturn(List.of());
+        CartCheckoutItem checkedOut = new CartCheckoutItem(100L, 11L, "감귤", "1kg", 12900, 1);
+
+        sut.removeCheckedOutItems(1L, List.of(checkedOut));
+
+        verify(cartItemRepository).deleteAll(List.of());
+    }
+
+    @Test
+    void 주문할_항목을_선택하지_않으면_실패한다() {
+        assertThatThrownBy(() -> sut.getCheckoutItems(1L, List.of()))
+                .isInstanceOf(CartException.class)
+                .extracting(e -> ((CartException) e).getErrorCode())
+                .isEqualTo(CartErrorCode.CART_ITEMS_REQUIRED);
+
+        verify(cartRepository, never()).findByMemberIdForUpdate(anyLong());
     }
 
     @Test
