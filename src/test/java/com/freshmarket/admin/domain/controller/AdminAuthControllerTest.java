@@ -9,11 +9,14 @@ import com.freshmarket.admin.domain.dto.AdminLoginResponse;
 import com.freshmarket.admin.domain.dto.AdminLoginResult;
 import com.freshmarket.admin.domain.entity.AdminRole;
 import com.freshmarket.admin.domain.service.AdminAuthService;
+import com.freshmarket.common.auth.AuthCookieFactory;
+import com.freshmarket.common.auth.jwt.JwtTokenProvider;
 import com.freshmarket.common.response.ResponseEnvelope;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class AdminAuthControllerTest {
 
@@ -28,10 +31,9 @@ class AdminAuthControllerTest {
     @Test
     void 로그인에_성공하면_액세스_토큰은_본문으로_리프레시_토큰은_HttpOnly_쿠키로_내려간다() {
         // given
-        AdminAuthController controller = new AdminAuthController(
-                adminAuthService,
-                true
-        );
+        AuthCookieFactory authCookieFactory = new AuthCookieFactory(mock(JwtTokenProvider.class));
+        ReflectionTestUtils.setField(authCookieFactory, "secure", true);
+        AdminAuthController controller = new AdminAuthController(adminAuthService, authCookieFactory);
 
         AdminLoginRequest request = new AdminLoginRequest("admin.kim", "Freahman!2026");
         AdminLoginResponse loginResponse = new AdminLoginResponse(
