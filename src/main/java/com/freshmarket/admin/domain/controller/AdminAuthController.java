@@ -4,12 +4,12 @@ import com.freshmarket.admin.domain.dto.AdminLoginRequest;
 import com.freshmarket.admin.domain.dto.AdminLoginResponse;
 import com.freshmarket.admin.domain.dto.AdminLoginResult;
 import com.freshmarket.admin.domain.service.AdminAuthService;
+import com.freshmarket.common.auth.AuthCookieFactory;
 import com.freshmarket.common.response.ResponseEnvelope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -30,17 +30,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/admin/auth/tokens")
 class AdminAuthController {
 
-    // auth.md: Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict; Path=...
-    private static final String REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
-
     private final AdminAuthService adminAuthService;
-    private final boolean refreshCookieSecure;
+    private final AuthCookieFactory authCookieFactory;
 
-    AdminAuthController(
-            AdminAuthService adminAuthService,
-            @Value("${admin.refresh-cookie-secure}") boolean refreshCookieSecure) {
+    AdminAuthController(AdminAuthService adminAuthService, AuthCookieFactory authCookieFactory) {
         this.adminAuthService = adminAuthService;
-        this.refreshCookieSecure = refreshCookieSecure;
+        this.authCookieFactory = authCookieFactory;
     }
 
     @Operation(
@@ -55,18 +50,10 @@ class AdminAuthController {
             @Valid @RequestBody AdminLoginRequest request) {
         AdminLoginResult result = adminAuthService.login(request);
 
-        /*
-         * auth.md "관리자 > 재발급과 로그아웃" 절의 쿠키 설정을 따른다.
-         * Path 는 로그인과 재발급이 함께 쓰는 /v1/admin/auth/ 범위로 제한한다.
-         * Secure 는 설정으로 분리해 로컬 개발(HTTP)에서는 끌 수 있게 한다.
-         */
-        ResponseCookie refreshTokenCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, result.refreshToken())
-                .httpOnly(true)
-                .secure(refreshCookieSecure)
-                .sameSite("Strict")
-                .path("/v1/admin/auth/")
-                .maxAge(result.refreshTokenValiditySeconds())
-                .build();
+        ResponseCookie refreshTokenCookie = authCookieFactory.adminRefreshTokenCookie(
+                result.refreshToken(),
+                result.refreshTokenValiditySeconds()
+        );
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString())
