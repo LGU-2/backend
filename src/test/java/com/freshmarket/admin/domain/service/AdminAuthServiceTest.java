@@ -36,12 +36,13 @@ class AdminAuthServiceTest {
     private static final String TEST_JWT_SECRET =
             "test-only-secret-key-must-be-at-least-32-bytes-long-for-hmac-sha256";
     private static final long ACCESS_TOKEN_VALIDITY_MS = 1_800_000L;
-    private static final long REFRESH_TOKEN_VALIDITY_SECONDS = 86_400L;
+    private static final long MEMBER_REFRESH_TOKEN_VALIDITY_MS = 1_209_600_000L;
+    private static final long ADMIN_REFRESH_TOKEN_VALIDITY_MS = 86_400_000L;
 
     private final AdminRepository adminRepository = mock(AdminRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(
-            TEST_JWT_SECRET, ACCESS_TOKEN_VALIDITY_MS, REFRESH_TOKEN_VALIDITY_SECONDS * 1000);
+            TEST_JWT_SECRET, ACCESS_TOKEN_VALIDITY_MS, MEMBER_REFRESH_TOKEN_VALIDITY_MS);
     private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
 
     private final AdminAuthService adminAuthService = new AdminAuthService(
@@ -49,7 +50,7 @@ class AdminAuthServiceTest {
             passwordEncoder,
             jwtTokenProvider,
             refreshTokenRepository,
-            REFRESH_TOKEN_VALIDITY_SECONDS
+            ADMIN_REFRESH_TOKEN_VALIDITY_MS
     );
 
     @Test
@@ -93,7 +94,7 @@ class AdminAuthServiceTest {
                 "ROLE_ADMIN",
                 TokenType.ADMIN,
                 false,
-                Duration.ofSeconds(REFRESH_TOKEN_VALIDITY_SECONDS));
+                Duration.ofMillis(ADMIN_REFRESH_TOKEN_VALIDITY_MS));
     }
 
     @Test

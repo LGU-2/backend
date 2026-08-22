@@ -45,7 +45,7 @@ public class AdminAuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final long refreshTokenValiditySeconds;
+    private final long refreshTokenValidityMs;
     private final String dummyPasswordHash;
 
     public AdminAuthService(
@@ -53,12 +53,12 @@ public class AdminAuthService {
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
             RefreshTokenRepository refreshTokenRepository,
-            @Value("${admin.refresh-token-validity-seconds}") long refreshTokenValiditySeconds) {
+            @Value("${jwt.refresh-token-validity.admin}") long refreshTokenValidityMs) {
         this.adminRepository = adminRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenRepository = refreshTokenRepository;
-        this.refreshTokenValiditySeconds = refreshTokenValiditySeconds;
+        this.refreshTokenValidityMs = refreshTokenValidityMs;
         // 같은 인코더로 미리 만들어 둬야 진짜 비밀번호 검증과 연산 비용(코스트 팩터)이 완전히 같다
         this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD_SOURCE);
     }
@@ -104,7 +104,7 @@ public class AdminAuthService {
                 admin.getRole().toAuthority(),
                 TokenType.ADMIN,
                 false,
-                Duration.ofSeconds(refreshTokenValiditySeconds));
+                Duration.ofMillis(refreshTokenValidityMs));
 
         AdminLoginResponse response = new AdminLoginResponse(
                 jwtTokenProvider.getAccessTokenValidityMs() / 1000,
@@ -115,7 +115,7 @@ public class AdminAuthService {
                 admin.getId(), maskLoginId(admin.getLoginId()));
 
         // 두 토큰 원문은 응답 본문이 아니라 컨트롤러가 만드는 HttpOnly 쿠키로만 나간다
-        return new AdminLoginResult(response, accessToken, rawRefreshToken, refreshTokenValiditySeconds);
+        return new AdminLoginResult(response, accessToken, rawRefreshToken, refreshTokenValidityMs / 1000);
     }
 
     private String maskLoginId(String loginId) {
