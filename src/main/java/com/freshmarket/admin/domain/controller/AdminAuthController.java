@@ -40,8 +40,8 @@ class AdminAuthController {
 
     @Operation(
             summary = "관리자 로그인",
-            description = "아이디와 비밀번호로 인증해 관리자 토큰을 발급한다. 액세스 토큰은 응답 본문으로, "
-                    + "리프레시 토큰은 HttpOnly 쿠키로 내려간다. 5회 실패 시 잠금 정책은 이번 범위에 포함하지 않는다."
+            description = "아이디와 비밀번호로 인증해 관리자 토큰을 발급한다. 액세스 토큰과 리프레시 토큰은 "
+                    + "모두 HttpOnly 쿠키로 내려간다. 5회 실패 시 잠금 정책은 이번 범위에 포함하지 않는다."
     )
     @ApiResponse(responseCode = "201", description = "발급 성공")
     @ApiResponse(responseCode = "401", description = "아이디 또는 비밀번호 불일치. 사유를 구분해 알리지 않는다 (ADMIN-001)")
@@ -50,12 +50,14 @@ class AdminAuthController {
             @Valid @RequestBody AdminLoginRequest request) {
         AdminLoginResult result = adminAuthService.login(request);
 
+        ResponseCookie accessTokenCookie = authCookieFactory.accessTokenCookie(result.accessToken());
         ResponseCookie refreshTokenCookie = authCookieFactory.adminRefreshTokenCookie(
                 result.refreshToken(),
                 result.refreshTokenValiditySeconds()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED)
+                .header(HttpHeaders.SET_COOKIE, accessTokenCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString())
                 .body(ResponseEnvelope.success(result.response()));
     }

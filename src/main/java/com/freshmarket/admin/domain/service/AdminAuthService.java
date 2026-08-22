@@ -38,8 +38,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class AdminAuthService {
 
-    private static final String TOKEN_TYPE = "Bearer";
-
     // 실제 계정과 무관한 값이다. 계정이 없을 때도 이 해시로 BCrypt 를 돌려 응답 시간을 맞춘다 (SEC-6-04)
     private static final String DUMMY_PASSWORD_SOURCE = "dummy-password-for-constant-time-comparison";
 
@@ -109,8 +107,6 @@ public class AdminAuthService {
                 Duration.ofSeconds(refreshTokenValiditySeconds));
 
         AdminLoginResponse response = new AdminLoginResponse(
-                accessToken,
-                TOKEN_TYPE,
                 jwtTokenProvider.getAccessTokenValidityMs() / 1000,
                 new AdminLoginResponse.AdminSummary(
                         admin.getLoginId(), admin.getName(), admin.getRole()));
@@ -118,8 +114,8 @@ public class AdminAuthService {
         log.info("event=ADMIN_LOGIN success=true adminId={} loginId={}",
                 admin.getId(), maskLoginId(admin.getLoginId()));
 
-        // refreshToken 원문은 응답 본문이 아니라 컨트롤러가 만드는 HttpOnly 쿠키로만 나간다
-        return new AdminLoginResult(response, rawRefreshToken, refreshTokenValiditySeconds);
+        // 두 토큰 원문은 응답 본문이 아니라 컨트롤러가 만드는 HttpOnly 쿠키로만 나간다
+        return new AdminLoginResult(response, accessToken, rawRefreshToken, refreshTokenValiditySeconds);
     }
 
     private String maskLoginId(String loginId) {

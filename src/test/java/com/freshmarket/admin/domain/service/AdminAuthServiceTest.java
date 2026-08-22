@@ -76,13 +76,12 @@ class AdminAuthServiceTest {
         AdminLoginResult result = adminAuthService.login(request);
 
         // then
-        assertThat(result.response().accessToken()).isNotBlank();
-        assertThat(result.response().tokenType()).isEqualTo("Bearer");
         assertThat(result.response().expiresInSeconds()).isEqualTo(1800L);
         assertThat(result.response().admin().loginId()).isEqualTo("admin.kim");
         assertThat(result.response().admin().role()).isEqualTo(AdminRole.ADMIN);
 
-        // 리프레시 토큰은 응답 본문이 아니라 컨트롤러가 쿠키로 내려보낼 별도 값으로 온다
+        // 토큰은 응답 본문이 아니라 컨트롤러가 HttpOnly 쿠키로 내려보낼 별도 값으로 전달된다.
+        assertThat(result.accessToken()).isNotBlank();
         assertThat(result.refreshToken()).isNotBlank();
         assertThat(result.refreshTokenValiditySeconds()).isEqualTo(86400L);
 
@@ -196,6 +195,6 @@ class AdminAuthServiceTest {
         AdminLoginResult result = adminAuthService.login(request);
 
         // then
-        assertThat(jwtTokenProvider.getRole(result.response().accessToken())).isEqualTo("ROLE_ADMIN");
+        assertThat(jwtTokenProvider.getRole(result.accessToken())).isEqualTo("ROLE_ADMIN");
     }
 }
