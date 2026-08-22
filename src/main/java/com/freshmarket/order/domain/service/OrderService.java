@@ -37,6 +37,7 @@ public class OrderService {
                 .stream()
                 .map(OrderItemResponse::from)
                 .toList();
+        // TODO: 결제·배송 도메인의 공개 조회 API가 확정되면 결제 수단·상태와 배송 상태·송장 정보를 함께 조합한다.
         return OrderDetailResponse.from(order, items);
     }
 
