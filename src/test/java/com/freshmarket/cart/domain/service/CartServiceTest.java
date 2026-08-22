@@ -173,6 +173,17 @@ class CartServiceTest {
     }
 
     @Test
+    void 이미_삭제된_항목을_다시_삭제해도_성공한다() {
+        Cart cart = cart(1L, 10L);
+        when(cartRepository.findByMemberIdForUpdate(1L)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByIdAndCartId(100L, 10L)).thenReturn(Optional.empty());
+
+        sut.deleteItem(1L, 100L);
+
+        verify(cartItemRepository, never()).delete(any(CartItem.class));
+    }
+
+    @Test
     void 주문할_항목을_잠금_조회하고_현재_상품정보를_반환한다() {
         Cart cart = cart(1L, 10L);
         CartItem first = item(10L, 11L, 2, 100L);

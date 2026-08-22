@@ -130,7 +130,9 @@ public class CartService {
     @Transactional
     public void deleteItem(Long memberId, Long cartItemId) {
         Cart cart = findCartForUpdate(memberId);
-        cartItemRepository.delete(findItem(cart.getId(), cartItemId));
+        // DELETE 재시도는 이미 지워진 항목이어도 성공(204)으로 끝난다.
+        cartItemRepository.findByIdAndCartId(cart.getId(), cartItemId)
+                .ifPresent(cartItemRepository::delete);
     }
 
     private Cart findCart(Long memberId) {
