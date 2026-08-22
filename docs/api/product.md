@@ -202,6 +202,7 @@ POST /v1/admin/products
 ```json
 {
   "name": "제주 감귤 1kg",
+  "requestId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "categoryId": 4,
   "supplierId": 2,
   "storageType": "COLD",
@@ -214,6 +215,7 @@ POST /v1/admin/products
 | 필드 | 필수 | 제약 |
 |---|---|---|
 | `name` | O | 255자 이하 |
+| `requestId` | O | 클라이언트가 생성하는 요청 식별자. 100자 이하 |
 | `categoryId` | O | 존재하는 카테고리 |
 | `supplierId` | O | 존재하는 공급처 |
 | `storageType` | O | `ROOM`, `COLD`, `FROZEN` |
@@ -222,6 +224,7 @@ POST /v1/admin/products
 
 **상품코드는 서버가 만든다** (`API-2-06`). 클라이언트가 보내지 않는다.
 **재고와 소비기한은 여기서 받지 않는다.** 로트 입고로만 들어온다.
+**같은 `requestId`로 재시도하면 새로 등록하지 않고 최초 등록 결과를 그대로 돌려준다** (`API-5-07`, `AIP-155`).
 
 ### 수정과 삭제
 

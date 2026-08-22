@@ -21,3 +21,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # (2026-08-18 12:15) 회원 로그인 state/nonce, access token valid-after 커트라인,
+  # refresh token rotation(CAS Lua 스크립트)을 Redis에 둔다.
+  redis:
+    image: redis:7.4
+    container_name: freshmarket-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
