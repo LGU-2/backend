@@ -57,12 +57,6 @@ management:
         # 이 포트에 닿을 수 있는 사람은 로그 레벨을 바꿀 수 있다. 경계는 보안 그룹이 맡는다.
         include: health, info, prometheus, loggers
 
-logging:
-  level:
-    # 기동 때 Spring Data Redis 가 JPA 리포지토리를 자기 후보로 훑으면서 리포지토리마다
-    # INFO 를 남긴다. Redis 리포지토리가 하나도 없어 매번 같은 내용이라 운영에서는 줄인다.
-    org.springframework.data.repository.config: WARN
-
 jwt:
   cookie:
     # 운영은 HTTPS 다. 이건 환경마다 다른 값이 아니라 사실이라 환경변수를 두지 않는다.
